@@ -83,6 +83,7 @@ export default function NaverCallbackScreen() {
       // localStorage에 회원 정보 저장
       localStorage.setItem("customerId", tokenData.memberId);
       localStorage.setItem("customerName", tokenData.memberName || "");
+      localStorage.setItem("customerPhone", tokenData.memberPhone || "");
 
       // 마이페이지로 이동
       setTimeout(() => {

@@ -148,6 +148,7 @@ export async function action({ request }: Route.ActionArgs) {
       success: true,
       memberId: existingMember.id,
       memberName: existingMember.name || existingMember.email,
+      memberPhone: existingMember.phone || "",
     });
   } catch (error) {
     console.error("Naver login error:", error);

@@ -101,6 +101,7 @@ export async function action({ request }: Route.ActionArgs) {
       success: true, 
       memberId: member.id,
       memberName: member.name || member.email,
+      memberPhone: phone,
     });
   }
 
@@ -149,6 +150,7 @@ export default function CustomerRegisterScreen() {
       if ("memberId" in actionData && actionData.memberId) {
         localStorage.setItem("customerId", actionData.memberId);
         localStorage.setItem("customerName", ("memberName" in actionData ? actionData.memberName : "") || "");
+        localStorage.setItem("customerPhone", ("memberPhone" in actionData ? actionData.memberPhone : "") || "");
       }
     } else if (actionData && "error" in actionData && actionData.error) {
       setError(actionData.error);

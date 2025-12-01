@@ -68,6 +68,7 @@ export async function action({ request }: Route.ActionArgs) {
     success: true, 
     memberId: member.id,
     memberName: member.name || member.email,
+    memberPhone: member.phone || "",
   });
 }
 
@@ -90,6 +91,7 @@ export default function CustomerLoginScreen() {
     if (actionData?.success && "memberId" in actionData) {
       localStorage.setItem("customerId", actionData.memberId);
       localStorage.setItem("customerName", ("memberName" in actionData ? actionData.memberName : "") || "");
+      localStorage.setItem("customerPhone", ("memberPhone" in actionData ? actionData.memberPhone : "") || "");
       navigate("/customer/mypage");
     } else if (actionData && "error" in actionData) {
       setError(actionData.error);

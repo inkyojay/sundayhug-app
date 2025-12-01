@@ -4,7 +4,7 @@
 import type { Route } from "./+types/analyses";
 
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useRouteLoaderData } from "react-router";
 import { 
   ArrowLeftIcon, 
   MoonIcon,
@@ -12,6 +12,7 @@ import {
   ImageIcon
 } from "lucide-react";
 
+import { createClient } from "@supabase/supabase-js";
 import { Button } from "~/core/components/ui/button";
 import { Card, CardContent } from "~/core/components/ui/card";
 import { Badge } from "~/core/components/ui/badge";
@@ -24,28 +25,65 @@ export function meta(): Route.MetaDescriptors {
 
 export default function MypageAnalysesScreen() {
   const navigate = useNavigate();
+  const rootData = useRouteLoaderData("root") as { env?: { SUPABASE_URL: string; SUPABASE_ANON_KEY: string } } | undefined;
   const [analyses, setAnalyses] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const customerId = localStorage.getItem("customerId");
+    const customerPhone = localStorage.getItem("customerPhone");
+    
     if (!customerId) {
       navigate("/customer/login");
       return;
     }
 
-    // 수면 분석은 현재 익명으로 저장되므로 localStorage에서 이력 관리
-    // 추후 user_id 연동 시 서버에서 조회
-    const savedAnalyses = localStorage.getItem("sleepAnalyses");
-    if (savedAnalyses) {
-      try {
-        setAnalyses(JSON.parse(savedAnalyses));
-      } catch (e) {
-        console.error("분석 이력 파싱 오류:", e);
+    // DB에서 수면 분석 이력 조회 (전화번호 기준)
+    if (rootData?.env && customerPhone) {
+      fetchAnalyses(customerPhone, rootData.env);
+    } else {
+      // 전화번호가 없으면 localStorage에서 가져오기 (폴백)
+      const savedAnalyses = localStorage.getItem("sleepAnalyses");
+      if (savedAnalyses) {
+        try {
+          setAnalyses(JSON.parse(savedAnalyses));
+        } catch (e) {
+          console.error("분석 이력 파싱 오류:", e);
+        }
       }
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  }, [navigate]);
+  }, [navigate, rootData]);
+
+  const fetchAnalyses = async (
+    phone: string,
+    env: { SUPABASE_URL: string; SUPABASE_ANON_KEY: string }
+  ) => {
+    try {
+      const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
+
+      // 전화번호 정규화 (하이픈 제거)
+      const normalizedPhone = phone.replace(/-/g, "");
+
+      const { data, error } = await supabase
+        .from("sleep_analyses")
+        .select("id, image_url, age_in_months, summary, created_at")
+        .or(`phone_number.eq.${normalizedPhone},phone_number.eq.${phone}`)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("수면 분석 이력 조회 오류:", error);
+        setAnalyses([]);
+      } else {
+        setAnalyses(data || []);
+      }
+    } catch (error) {
+      console.error("수면 분석 이력 조회 오류:", error);
+      setAnalyses([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 px-4 py-6">
@@ -89,9 +127,9 @@ export default function MypageAnalysesScreen() {
                 <Card className="hover:bg-muted/50 transition-colors">
                   <CardContent className="flex items-center gap-4 p-4">
                     <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
-                      {analysis.imagePreview ? (
+                      {analysis.image_url ? (
                         <img 
-                          src={analysis.imagePreview} 
+                          src={analysis.image_url} 
                           alt="분석 이미지"
                           className="w-full h-full object-cover"
                         />
@@ -101,13 +139,18 @@ export default function MypageAnalysesScreen() {
                     </div>
                     <div className="flex-1">
                       <p className="font-medium">
-                        {analysis.ageInMonths ? `${analysis.ageInMonths}개월 아기` : "수면 환경 분석"}
+                        {analysis.age_in_months ? `${analysis.age_in_months}개월 아기` : "수면 환경 분석"}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {analysis.createdAt 
-                          ? new Date(analysis.createdAt).toLocaleDateString("ko-KR")
+                        {analysis.created_at 
+                          ? new Date(analysis.created_at).toLocaleDateString("ko-KR")
                           : "날짜 미상"}
                       </p>
+                      {analysis.summary && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                          {analysis.summary}
+                        </p>
+                      )}
                     </div>
                     <ChevronRightIcon className="h-5 w-5 text-muted-foreground" />
                   </CardContent>

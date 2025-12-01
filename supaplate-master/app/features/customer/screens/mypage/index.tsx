@@ -8,7 +8,7 @@
 import type { Route } from "./+types/index";
 
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { 
   ShieldCheckIcon, 
   MoonIcon, 
@@ -61,10 +61,25 @@ const menuItems = [
 
 export default function CustomerMypageIndexScreen() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [memberName, setMemberName] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
+    // URL 쿼리 파라미터로 전달된 경우 (소셜 로그인 콜백)
+    const urlMemberId = searchParams.get("memberId");
+    const urlMemberName = searchParams.get("memberName");
+    const urlMemberPhone = searchParams.get("memberPhone");
+    
+    if (urlMemberId) {
+      localStorage.setItem("customerId", urlMemberId);
+      if (urlMemberName) localStorage.setItem("customerName", urlMemberName);
+      if (urlMemberPhone) localStorage.setItem("customerPhone", urlMemberPhone);
+      // 쿼리 파라미터 제거 후 리다이렉트
+      navigate("/customer/mypage", { replace: true });
+      return;
+    }
+
     const customerId = localStorage.getItem("customerId");
     const name = localStorage.getItem("customerName");
     
@@ -75,11 +90,12 @@ export default function CustomerMypageIndexScreen() {
     
     setIsLoggedIn(true);
     setMemberName(name || "회원");
-  }, [navigate]);
+  }, [navigate, searchParams]);
 
   const handleLogout = () => {
     localStorage.removeItem("customerId");
     localStorage.removeItem("customerName");
+    localStorage.removeItem("customerPhone");
     navigate("/customer");
   };
 

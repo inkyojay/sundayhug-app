@@ -138,7 +138,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       `warranty_member_name=${encodeURIComponent(member.name || kakaoNickname || "")}; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}`
     );
     // localStorage 설정을 위해 쿼리 파라미터로 전달
-    headers.append("Location", `/customer/mypage?memberId=${member.id}&memberName=${encodeURIComponent(member.name || kakaoNickname || "")}`);
+    headers.append("Location", `/customer/mypage?memberId=${member.id}&memberName=${encodeURIComponent(member.name || kakaoNickname || "")}&memberPhone=${encodeURIComponent(member.phone || "")}`);
     
     return new Response(null, {
       status: 302,
