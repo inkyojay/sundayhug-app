@@ -12,6 +12,9 @@ import {
   ClockIcon,
   FilterIcon,
   ExternalLinkIcon,
+  DownloadIcon,
+  DatabaseIcon,
+  CalendarIcon,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useFetcher, useRevalidator } from "react-router";
@@ -167,10 +170,24 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-// 주문 동기화 Action
+// 주문 조회/동기화 Action
 export async function action({ request }: Route.ActionArgs) {
   const supabaseUrl = process.env.SUPABASE_URL!;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
+
+  const formData = await request.formData();
+  const actionType = formData.get("actionType") as string; // "query" or "sync"
+  const startDate = formData.get("startDate") as string;
+  const endDate = formData.get("endDate") as string;
+
+  // 날짜로부터 daysAgo 계산
+  const start = startDate ? new Date(startDate) : new Date();
+  const end = endDate ? new Date(endDate) : new Date();
+  const today = new Date();
+  const daysAgo = Math.ceil((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
+  // forceRefresh: sync면 true (PlayAuto API 호출), query면 false (캐시 우선)
+  const forceRefresh = actionType === "sync";
 
   try {
     const response = await fetch(
@@ -181,19 +198,25 @@ export async function action({ request }: Route.ActionArgs) {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${supabaseKey}`,
         },
-        body: JSON.stringify({ trigger: "manual" }),
+        body: JSON.stringify({ 
+          forceRefresh,
+          daysAgo: Math.max(daysAgo, 1), // 최소 1일
+        }),
       }
     );
 
     const result = await response.json();
     
     if (response.ok && result.success) {
-      return { success: true, message: "주문 동기화가 완료되었습니다!", data: result.data };
+      const message = forceRefresh 
+        ? `PlayAuto에서 ${result.data?.ordersSynced || 0}개 주문 동기화 완료!`
+        : `${result.data?.orderCount || 0}개 주문 조회 완료 (${result.source === "cache" ? "캐시" : "API"})`;
+      return { success: true, message, data: result.data, source: result.source };
     } else {
-      return { success: false, error: result.error || "동기화 중 오류가 발생했습니다." };
+      return { success: false, error: result.error || "처리 중 오류가 발생했습니다." };
     }
   } catch (error: any) {
-    return { success: false, error: error.message || "동기화 중 오류가 발생했습니다." };
+    return { success: false, error: error.message || "처리 중 오류가 발생했습니다." };
   }
 }
 
@@ -202,12 +225,20 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
   const [searchInput, setSearchInput] = useState(search);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   
+  // 날짜 범위 (기본: 최근 7일)
+  const today = new Date();
+  const weekAgo = new Date(today);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  
+  const [startDate, setStartDate] = useState(weekAgo.toISOString().split("T")[0]);
+  const [endDate, setEndDate] = useState(today.toISOString().split("T")[0]);
+  
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
-  const syncing = fetcher.state === "submitting" || fetcher.state === "loading";
+  const isLoading = fetcher.state === "submitting" || fetcher.state === "loading";
   const hasHandledRef = useRef(false);
 
-  // 동기화 결과 처리
+  // 동기화/조회 결과 처리
   useEffect(() => {
     if (fetcher.data && fetcher.state === "idle" && !hasHandledRef.current) {
       hasHandledRef.current = true;
@@ -255,8 +286,20 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
     window.location.href = "/dashboard/orders";
   };
 
+  // 주문 조회 (캐시 우선)
+  const handleQuery = () => {
+    fetcher.submit(
+      { actionType: "query", startDate, endDate },
+      { method: "POST" }
+    );
+  };
+
+  // 데이터 동기화 (PlayAuto API 강제 호출)
   const handleSync = () => {
-    fetcher.submit({}, { method: "POST" });
+    fetcher.submit(
+      { actionType: "sync", startDate, endDate },
+      { method: "POST" }
+    );
   };
 
   const hasActiveFilters = search || filters.status !== "all" || filters.shop !== "all";
@@ -304,18 +347,62 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
       )}
 
       {/* 헤더 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <ShoppingCartIcon className="h-6 w-6" />
-            주문 관리
-          </h1>
-          <p className="text-muted-foreground">PlayAuto 주문 현황</p>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <ShoppingCartIcon className="h-6 w-6" />
+              주문 관리
+            </h1>
+            <p className="text-muted-foreground">PlayAuto 주문 현황</p>
+          </div>
         </div>
-        <Button onClick={handleSync} disabled={syncing}>
-          <RefreshCwIcon className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-          {syncing ? "동기화 중..." : "주문 동기화"}
-        </Button>
+        
+        {/* 날짜 선택 & 동기화/조회 버튼 */}
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">시작일</label>
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-[150px]"
+                  />
+                </div>
+                <span className="text-muted-foreground">~</span>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">종료일</label>
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-[150px]"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={handleQuery} disabled={isLoading}>
+                  <SearchIcon className={`h-4 w-4 mr-2 ${isLoading ? "animate-pulse" : ""}`} />
+                  {isLoading ? "조회 중..." : "주문 조회"}
+                </Button>
+                <Button onClick={handleSync} disabled={isLoading}>
+                  <DatabaseIcon className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+                  {isLoading ? "동기화 중..." : "데이터 동기화"}
+                </Button>
+              </div>
+              
+              <p className="text-xs text-muted-foreground ml-auto">
+                <span className="font-medium">주문 조회</span>: DB 캐시에서 조회 | 
+                <span className="font-medium"> 데이터 동기화</span>: PlayAuto에서 새로 가져오기
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* 통계 카드 */}
