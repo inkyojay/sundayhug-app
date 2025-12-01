@@ -1,5 +1,7 @@
 /**
  * 보증서 상세 페이지 (관리자용)
+ * - 주문 자동/수동 연결 기능 포함
+ * - 1:1 매핑 (하나의 주문에는 하나의 보증서만 연결)
  */
 import type { Route } from "./+types/warranty-detail";
 
@@ -20,8 +22,12 @@ import {
   MapPinIcon,
   CreditCardIcon,
   AlertTriangleIcon,
+  SearchIcon,
+  LinkIcon,
+  UnlinkIcon,
+  Loader2Icon,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useFetcher, useRevalidator } from "react-router";
 
 import { Badge } from "~/core/components/ui/badge";
@@ -33,7 +39,17 @@ import {
   CardHeader,
   CardTitle,
 } from "~/core/components/ui/card";
+import { Input } from "~/core/components/ui/input";
+import { Label } from "~/core/components/ui/label";
 import { Separator } from "~/core/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "~/core/components/ui/dialog";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 import { createAdminClient } from "~/core/lib/supa-admin.server";
@@ -44,6 +60,7 @@ export const meta: Route.MetaFunction = ({ data }) => {
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
+  const adminClient = createAdminClient();
   const { id } = params;
 
   // 보증서 상세 정보
@@ -116,6 +133,111 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     }
   }
 
+  // 자동 연동 후보 주문 검색 (order_id가 없고 pending 상태인 경우)
+  let suggestedOrders: any[] = [];
+  if (!warranty.order_id && warranty.status === "pending") {
+    // 전화번호로 검색 (하이픈 제거하고 뒤 8자리로 매칭)
+    const phone = warranty.customer_phone?.replace(/-/g, "") || "";
+    const phoneLast8 = phone.slice(-8);
+    
+    // 송장번호로 검색
+    const trackingNumber = warranty.tracking_number;
+
+    // 주문일 기준 (±7일)
+    const orderDate = warranty.order_date ? new Date(warranty.order_date) : null;
+    
+    let query = adminClient
+      .from("orders")
+      .select(`
+        id,
+        uniq,
+        shop_ord_no,
+        shop_name,
+        shop_sale_name,
+        shop_opt_name,
+        ord_time,
+        ord_status,
+        to_name,
+        to_tel,
+        to_htel,
+        invoice_no,
+        pay_amt
+      `)
+      .order("ord_time", { ascending: false })
+      .limit(20);
+
+    // 송장번호로 먼저 검색
+    if (trackingNumber) {
+      const { data: byInvoice } = await adminClient
+        .from("orders")
+        .select(`
+          id,
+          uniq,
+          shop_ord_no,
+          shop_name,
+          shop_sale_name,
+          shop_opt_name,
+          ord_time,
+          ord_status,
+          to_name,
+          to_tel,
+          to_htel,
+          invoice_no,
+          pay_amt
+        `)
+        .eq("invoice_no", trackingNumber)
+        .limit(10);
+      
+      if (byInvoice && byInvoice.length > 0) {
+        suggestedOrders = byInvoice;
+      }
+    }
+
+    // 송장번호로 못찾으면 전화번호로 검색
+    if (suggestedOrders.length === 0 && phoneLast8) {
+      const { data: byPhone } = await adminClient
+        .from("orders")
+        .select(`
+          id,
+          uniq,
+          shop_ord_no,
+          shop_name,
+          shop_sale_name,
+          shop_opt_name,
+          ord_time,
+          ord_status,
+          to_name,
+          to_tel,
+          to_htel,
+          invoice_no,
+          pay_amt
+        `)
+        .or(`to_tel.ilike.%${phoneLast8}%,to_htel.ilike.%${phoneLast8}%`)
+        .order("ord_time", { ascending: false })
+        .limit(20);
+      
+      if (byPhone) {
+        suggestedOrders = byPhone;
+      }
+    }
+
+    // 이미 다른 보증서에 연결된 주문 제외
+    if (suggestedOrders.length > 0) {
+      const orderIds = suggestedOrders.map(o => o.id);
+      const { data: linkedWarranties } = await adminClient
+        .from("warranties")
+        .select("order_id")
+        .in("order_id", orderIds)
+        .neq("id", id); // 현재 보증서 제외
+
+      const linkedOrderIds = new Set(linkedWarranties?.map(w => w.order_id) || []);
+      suggestedOrders = suggestedOrders.map(order => ({
+        ...order,
+        already_linked: linkedOrderIds.has(order.id),
+      }));
+    }
+  }
+
   // 보증서 이력
   const { data: logs } = await supabase
     .from("warranty_logs")
@@ -134,6 +256,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     warranty,
     orderInfo,
     orderItems,
+    suggestedOrders,
     logs: logs || [],
     asRequests: asRequests || [],
   };
@@ -148,6 +271,127 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   console.log("Detail action received:", { id, actionType });
 
+  // 주문 검색
+  if (actionType === "searchOrders") {
+    const searchQuery = formData.get("searchQuery") as string;
+    
+    if (!searchQuery || searchQuery.length < 3) {
+      return { success: false, error: "검색어를 3자 이상 입력해주세요." };
+    }
+
+    // 검색어로 주문 검색 (송장번호, 전화번호, 주문번호, 수령인명)
+    const { data: searchResults, error } = await adminClient
+      .from("orders")
+      .select(`
+        id,
+        uniq,
+        shop_ord_no,
+        shop_name,
+        shop_sale_name,
+        shop_opt_name,
+        ord_time,
+        ord_status,
+        to_name,
+        to_tel,
+        to_htel,
+        invoice_no,
+        pay_amt
+      `)
+      .or(`invoice_no.ilike.%${searchQuery}%,to_tel.ilike.%${searchQuery}%,to_htel.ilike.%${searchQuery}%,shop_ord_no.ilike.%${searchQuery}%,to_name.ilike.%${searchQuery}%`)
+      .order("ord_time", { ascending: false })
+      .limit(20);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    // 이미 다른 보증서에 연결된 주문 체크
+    if (searchResults && searchResults.length > 0) {
+      const orderIds = searchResults.map(o => o.id);
+      const { data: linkedWarranties } = await adminClient
+        .from("warranties")
+        .select("order_id")
+        .in("order_id", orderIds)
+        .neq("id", id);
+
+      const linkedOrderIds = new Set(linkedWarranties?.map(w => w.order_id) || []);
+      const resultsWithStatus = searchResults.map(order => ({
+        ...order,
+        already_linked: linkedOrderIds.has(order.id),
+      }));
+
+      return { success: true, searchResults: resultsWithStatus };
+    }
+
+    return { success: true, searchResults: [] };
+  }
+
+  // 주문 연결
+  if (actionType === "linkOrder") {
+    const orderId = formData.get("orderId") as string;
+
+    // 해당 주문이 이미 다른 보증서에 연결되어 있는지 확인
+    const { data: existingLink } = await adminClient
+      .from("warranties")
+      .select("id, warranty_number")
+      .eq("order_id", orderId)
+      .neq("id", id)
+      .single();
+
+    if (existingLink) {
+      return { 
+        success: false, 
+        error: `이 주문은 이미 다른 보증서(${existingLink.warranty_number})에 연결되어 있습니다.` 
+      };
+    }
+
+    // 주문 정보 가져와서 보증서에 연결
+    const { data: order } = await adminClient
+      .from("orders")
+      .select("id, shop_sale_name, shop_opt_name, invoice_no, ord_time, shop_name")
+      .eq("id", orderId)
+      .single();
+
+    if (!order) {
+      return { success: false, error: "주문을 찾을 수 없습니다." };
+    }
+
+    const { error } = await adminClient
+      .from("warranties")
+      .update({
+        order_id: orderId,
+        tracking_number: order.invoice_no,
+        product_name: order.shop_sale_name,
+        product_option: order.shop_opt_name,
+        sales_channel: order.shop_name,
+        order_date: order.ord_time ? new Date(order.ord_time).toISOString().split("T")[0] : null,
+      })
+      .eq("id", id);
+
+    if (error) {
+      return { success: false, error: `연결 실패: ${error.message}` };
+    }
+
+    return { success: true, message: "주문이 연결되었습니다." };
+  }
+
+  // 주문 연결 해제
+  if (actionType === "unlinkOrder") {
+    const { error } = await adminClient
+      .from("warranties")
+      .update({
+        order_id: null,
+      })
+      .eq("id", id);
+
+    if (error) {
+      return { success: false, error: `연결 해제 실패: ${error.message}` };
+    }
+
+    return { success: true, message: "주문 연결이 해제되었습니다." };
+  }
+
+  // 승인
   if (actionType === "approve") {
     const today = new Date();
     const warrantyEnd = new Date(today);
@@ -175,6 +419,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     return { success: true, message: "승인되었습니다." };
   }
 
+  // 거절
   if (actionType === "reject") {
     const reason = formData.get("reason") as string;
     
@@ -197,8 +442,8 @@ export async function action({ request, params }: Route.ActionArgs) {
     return { success: true, message: "거절되었습니다." };
   }
 
+  // 카카오 알림톡
   if (actionType === "sendKakao") {
-    // TODO: 카카오 알림톡 발송 로직
     const { data, error } = await adminClient
       .from("warranties")
       .update({
@@ -227,18 +472,56 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
 };
 
 export default function WarrantyDetail({ loaderData }: Route.ComponentProps) {
-  const { warranty, orderInfo, orderItems, logs, asRequests } = loaderData;
+  const { warranty, orderInfo, orderItems, suggestedOrders, logs, asRequests } = loaderData;
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
+  
+  const [showSearchDialog, setShowSearchDialog] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
   
   // fetcher가 완료되면 데이터 새로고침
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.success) {
-      revalidator.revalidate();
+      if (fetcher.data.searchResults) {
+        setSearchResults(fetcher.data.searchResults);
+      } else {
+        revalidator.revalidate();
+        setShowSearchDialog(false);
+        setSearchQuery("");
+        setSearchResults([]);
+      }
     }
   }, [fetcher.state, fetcher.data]);
   
   const StatusIcon = statusConfig[warranty.status]?.icon || ClockIcon;
+  const isSubmitting = fetcher.state !== "idle";
+
+  const handleSearch = () => {
+    if (searchQuery.length < 3) return;
+    fetcher.submit(
+      { action: "searchOrders", searchQuery },
+      { method: "POST" }
+    );
+  };
+
+  const handleLinkOrder = (orderId: string) => {
+    if (confirm("이 주문을 보증서에 연결하시겠습니까?")) {
+      fetcher.submit(
+        { action: "linkOrder", orderId },
+        { method: "POST" }
+      );
+    }
+  };
+
+  const handleUnlinkOrder = () => {
+    if (confirm("주문 연결을 해제하시겠습니까?")) {
+      fetcher.submit(
+        { action: "unlinkOrder" },
+        { method: "POST" }
+      );
+    }
+  };
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -334,14 +617,27 @@ export default function WarrantyDetail({ loaderData }: Route.ComponentProps) {
           {orderInfo ? (
             <Card className="border-green-500/50 bg-green-50/30 dark:bg-green-950/20">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-400">
-                  <ShoppingCartIcon className="h-5 w-5" />
-                  주문 정보 확인됨
-                  <Badge variant="default" className="ml-2 bg-green-600">매칭 완료</Badge>
-                </CardTitle>
-                <CardDescription>
-                  보증서 신청 정보와 실제 주문 이력이 일치합니다
-                </CardDescription>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                      <ShoppingCartIcon className="h-5 w-5" />
+                      주문 정보 확인됨
+                      <Badge variant="default" className="ml-2 bg-green-600">매칭 완료</Badge>
+                    </CardTitle>
+                    <CardDescription>
+                      보증서 신청 정보와 실제 주문 이력이 일치합니다
+                    </CardDescription>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleUnlinkOrder}
+                    disabled={isSubmitting}
+                  >
+                    <UnlinkIcon className="h-4 w-4 mr-1" />
+                    연결 해제
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* 주문 기본 정보 */}
@@ -509,10 +805,10 @@ export default function WarrantyDetail({ loaderData }: Route.ComponentProps) {
                   주문 정보 없음
                 </CardTitle>
                 <CardDescription>
-                  연결된 주문 정보가 없습니다. 수동 확인이 필요합니다.
+                  연결된 주문 정보가 없습니다. 아래에서 주문을 검색하여 연결해주세요.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2 text-sm">
                   <div>
                     <p className="text-muted-foreground">송장번호 (입력값)</p>
@@ -528,6 +824,74 @@ export default function WarrantyDetail({ loaderData }: Route.ComponentProps) {
                     </p>
                   </div>
                 </div>
+
+                {/* 자동 연동 후보 주문 */}
+                {suggestedOrders && suggestedOrders.length > 0 && (
+                  <>
+                    <Separator />
+                    <div>
+                      <p className="text-sm font-medium mb-3 flex items-center gap-2">
+                        <SearchIcon className="h-4 w-4" />
+                        연결 가능한 주문 ({suggestedOrders.length}건)
+                      </p>
+                      <div className="space-y-2 max-h-80 overflow-y-auto">
+                        {suggestedOrders.map((order: any) => (
+                          <div 
+                            key={order.id} 
+                            className={`p-3 rounded-lg border text-sm ${
+                              order.already_linked 
+                                ? "bg-muted/30 opacity-60" 
+                                : "bg-background hover:bg-muted/50"
+                            }`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <p className="font-medium">{order.shop_sale_name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {order.shop_name} · {order.ord_time ? new Date(order.ord_time).toLocaleDateString("ko-KR") : "-"}
+                                </p>
+                                <div className="flex gap-3 mt-1 text-xs">
+                                  <span>수령인: {order.to_name}</span>
+                                  <span className="font-mono">{order.to_htel || order.to_tel}</span>
+                                </div>
+                                {order.invoice_no && (
+                                  <p className="text-xs font-mono mt-1">송장: {order.invoice_no}</p>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                {order.already_linked ? (
+                                  <Badge variant="secondary" className="text-xs">
+                                    이미 연결됨
+                                  </Badge>
+                                ) : (
+                                  <Button 
+                                    size="sm" 
+                                    onClick={() => handleLinkOrder(order.id)}
+                                    disabled={isSubmitting}
+                                  >
+                                    <LinkIcon className="h-3 w-3 mr-1" />
+                                    연결
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* 수동 검색 버튼 */}
+                <Separator />
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => setShowSearchDialog(true)}
+                >
+                  <SearchIcon className="h-4 w-4 mr-2" />
+                  주문 직접 검색
+                </Button>
               </CardContent>
             </Card>
           )}
@@ -562,46 +926,16 @@ export default function WarrantyDetail({ loaderData }: Route.ComponentProps) {
             </CardContent>
           </Card>
 
-          {/* A/S 이력 */}
-          {asRequests.length > 0 && (
+          {/* 인증 사진 */}
+          {warranty.product_photo_url && (
             <Card>
               <CardHeader>
-                <CardTitle>A/S 신청 이력</CardTitle>
-                <CardDescription>{asRequests.length}건</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                  <ImageIcon className="h-5 w-5" />
+                  제품 인증 사진
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {asRequests.map((as: any) => (
-                    <div key={as.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <p className="font-medium">{as.request_type}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(as.created_at).toLocaleDateString("ko-KR")}
-                        </p>
-                      </div>
-                      <Badge variant={as.status === "completed" ? "default" : "outline"}>
-                        {as.status}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* 우측: 사진 및 액션 */}
-        <div className="space-y-6">
-          {/* 인증 사진 */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ImageIcon className="h-5 w-5" />
-                제품 인증 사진
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {warranty.product_photo_url ? (
                 <a 
                   href={warranty.product_photo_url} 
                   target="_blank" 
@@ -611,95 +945,144 @@ export default function WarrantyDetail({ loaderData }: Route.ComponentProps) {
                   <img 
                     src={warranty.product_photo_url} 
                     alt="제품 인증 사진"
-                    className="w-full rounded-lg border hover:opacity-90 transition-opacity"
+                    className="max-w-full h-auto rounded-lg border hover:opacity-90 transition-opacity"
+                    style={{ maxHeight: "400px" }}
                   />
                 </a>
-              ) : (
-                <div className="border rounded-lg p-12 bg-muted/30 text-center">
-                  <ImageIcon className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-muted-foreground">사진 없음</p>
-                </div>
-              )}
-              {warranty.photo_uploaded_at && (
-                <p className="text-xs text-muted-foreground mt-2 text-center">
-                  업로드: {new Date(warranty.photo_uploaded_at).toLocaleString("ko-KR")}
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                {warranty.photo_uploaded_at && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    업로드: {new Date(warranty.photo_uploaded_at).toLocaleString("ko-KR")}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
+        {/* 우측: 액션 & 이력 */}
+        <div className="space-y-6">
           {/* 액션 버튼 */}
-          <Card>
-            <CardHeader>
-              <CardTitle>관리</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {warranty.status === "pending" && (
-                <>
-                  <fetcher.Form method="POST" className="w-full">
-                    <input type="hidden" name="action" value="approve" />
-                    <Button className="w-full" type="submit" disabled={fetcher.state !== "idle"}>
+          {warranty.status === "pending" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>관리자 액션</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <fetcher.Form method="POST">
+                  <input type="hidden" name="action" value="approve" />
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-green-600 hover:bg-green-700"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
                       <CheckCircleIcon className="h-4 w-4 mr-2" />
-                      승인하기
-                    </Button>
-                  </fetcher.Form>
-                  <Button variant="destructive" className="w-full" asChild>
-                    <a href={`/dashboard/warranty/pending?reject=${warranty.id}`}>
-                      <XCircleIcon className="h-4 w-4 mr-2" />
-                      거절하기
-                    </a>
-                  </Button>
-                </>
-              )}
-
-              {warranty.status === "approved" && !warranty.kakao_sent && (
-                <fetcher.Form method="POST" className="w-full">
-                  <input type="hidden" name="action" value="sendKakao" />
-                  <Button variant="outline" className="w-full" type="submit" disabled={fetcher.state !== "idle"}>
-                    <MessageSquareIcon className="h-4 w-4 mr-2" />
-                    카카오톡 발송
+                    )}
+                    승인
                   </Button>
                 </fetcher.Form>
-              )}
+                <fetcher.Form method="POST">
+                  <input type="hidden" name="action" value="reject" />
+                  <Button 
+                    type="submit" 
+                    variant="destructive" 
+                    className="w-full"
+                    disabled={isSubmitting}
+                  >
+                    <XCircleIcon className="h-4 w-4 mr-2" />
+                    거절
+                  </Button>
+                </fetcher.Form>
+              </CardContent>
+            </Card>
+          )}
 
-              {warranty.kakao_sent && (
-                <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                  <CheckCircleIcon className="h-5 w-5 mx-auto text-green-600 mb-1" />
-                  <p className="text-sm text-green-600">카카오톡 발송 완료</p>
-                  {warranty.kakao_sent_at && (
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(warranty.kakao_sent_at).toLocaleString("ko-KR")}
-                    </p>
-                  )}
+          {/* 카카오 알림톡 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquareIcon className="h-5 w-5" />
+                카카오 알림톡
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {warranty.kakao_sent ? (
+                <div className="text-sm">
+                  <Badge variant="default" className="mb-2">발송됨</Badge>
+                  <p className="text-muted-foreground">
+                    {warranty.kakao_sent_at && new Date(warranty.kakao_sent_at).toLocaleString("ko-KR")}
+                  </p>
                 </div>
-              )}
-
-              {warranty.status === "rejected" && warranty.rejection_reason && (
-                <div className="p-3 bg-destructive/10 rounded-lg">
-                  <p className="text-sm font-medium text-destructive">거절 사유</p>
-                  <p className="text-sm mt-1">{warranty.rejection_reason}</p>
-                </div>
+              ) : (
+                <fetcher.Form method="POST">
+                  <input type="hidden" name="action" value="sendKakao" />
+                  <Button 
+                    type="submit" 
+                    variant="outline" 
+                    className="w-full"
+                    disabled={isSubmitting || warranty.status !== "approved"}
+                  >
+                    <MessageSquareIcon className="h-4 w-4 mr-2" />
+                    알림톡 발송
+                  </Button>
+                </fetcher.Form>
               )}
             </CardContent>
           </Card>
 
           {/* 처리 이력 */}
-          {logs.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>처리 이력</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>처리 이력</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {logs.length > 0 ? (
+                <div className="space-y-3">
                   {logs.map((log: any) => (
                     <div key={log.id} className="text-sm border-l-2 pl-3 py-1">
                       <p className="font-medium">{log.action}</p>
                       {log.description && (
-                        <p className="text-muted-foreground">{log.description}</p>
+                        <p className="text-muted-foreground text-xs">{log.description}</p>
                       )}
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-muted-foreground text-xs">
                         {new Date(log.created_at).toLocaleString("ko-KR")}
-                        {log.performed_by && ` · ${log.performed_by}`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">이력이 없습니다</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* A/S 신청 이력 */}
+          {asRequests.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>A/S 신청 이력</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {asRequests.map((req: any) => (
+                    <div key={req.id} className="text-sm border-l-2 pl-3 py-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{req.request_type}</Badge>
+                        <Badge variant={
+                          req.status === "completed" ? "default" :
+                          req.status === "processing" ? "secondary" :
+                          "outline"
+                        }>
+                          {req.status}
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground text-xs mt-1">
+                        {req.issue_description?.slice(0, 50)}...
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        {new Date(req.created_at).toLocaleString("ko-KR")}
                       </p>
                     </div>
                   ))}
@@ -709,7 +1092,105 @@ export default function WarrantyDetail({ loaderData }: Route.ComponentProps) {
           )}
         </div>
       </div>
+
+      {/* 주문 검색 다이얼로그 */}
+      <Dialog open={showSearchDialog} onOpenChange={setShowSearchDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>주문 검색</DialogTitle>
+            <DialogDescription>
+              송장번호, 전화번호, 주문번호, 수령인명으로 검색할 수 있습니다.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <Input
+                placeholder="검색어 입력 (3자 이상)"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              />
+              <Button onClick={handleSearch} disabled={isSubmitting || searchQuery.length < 3}>
+                {isSubmitting ? (
+                  <Loader2Icon className="h-4 w-4 animate-spin" />
+                ) : (
+                  <SearchIcon className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+
+            {fetcher.data?.error && (
+              <p className="text-sm text-destructive">{fetcher.data.error}</p>
+            )}
+
+            {searchResults.length > 0 ? (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {searchResults.map((order: any) => (
+                  <div 
+                    key={order.id} 
+                    className={`p-3 rounded-lg border text-sm ${
+                      order.already_linked 
+                        ? "bg-muted/30 opacity-60" 
+                        : "bg-background hover:bg-muted/50"
+                    }`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <p className="font-medium">{order.shop_sale_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {order.shop_name} · 주문번호: {order.shop_ord_no}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {order.ord_time ? new Date(order.ord_time).toLocaleString("ko-KR") : "-"}
+                        </p>
+                        <div className="flex gap-3 mt-1 text-xs">
+                          <span>수령인: {order.to_name}</span>
+                          <span className="font-mono">{order.to_htel || order.to_tel}</span>
+                        </div>
+                        {order.invoice_no && (
+                          <p className="text-xs font-mono mt-1">송장: {order.invoice_no}</p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold mb-2">{Number(order.pay_amt || 0).toLocaleString()}원</p>
+                        {order.already_linked ? (
+                          <Badge variant="secondary" className="text-xs">
+                            이미 연결됨
+                          </Badge>
+                        ) : (
+                          <Button 
+                            size="sm" 
+                            onClick={() => handleLinkOrder(order.id)}
+                            disabled={isSubmitting}
+                          >
+                            <LinkIcon className="h-3 w-3 mr-1" />
+                            연결
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : searchQuery.length >= 3 && fetcher.state === "idle" && fetcher.data?.searchResults ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                검색 결과가 없습니다.
+              </p>
+            ) : null}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowSearchDialog(false);
+              setSearchQuery("");
+              setSearchResults([]);
+            }}>
+              닫기
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
