@@ -80,12 +80,36 @@ export async function action({ request }: Route.ActionArgs) {
     const { data: warrantyNumber } = await supabase
       .rpc("generate_warranty_number");
 
+    // 고객 생성 또는 조회 (customer_id 호환성 유지)
+    let customerId: string | null = null;
+    const { data: existingCustomer } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("phone", normalizedPhone)
+      .single();
+
+    if (existingCustomer) {
+      customerId = existingCustomer.id;
+      await supabase
+        .from("customers")
+        .update({ name: customerName })
+        .eq("id", customerId);
+    } else {
+      const { data: newCustomer } = await supabase
+        .from("customers")
+        .insert({ phone: normalizedPhone, name: customerName })
+        .select("id")
+        .single();
+      customerId = newCustomer?.id || null;
+    }
+
     // 보증서 생성 (status: pending - 관리자 승인 대기)
     const { data: warranty, error } = await supabase
       .from("warranties")
       .insert({
         warranty_number: warrantyNumber || `SH-W-${Date.now()}`,
         member_id: memberId, // 로그인된 회원 ID
+        customer_id: customerId, // 호환성 유지
         order_id: null, // 주문 연결 없음
         customer_phone: normalizedPhone,
         product_name: "ABC 이동식 아기침대",
