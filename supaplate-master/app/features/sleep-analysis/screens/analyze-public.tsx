@@ -10,6 +10,7 @@ import { Link, useFetcher, data } from "react-router";
 import { Loader2, Moon, Baby, Shield, Clock, Thermometer, Music } from "lucide-react";
 
 import { Button } from "~/core/components/ui/button";
+import makeServerClient from "~/core/lib/supa-client.server";
 import { UploadForm } from "../components/upload-form";
 import { AnalysisResult } from "../components/analysis-result";
 import { analyzeSleepEnvironment } from "../lib/gemini.server";
@@ -35,6 +36,11 @@ export async function action({ request }: Route.ActionArgs) {
     return data({ error: "이미지와 생년월일은 필수입니다." }, { status: 400 });
   }
 
+  // 로그인한 사용자 정보 가져오기
+  const [client] = makeServerClient(request);
+  const { data: { user } } = await client.auth.getUser();
+  const userId = user?.id ?? null;
+
   try {
     // Analyze with Gemini
     const report = await analyzeSleepEnvironment(imageBase64, imageMimeType, birthDate);
@@ -49,7 +55,7 @@ export async function action({ request }: Route.ActionArgs) {
         imageBase64,
         phoneNumber,
         instagramId,
-        userId: null,
+        userId,
       });
     } catch (dbError) {
       console.warn("Failed to save to database (continuing):", dbError);
