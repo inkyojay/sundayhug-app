@@ -100,8 +100,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     return data({ error: error.message }, { status: 400 });
   }
 
-  // Redirect to home page with auth cookies in headers
-  return redirect("/", { headers });
+  // Customer 앱 사용자는 마이페이지로 리다이렉트
+  // (향후 referer 또는 state 파라미터로 동적 처리 가능)
+  return redirect("/customer/mypage", { headers });
 }
 
 /**
