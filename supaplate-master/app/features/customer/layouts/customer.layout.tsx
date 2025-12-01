@@ -121,6 +121,38 @@ export default function CustomerLayout() {
         <Outlet />
       </main>
 
+      {/* Footer (Desktop) */}
+      <footer className="hidden md:block border-t bg-muted/30 mt-8">
+        <div className="container px-4 py-8">
+          <div className="text-sm text-muted-foreground space-y-1">
+            <p>
+              <span className="font-medium">법인명(상호)</span> : 주식회사 제이코프 | 
+              <span className="font-medium"> 주소</span> : 16897 경기도 용인시 기흥구 죽전로 6 한솔프라자 7층 706호
+            </p>
+            <p>
+              <span className="font-medium">대표자</span> : 정인교 | 
+              <span className="font-medium"> 전화</span> : 070-7703-8005 | 
+              <span className="font-medium"> 개인정보관리책임자</span> : 강창건(contact@sundayhug.com)
+            </p>
+            <p>
+              <span className="font-medium">사업자등록번호</span> : 702-86-02618 | 
+              <span className="font-medium"> 통신판매업신고</span> : 제2023-용인기흥-0364호{" "}
+              <a 
+                href="https://www.ftc.go.kr/bizCommPop.do?wrkr_no=7028602618" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                [사업자정보확인]
+              </a>
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground/60 mt-4">
+            © {new Date().getFullYear()} Sundayhug. All rights reserved.
+          </p>
+        </div>
+      </footer>
+
       {/* Bottom Navigation (Mobile) */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:hidden">
         <div className="flex items-center justify-around py-2">
