@@ -42,6 +42,7 @@ import {
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
 import { Separator } from "~/core/components/ui/separator";
+import { Textarea } from "~/core/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -567,6 +568,10 @@ export default function WarrantyDetail({ loaderData }: Route.ComponentProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   
+  // 거절 다이얼로그 상태
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
+  
   // fetcher가 완료되면 데이터 새로고침
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.success) {
@@ -577,6 +582,8 @@ export default function WarrantyDetail({ loaderData }: Route.ComponentProps) {
         setShowSearchDialog(false);
         setSearchQuery("");
         setSearchResults([]);
+        setShowRejectDialog(false);
+        setRejectionReason("");
       }
     }
   }, [fetcher.state, fetcher.data]);
@@ -608,6 +615,18 @@ export default function WarrantyDetail({ loaderData }: Route.ComponentProps) {
         { method: "POST" }
       );
     }
+  };
+
+  const handleReject = () => {
+    if (!rejectionReason.trim()) {
+      alert("거절 사유를 입력해주세요.");
+      return;
+    }
+    
+    fetcher.submit(
+      { action: "reject", reason: rejectionReason },
+      { method: "POST" }
+    );
   };
 
   return (
@@ -1072,18 +1091,15 @@ export default function WarrantyDetail({ loaderData }: Route.ComponentProps) {
                     승인
                   </Button>
                 </fetcher.Form>
-                <fetcher.Form method="POST">
-                  <input type="hidden" name="action" value="reject" />
-                  <Button 
-                    type="submit" 
-                    variant="destructive" 
-                    className="w-full"
-                    disabled={isSubmitting}
-                  >
-                    <XCircleIcon className="h-4 w-4 mr-2" />
-                    거절
-                  </Button>
-                </fetcher.Form>
+                <Button 
+                  variant="destructive" 
+                  className="w-full"
+                  onClick={() => setShowRejectDialog(true)}
+                  disabled={isSubmitting}
+                >
+                  <XCircleIcon className="h-4 w-4 mr-2" />
+                  거절
+                </Button>
               </CardContent>
             </Card>
           )}
@@ -1276,6 +1292,45 @@ export default function WarrantyDetail({ loaderData }: Route.ComponentProps) {
               setSearchResults([]);
             }}>
               닫기
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 거절 사유 다이얼로그 */}
+      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>보증서 거절</DialogTitle>
+            <DialogDescription>
+              {warranty.warranty_number} 보증서를 거절합니다.
+              고객에게 안내할 거절 사유를 입력해주세요.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="거절 사유를 입력하세요. (예: 제품 사진이 불명확합니다. 제품 전체가 보이는 사진으로 다시 등록해주세요.)"
+            value={rejectionReason}
+            onChange={(e) => setRejectionReason(e.target.value)}
+            rows={4}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowRejectDialog(false);
+              setRejectionReason("");
+            }}>
+              취소
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleReject}
+              disabled={isSubmitting || !rejectionReason.trim()}
+            >
+              {isSubmitting ? (
+                <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <XCircleIcon className="h-4 w-4 mr-2" />
+              )}
+              거절
             </Button>
           </DialogFooter>
         </DialogContent>
