@@ -10,7 +10,7 @@ import { data } from "react-router";
 import { z } from "zod";
 
 import adminClient from "~/core/lib/supa-admin-client.server";
-import { generateOTP, sendAlimtalkOTP, sendSmsOTP } from "../lib/solapi.server";
+import { generateOTP, sendSmsOTP } from "../lib/solapi.server";
 
 const requestSchema = z.object({
   phoneNumber: z.string().min(10).max(15),
@@ -66,17 +66,12 @@ export async function action({ request }: Route.ActionArgs) {
       );
     }
 
-    // SMS로 먼저 발송 (알림톡은 채널 친구만 수신 가능)
+    // SMS로 인증번호 발송
     console.log("📱 SMS 발송 시작:", normalizedPhone);
-    let sendResult = await sendSmsOTP(normalizedPhone, otp);
-
-    // SMS 실패 시 알림톡으로 시도
-    if (!sendResult.success) {
-      console.log("📲 SMS 실패, 알림톡 시도...");
-      sendResult = await sendAlimtalkOTP(normalizedPhone, otp);
-    }
+    const sendResult = await sendSmsOTP(normalizedPhone, otp);
 
     if (!sendResult.success) {
+      console.error("❌ SMS 발송 실패:", sendResult.error);
       return data(
         { success: false, error: sendResult.error || "인증번호 발송에 실패했습니다." },
         { status: 500 }
