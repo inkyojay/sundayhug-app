@@ -1,0 +1,23 @@
+# 환경 변수
+.env
+.env.local
+
+# 운영체제
+.DS_Store
+Thumbs.db
+
+# 에디터
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 로그
+*.log
+npm-debug.log*
+
+# 임시 파일
+*.tmp
+.cache/
+
+

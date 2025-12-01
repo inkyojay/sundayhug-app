@@ -1,0 +1,13 @@
+{
+  "name": "playauto-inventory-dashboard",
+  "version": "1.0.0",
+  "description": "PlayAuto 재고 관리 대시보드",
+  "scripts": {
+    "start": "npx serve dashboard -l $PORT"
+  },
+  "dependencies": {
+    "serve": "^14.2.1"
+  }
+}
+
+
