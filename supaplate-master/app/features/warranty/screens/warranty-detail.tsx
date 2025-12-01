@@ -53,6 +53,7 @@ import {
 
 import makeServerClient from "~/core/lib/supa-client.server";
 import { createAdminClient } from "~/core/lib/supa-admin.server";
+import { sendWarrantyApprovalAlimtalk } from "~/features/auth/lib/solapi.server";
 
 export const meta: Route.MetaFunction = ({ data }) => {
   return [{ title: `${data?.warranty?.warranty_number || "보증서"} | Sundayhug Admin` }];
@@ -394,23 +395,61 @@ export async function action({ request, params }: Route.ActionArgs) {
     const warrantyEnd = new Date(today);
     warrantyEnd.setFullYear(warrantyEnd.getFullYear() + 1);
 
+    const warrantyStartStr = today.toISOString().split("T")[0];
+    const warrantyEndStr = warrantyEnd.toISOString().split("T")[0];
+
     const { data, error } = await adminClient
       .from("warranties")
       .update({
         status: "approved",
         approved_at: new Date().toISOString(),
         approved_by: "admin",
-        warranty_start: today.toISOString().split("T")[0],
-        warranty_end: warrantyEnd.toISOString().split("T")[0],
+        warranty_start: warrantyStartStr,
+        warranty_end: warrantyEndStr,
       })
       .eq("id", id)
-      .select();
+      .select("*, customers(name)")
+      .single();
 
     console.log("Detail approve result:", { data, error });
 
     if (error) {
       console.error("승인 오류:", error);
       return { success: false, error: `승인 실패: ${error.message}` };
+    }
+
+    // 카카오 알림톡 발송
+    if (data?.customer_phone) {
+      try {
+        const alimtalkResult = await sendWarrantyApprovalAlimtalk(
+          data.customer_phone,
+          {
+            customerName: data.buyer_name || data.customers?.name || "고객",
+            productName: data.product_name || "제품",
+            warrantyNumber: data.warranty_number,
+            startDate: warrantyStartStr,
+            endDate: warrantyEndStr,
+          }
+        );
+
+        if (alimtalkResult.success) {
+          // 알림톡 발송 성공 기록
+          await adminClient
+            .from("warranties")
+            .update({
+              kakao_sent: true,
+              kakao_sent_at: new Date().toISOString(),
+              kakao_message_id: alimtalkResult.messageId,
+            })
+            .eq("id", id);
+          
+          console.log("✅ 승인 알림톡 발송 완료:", alimtalkResult.messageId);
+        } else {
+          console.error("⚠️ 알림톡 발송 실패 (승인은 완료됨):", alimtalkResult.error);
+        }
+      } catch (alimtalkError) {
+        console.error("⚠️ 알림톡 발송 중 오류 (승인은 완료됨):", alimtalkError);
+      }
     }
 
     return { success: true, message: "승인되었습니다." };
@@ -439,21 +478,48 @@ export async function action({ request, params }: Route.ActionArgs) {
     return { success: true, message: "거절되었습니다." };
   }
 
-  // 카카오 알림톡
+  // 카카오 알림톡 수동 발송
   if (actionType === "sendKakao") {
-    const { data, error } = await adminClient
+    // 먼저 보증서 정보 조회
+    const { data: warranty, error: fetchError } = await adminClient
+      .from("warranties")
+      .select("*, customers(name)")
+      .eq("id", id)
+      .single();
+
+    if (fetchError || !warranty) {
+      return { success: false, error: "보증서 정보를 찾을 수 없습니다." };
+    }
+
+    if (!warranty.warranty_start || !warranty.warranty_end) {
+      return { success: false, error: "보증 기간이 설정되지 않았습니다. 먼저 승인해주세요." };
+    }
+
+    // 알림톡 발송
+    const alimtalkResult = await sendWarrantyApprovalAlimtalk(
+      warranty.customer_phone,
+      {
+        customerName: warranty.buyer_name || warranty.customers?.name || "고객",
+        productName: warranty.product_name || "제품",
+        warrantyNumber: warranty.warranty_number,
+        startDate: warranty.warranty_start,
+        endDate: warranty.warranty_end,
+      }
+    );
+
+    if (!alimtalkResult.success) {
+      return { success: false, error: `카카오톡 발송 실패: ${alimtalkResult.error}` };
+    }
+
+    // 발송 기록 업데이트
+    await adminClient
       .from("warranties")
       .update({
         kakao_sent: true,
         kakao_sent_at: new Date().toISOString(),
+        kakao_message_id: alimtalkResult.messageId,
       })
-      .eq("id", id)
-      .select();
-
-    if (error) {
-      console.error("카카오 발송 오류:", error);
-      return { success: false, error: `카카오톡 발송 실패: ${error.message}` };
-    }
+      .eq("id", id);
 
     return { success: true, message: "카카오톡이 발송되었습니다." };
   }

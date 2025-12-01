@@ -142,6 +142,107 @@ export async function sendAlimtalkOTP(
   }
 }
 
+// =============================================================================
+// 보증서 승인 알림톡
+// =============================================================================
+
+interface WarrantyApprovalData {
+  customerName: string;     // 구매자명
+  productName: string;      // 제품명
+  warrantyNumber: string;   // 보증서번호
+  startDate: string;        // 보증시작일 (YYYY-MM-DD 또는 YYYY. M. D. 형식)
+  endDate: string;          // 보증종료일
+}
+
+/**
+ * 보증서 승인 알림톡 발송
+ * Template ID: KA01TP251128085755946WibuPW0VFxq
+ * PF ID: KA01PF23042615382308323ou8Ro12HU
+ */
+export async function sendWarrantyApprovalAlimtalk(
+  phoneNumber: string,
+  data: WarrantyApprovalData
+): Promise<SendAlimtalkResult> {
+  const config = getSolapiConfig();
+
+  // 전화번호 포맷 정리 (하이픈 제거)
+  const formattedPhone = phoneNumber.replace(/-/g, "").replace(/\s/g, "");
+
+  const authHeader = generateAuthHeader(config.apiKey, config.apiSecret);
+
+  // 날짜 포맷 변환 (YYYY-MM-DD → YYYY. M. D.)
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.`;
+  };
+
+  const requestBody = {
+    message: {
+      to: formattedPhone,
+      from: config.senderNumber,
+      kakaoOptions: {
+        pfId: "KA01PF23042615382308323ou8Ro12HU",
+        templateId: "KA01TP251128085755946WibuPW0VFxq",
+        variables: {
+          "#{고객명}": data.customerName || "-",
+          "#{제품명}": data.productName || "-",
+          "#{보증서번호}": data.warrantyNumber,
+          "#{시작일}": formatDate(data.startDate),
+          "#{종료일}": formatDate(data.endDate),
+        },
+      },
+    },
+  };
+
+  try {
+    console.log("📤 보증서 승인 알림톡 발송 요청:", JSON.stringify(requestBody, null, 2));
+    
+    const response = await fetch("https://api.solapi.com/messages/v4/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: authHeader,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    const result = await response.json();
+    console.log("📥 알림톡 응답:", JSON.stringify(result, null, 2));
+
+    if (!response.ok) {
+      console.error("❌ Solapi 알림톡 Error:", result);
+      return {
+        success: false,
+        error: result.errorMessage || result.message || "알림톡 발송에 실패했습니다.",
+      };
+    }
+
+    // 성공 응답 확인
+    if (result.groupId || result.messageId) {
+      console.log("✅ 보증서 승인 알림톡 발송 성공:", result.groupId || result.messageId);
+      return {
+        success: true,
+        messageId: result.groupId || result.messageId,
+      };
+    }
+
+    return {
+      success: false,
+      error: "알림톡 발송 응답이 올바르지 않습니다.",
+    };
+  } catch (error) {
+    console.error("❌ Solapi 알림톡 request error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "알림톡 발송 중 오류가 발생했습니다.",
+    };
+  }
+}
+
+// =============================================================================
+// SMS OTP 발송
+// =============================================================================
+
 /**
  * SMS로 인증번호 발송
  * 참고: https://developers.solapi.com/references/messages/sendManyDetail
