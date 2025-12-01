@@ -38,8 +38,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response("Analysis not found", { status: 404 });
   }
 
-  // Check if user owns this analysis
-  if (result.analysis.userId && result.analysis.userId !== user?.id) {
+  // 권한 체크: 
+  // - userId가 없는 분석은 누구나 볼 수 있음 (비로그인 분석)
+  // - userId가 있고 로그인한 경우, 본인 분석만 볼 수 있음
+  // - userId가 있지만 로그인 안 한 경우, 일단 허용 (URL 공유 등)
+  if (user && result.analysis.userId && result.analysis.userId !== user.id) {
     throw new Response("Unauthorized", { status: 403 });
   }
 
