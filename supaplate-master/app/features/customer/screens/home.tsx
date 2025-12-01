@@ -162,18 +162,6 @@ export default function CustomerHomeScreen() {
         </section>
       )}
 
-      {/* Footer Info */}
-      <section className="px-4 pb-12">
-        <div className="mx-auto max-w-md text-center text-sm text-muted-foreground">
-          <p>문의사항이 있으신가요?</p>
-          <p className="mt-1">
-            <a href="tel:15339093" className="font-medium text-primary hover:underline">
-              1533-9093
-            </a>
-            {" "}(평일 10:00~18:00)
-          </p>
-        </div>
-      </section>
     </div>
   );
 }

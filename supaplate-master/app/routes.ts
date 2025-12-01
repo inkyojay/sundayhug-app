@@ -115,12 +115,14 @@ export default [
       
       // A/S 신청
       route("/as/:warrantyId", "features/customer/screens/as-request.tsx"),
-      
-      // 법적 문서
-      route("/privacy", "features/customer/screens/privacy.tsx"),
-      route("/terms", "features/customer/screens/terms.tsx"),
     ]),
   ]),
+  
+  // ========================================
+  // 법적 문서 (레이아웃 없이 독립적)
+  // ========================================
+  route("/privacy", "features/customer/screens/privacy.tsx"),
+  route("/terms", "features/customer/screens/terms.tsx"),
 
   // ========================================
   // 관리자 인증 라우트 (어드민용)
