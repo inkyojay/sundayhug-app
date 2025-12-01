@@ -4,9 +4,9 @@
  * - 심플한 헤더 (로고, 로그인/로그아웃)
  * - 하단 네비게이션 (모바일 최적화)
  */
-import { useEffect, useState } from "react";
-import { Link, Outlet, useLocation, useNavigate, useRouteLoaderData } from "react-router";
-import { createClient } from "@supabase/supabase-js";
+import type { Route } from "./+types/customer.layout";
+
+import { Link, Outlet, useLocation, useNavigate, useLoaderData, data } from "react-router";
 import { 
   HomeIcon, 
   ShieldCheckIcon, 
@@ -17,6 +17,7 @@ import {
 
 import { Button } from "~/core/components/ui/button";
 import { cn } from "~/core/lib/utils";
+import makeServerClient from "~/core/lib/supa-client.server";
 
 const navItems = [
   {
@@ -41,54 +42,33 @@ const navItems = [
   },
 ];
 
+// 서버에서 인증 상태 확인
+export async function loader({ request }: Route.LoaderArgs) {
+  const [supabase] = makeServerClient(request);
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (user) {
+    const name = user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split("@")[0];
+    return data({
+      isLoggedIn: true,
+      userName: name || "회원",
+    });
+  }
+  
+  return data({
+    isLoggedIn: false,
+    userName: null,
+  });
+}
+
 export default function CustomerLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const rootData = useRouteLoaderData("root") as { env?: { SUPABASE_URL: string; SUPABASE_ANON_KEY: string } } | undefined;
-  
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userName, setUserName] = useState<string | null>(null);
+  const { isLoggedIn, userName } = useLoaderData<typeof loader>();
 
-  // Supabase 클라이언트로 인증 상태 확인
-  useEffect(() => {
-    const checkAuth = async () => {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || rootData?.env?.SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || rootData?.env?.SUPABASE_ANON_KEY;
-      
-      if (!supabaseUrl || !supabaseKey) {
-        console.error("Supabase 환경변수가 없습니다");
-        return;
-      }
-      
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (user) {
-        setIsLoggedIn(true);
-        // 이름 가져오기
-        const name = user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split("@")[0];
-        setUserName(name || null);
-      } else {
-        setIsLoggedIn(false);
-        setUserName(null);
-      }
-    };
-    
-    checkAuth();
-  }, [location.pathname, rootData]);
-
-  const handleLogout = async () => {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || rootData?.env?.SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || rootData?.env?.SUPABASE_ANON_KEY;
-    
-    if (!supabaseUrl || !supabaseKey) return;
-    
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    await supabase.auth.signOut();
-    
-    setIsLoggedIn(false);
-    setUserName(null);
-    navigate("/customer");
+  const handleLogout = () => {
+    // 서버 사이드 로그아웃 페이지로 이동
+    navigate("/logout");
   };
   
   const isActive = (href: string) => {
