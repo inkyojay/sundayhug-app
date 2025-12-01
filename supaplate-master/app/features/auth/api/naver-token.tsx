@@ -72,7 +72,29 @@ export async function action({ request }: Route.ActionArgs) {
       .eq("naver_id", naverId)
       .single();
 
-    // 네이버 ID로 못 찾으면 이메일로 검색
+    // 네이버 ID로 못 찾으면 전화번호로 검색
+    if (!existingMember && naverPhone) {
+      const { data: phoneMember } = await adminClient
+        .from("warranty_members")
+        .select("*")
+        .eq("phone", naverPhone)
+        .single();
+      
+      if (phoneMember) {
+        // 기존 전화번호 회원에 네이버 ID 연결
+        await adminClient
+          .from("warranty_members")
+          .update({
+            naver_id: naverId,
+            naver_profile_image: naverProfileImage,
+          })
+          .eq("id", phoneMember.id);
+        
+        existingMember = phoneMember;
+      }
+    }
+
+    // 네이버 ID, 전화번호로 못 찾으면 이메일로 검색
     if (!existingMember && naverEmail) {
       const { data: emailMember } = await adminClient
         .from("warranty_members")
