@@ -321,7 +321,7 @@ export default function CustomerRegisterScreen() {
                   카카오로 시작하기
                 </Button>
 
-                {/* 네이버 로그인 */}
+                {/* 네이버 로그인 - 비활성화
                 <Button
                   type="button"
                   onClick={handleNaverLogin}
@@ -332,6 +332,7 @@ export default function CustomerRegisterScreen() {
                   </svg>
                   네이버로 시작하기
                 </Button>
+                */}
 
                 <div className="relative my-6">
                   <Separator />

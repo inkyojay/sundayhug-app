@@ -157,7 +157,7 @@ export default function CustomerLoginScreen() {
                   카카오로 로그인
                 </Button>
 
-                {/* 네이버 로그인 */}
+                {/* 네이버 로그인 - 비활성화
                 <Button
                   type="button"
                   onClick={handleNaverLogin}
@@ -168,6 +168,7 @@ export default function CustomerLoginScreen() {
                   </svg>
                   네이버로 로그인
                 </Button>
+                */}
 
                 <div className="relative my-6">
                   <Separator />
