@@ -68,13 +68,13 @@ export default [
     ...prefix("/warranty", [
       route("/upload-photo", "features/warranty/api/upload-photo.tsx"),
     ]),
-    // 수면 분석 API
-    ...prefix("/sleep", [
-      route("/analyze", "features/sleep-analysis/api/analyze.tsx"),
-      route("/analyze-from-url", "features/sleep-analysis/api/analyze-from-url.tsx"),
-      route("/:id/slides", "features/sleep-analysis/api/slides.tsx"),
-      route("/seed-references", "features/sleep-analysis/api/seed-references.tsx"),
-    ]),
+    // 수면 분석 API (프로덕션에서 비활성화 - develop 브랜치에서 활성화)
+    // ...prefix("/sleep", [
+    //   route("/analyze", "features/sleep-analysis/api/analyze.tsx"),
+    //   route("/analyze-from-url", "features/sleep-analysis/api/analyze-from-url.tsx"),
+    //   route("/:id/slides", "features/sleep-analysis/api/slides.tsx"),
+    //   route("/seed-references", "features/sleep-analysis/api/seed-references.tsx"),
+    // ]),
   ]),
 
   // ========================================
@@ -91,11 +91,11 @@ export default [
         route("/view/:id", "features/warranty/screens/public/view.tsx"),
       ]),
       
-      // 수면 분석기
-      ...prefix("/sleep", [
-        index("features/sleep-analysis/screens/analyze-public.tsx"),
-        route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "customer-sleep-result" }),
-      ]),
+      // 수면 분석기 (프로덕션에서 비활성화 - develop 브랜치에서 활성화)
+      // ...prefix("/sleep", [
+      //   index("features/sleep-analysis/screens/analyze-public.tsx"),
+      //   route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "customer-sleep-result" }),
+      // ]),
       
       // 통합 로그인/회원가입
       route("/login", "features/customer/screens/login.tsx"),
@@ -109,7 +109,8 @@ export default [
         route("/profile", "features/customer/screens/mypage/profile.tsx"),
         route("/warranties", "features/customer/screens/mypage/warranties.tsx"),
         route("/warranty/:id", "features/customer/screens/mypage/warranty-detail.tsx"),
-        route("/analyses", "features/customer/screens/mypage/analyses.tsx"),
+        // 수면 분석 이력 (프로덕션에서 비활성화)
+        // route("/analyses", "features/customer/screens/mypage/analyses.tsx"),
         route("/as", "features/customer/screens/mypage/as-list.tsx"),
       ]),
       
@@ -203,12 +204,12 @@ export default [
           route("/:id", "features/warranty/screens/warranty-detail.tsx"),
         ]),
         
-        // 수면 분석 관리 (관리자용)
-        ...prefix("/sleep", [
-          index("features/sleep-analysis/screens/analyze.tsx"),
-          route("/history", "features/sleep-analysis/screens/history.tsx"),
-          route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "dashboard-sleep-result" }),
-        ]),
+        // 수면 분석 관리 (프로덕션에서 비활성화 - develop 브랜치에서 활성화)
+        // ...prefix("/sleep", [
+        //   index("features/sleep-analysis/screens/analyze.tsx"),
+        //   route("/history", "features/sleep-analysis/screens/history.tsx"),
+        //   route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "dashboard-sleep-result" }),
+        // ]),
       ]),
       
       // 계정 설정

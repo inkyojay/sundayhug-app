@@ -43,13 +43,14 @@ const menuItems = [
     href: "/customer/mypage/warranties",
     color: "text-blue-500",
   },
-  {
-    title: "수면 분석 이력",
-    description: "AI 수면 환경 분석 결과를 확인하세요",
-    icon: MoonIcon,
-    href: "/customer/mypage/analyses",
-    color: "text-purple-500",
-  },
+  // 수면 분석 이력 (프로덕션에서 비활성화 - develop 브랜치에서 활성화)
+  // {
+  //   title: "수면 분석 이력",
+  //   description: "AI 수면 환경 분석 결과를 확인하세요",
+  //   icon: MoonIcon,
+  //   href: "/customer/mypage/analyses",
+  //   color: "text-purple-500",
+  // },
   {
     title: "A/S 신청 이력",
     description: "신청한 A/S 진행 상황을 확인하세요",
