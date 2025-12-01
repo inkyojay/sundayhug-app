@@ -59,6 +59,17 @@ export async function action({ request }: Route.ActionArgs) {
     const passwordHash = await bcrypt.hash(password, 10);
     const normalizedPhone = phone.replace(/-/g, "");
 
+    // 전화번호 중복 확인
+    const { data: existingPhone } = await supabase
+      .from("warranty_members")
+      .select("id")
+      .eq("phone", normalizedPhone)
+      .single();
+
+    if (existingPhone) {
+      return data({ success: false, error: "이미 가입된 전화번호입니다." });
+    }
+
     // 회원 생성
     const { data: member, error } = await supabase
       .from("warranty_members")
@@ -73,7 +84,17 @@ export async function action({ request }: Route.ActionArgs) {
 
     if (error) {
       console.error("회원가입 오류:", error);
-      return data({ success: false, error: "회원가입에 실패했습니다." });
+      // 에러 메시지 상세화
+      if (error.code === "23505") {
+        if (error.message.includes("email")) {
+          return data({ success: false, error: "이미 가입된 이메일입니다." });
+        }
+        if (error.message.includes("phone")) {
+          return data({ success: false, error: "이미 가입된 전화번호입니다." });
+        }
+        return data({ success: false, error: "이미 가입된 정보입니다." });
+      }
+      return data({ success: false, error: `회원가입 실패: ${error.message}` });
     }
 
     return data({ 
