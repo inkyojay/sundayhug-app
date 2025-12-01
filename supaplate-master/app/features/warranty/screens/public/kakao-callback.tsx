@@ -12,24 +12,30 @@ export async function loader({ request }: Route.LoaderArgs) {
     return redirect("/customer/login?error=kakao_failed");
   }
   
-  const KAKAO_CLIENT_ID = process.env.KAKAO_CLIENT_ID;
-  const KAKAO_CLIENT_SECRET = process.env.KAKAO_CLIENT_SECRET;
+  // 카카오 REST API 키 (환경변수 또는 하드코딩)
+  const KAKAO_CLIENT_ID = process.env.KAKAO_CLIENT_ID || "7474843a05c3daf50d1253676e6badbd";
   const REDIRECT_URI = `${url.origin}/customer/kakao/callback`;
   
   try {
-    // 1. 인가 코드로 토큰 요청
+    // 1. 인가 코드로 토큰 요청 (client_secret은 선택 사항)
+    const tokenParams: Record<string, string> = {
+      grant_type: "authorization_code",
+      client_id: KAKAO_CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
+      code,
+    };
+    
+    // client_secret이 있으면 추가
+    if (process.env.KAKAO_CLIENT_SECRET) {
+      tokenParams.client_secret = process.env.KAKAO_CLIENT_SECRET;
+    }
+    
     const tokenResponse = await fetch("https://kauth.kakao.com/oauth/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        client_id: KAKAO_CLIENT_ID || "",
-        client_secret: KAKAO_CLIENT_SECRET || "",
-        redirect_uri: REDIRECT_URI,
-        code,
-      }),
+      body: new URLSearchParams(tokenParams),
     });
     
     const tokenData = await tokenResponse.json();
