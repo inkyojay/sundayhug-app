@@ -9,12 +9,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const error = url.searchParams.get("error");
   
   if (error || !code) {
-    return redirect("/warranty/login?error=kakao_failed");
+    return redirect("/customer/login?error=kakao_failed");
   }
   
   const KAKAO_CLIENT_ID = process.env.KAKAO_CLIENT_ID;
   const KAKAO_CLIENT_SECRET = process.env.KAKAO_CLIENT_SECRET;
-  const REDIRECT_URI = `${url.origin}/warranty/kakao/callback`;
+  const REDIRECT_URI = `${url.origin}/customer/kakao/callback`;
   
   try {
     // 1. 인가 코드로 토큰 요청
@@ -36,7 +36,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     
     if (!tokenData.access_token) {
       console.error("카카오 토큰 발급 실패:", tokenData);
-      return redirect("/warranty/login?error=kakao_token_failed");
+      return redirect("/customer/login?error=kakao_token_failed");
     }
     
     // 2. 사용자 정보 요청
@@ -50,7 +50,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     
     if (!userData.id) {
       console.error("카카오 사용자 정보 조회 실패:", userData);
-      return redirect("/warranty/login?error=kakao_user_failed");
+      return redirect("/customer/login?error=kakao_user_failed");
     }
     
     const kakaoId = String(userData.id);
@@ -106,7 +106,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       
       if (insertError) {
         console.error("회원 생성 실패:", insertError);
-        return redirect("/warranty/login?error=create_failed");
+        return redirect("/customer/login?error=create_failed");
       }
       
       member = newMember;
@@ -126,7 +126,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       .update({ last_login_at: new Date().toISOString() })
       .eq("id", member.id);
     
-    // 6. 쿠키 설정 후 리다이렉트
+    // 6. 쿠키 + localStorage 설정 후 리다이렉트 (클라이언트에서 처리하기 위해)
     const headers = new Headers();
     headers.append(
       "Set-Cookie",
@@ -136,7 +136,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       "Set-Cookie",
       `warranty_member_name=${encodeURIComponent(member.name || kakaoNickname || "")}; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}`
     );
-    headers.append("Location", "/warranty/mypage");
+    // localStorage 설정을 위해 쿼리 파라미터로 전달
+    headers.append("Location", `/customer/mypage?memberId=${member.id}&memberName=${encodeURIComponent(member.name || kakaoNickname || "")}`);
     
     return new Response(null, {
       status: 302,
@@ -145,7 +146,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     
   } catch (error) {
     console.error("카카오 로그인 에러:", error);
-    return redirect("/warranty/login?error=kakao_error");
+    return redirect("/customer/login?error=kakao_error");
   }
 }
 
