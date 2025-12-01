@@ -45,9 +45,15 @@ export default function MypageWarrantiesScreen() {
       return;
     }
 
-    // 클라이언트에서 직접 Supabase 호출
-    if (rootData?.env) {
-      fetchWarranties(customerId, rootData.env);
+    // 환경변수 직접 사용 (VITE_ 접두사 우선)
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || rootData?.env?.SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || rootData?.env?.SUPABASE_ANON_KEY;
+    
+    if (supabaseUrl && supabaseKey) {
+      fetchWarranties(customerId, { SUPABASE_URL: supabaseUrl, SUPABASE_ANON_KEY: supabaseKey });
+    } else {
+      console.error("Supabase 환경변수가 없습니다");
+      setIsLoading(false);
     }
   }, [navigate, rootData]);
 

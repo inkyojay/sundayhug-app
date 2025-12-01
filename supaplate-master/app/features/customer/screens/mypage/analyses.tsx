@@ -33,14 +33,25 @@ export default function MypageAnalysesScreen() {
     const customerId = localStorage.getItem("customerId");
     const customerPhone = localStorage.getItem("customerPhone");
     
+    console.log("📱 Analyses page - customerId:", customerId, "phone:", customerPhone, "rootData:", rootData);
+    
     if (!customerId) {
       navigate("/customer/login");
       return;
     }
 
     // DB에서 수면 분석 이력 조회 (전화번호 기준)
-    if (rootData?.env && customerPhone) {
-      fetchAnalyses(customerPhone, rootData.env);
+    if (customerPhone) {
+      // 환경변수 직접 사용 (VITE_ 접두사)
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || rootData?.env?.SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || rootData?.env?.SUPABASE_ANON_KEY;
+      
+      if (supabaseUrl && supabaseKey) {
+        fetchAnalyses(customerPhone, { SUPABASE_URL: supabaseUrl, SUPABASE_ANON_KEY: supabaseKey });
+      } else {
+        console.error("Supabase 환경변수가 없습니다");
+        setIsLoading(false);
+      }
     } else {
       // 전화번호가 없으면 localStorage에서 가져오기 (폴백)
       const savedAnalyses = localStorage.getItem("sleepAnalyses");
