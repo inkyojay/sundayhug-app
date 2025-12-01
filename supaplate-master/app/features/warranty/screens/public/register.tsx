@@ -1,9 +1,11 @@
 /**
- * 보증서 등록 페이지 (고객용 - Public)
+ * 보증서 등록 페이지 (고객용 - 로그인 필수)
  * 
- * 대상: ABC 이동식 아기침대 (SKU: SH_X_PNPC%)
- * 조건: 구매 후 30일 이내 등록 필수
- * 인증: 수령자 이름 + 전화번호 + 제품 사진
+ * 대상: ABC 이동식 아기침대
+ * 흐름: 정보입력 → 사진등록 → 완료 (주문 검증 없음)
+ * 승인: 관리자가 확인 후 카카오톡 알림톡으로 결과 전달
+ * 
+ * 전제조건: 회원가입 완료 (전화번호 인증 또는 소셜 로그인)
  */
 import type { Route } from "./+types/register";
 
@@ -16,9 +18,10 @@ import {
   AlertCircleIcon,
   UploadIcon,
   XIcon,
+  ArrowLeftIcon,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useNavigate } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
 import {
@@ -32,9 +35,6 @@ import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
 
 import makeServerClient from "~/core/lib/supa-client.server";
-
-// 대상 제품 SKU 패턴 (ABC 이동식 아기침대)
-const TARGET_SKU_PATTERN = "SH_X_PNPC%";
 
 export const meta: Route.MetaFunction = () => {
   return [
@@ -53,170 +53,47 @@ export async function action({ request }: Route.ActionArgs) {
   
   const step = formData.get("step") as string;
 
-  if (step === "verify") {
-    // 1단계: 수령자 이름 + 연락처 검증
-    const customerName = formData.get("customerName") as string;
-    const phoneRaw = formData.get("phone") as string;
-
-    if (!customerName || !phoneRaw) {
-      return { success: false, error: "수령자 이름과 연락처를 입력해주세요." };
-    }
-
-    // 전화번호 정규화 (하이픈 제거 및 하이픈 포함 버전 둘 다 검색)
-    const phoneClean = phoneRaw.replace(/-/g, "");
-    const phoneWithDash = phoneClean.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
-
-    // 30일 전 날짜 계산
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    // orders + order_items 조인하여 검색
-    // 조건: 이름 매칭 + 전화번호 매칭 + ABC 아기침대 SKU + 30일 이내
-    const { data: orders, error } = await supabase
-      .from("orders")
-      .select(`
-        id, 
-        uniq,
-        shop_sale_name, 
-        shop_opt_name, 
-        ord_time, 
-        shop_name, 
-        invoice_no, 
-        to_name, 
-        to_tel, 
-        to_htel,
-        order_items!inner (
-          id,
-          sku_cd,
-          product_name,
-          shop_opt_name
-        )
-      `)
-      .eq("to_name", customerName)
-      .or(`to_tel.eq.${phoneClean},to_htel.eq.${phoneClean},to_tel.eq.${phoneWithDash},to_htel.eq.${phoneWithDash}`)
-      .like("order_items.sku_cd", "SH_X_PNPC%")
-      .gte("ord_time", thirtyDaysAgo.toISOString())
-      .order("ord_time", { ascending: false })
-      .limit(1);
-
-    if (error) {
-      console.error("Order search error:", error);
-      return { 
-        success: false, 
-        error: "주문 조회 중 오류가 발생했습니다." 
-      };
-    }
-
-    if (!orders || orders.length === 0) {
-      return { 
-        success: false, 
-        error: "보증서 등록 가능한 주문을 찾을 수 없습니다.\n\n확인 사항:\n• ABC 이동식 아기침대 구매 여부\n• 수령자 이름과 연락처 일치 여부\n• 구매 후 30일 이내 여부" 
-      };
-    }
-
-    const order = orders[0];
-    const orderItem = (order.order_items as any[])?.[0];
-
-    // 이미 등록된 보증서가 있는지 확인 (같은 주문번호로)
-    const { data: existingWarranty } = await supabase
-      .from("warranties")
-      .select("id, warranty_number")
-      .eq("order_id", order.id)
-      .single();
-
-    if (existingWarranty) {
-      return { 
-        success: false, 
-        error: `이미 등록된 보증서가 있습니다.\n보증서 번호: ${existingWarranty.warranty_number}` 
-      };
-    }
-
-    return {
-      success: true,
-      step: "verified",
-      order: {
-        id: order.id,
-        uniq: order.uniq,
-        productName: orderItem?.product_name || order.shop_sale_name,
-        productOption: orderItem?.shop_opt_name || order.shop_opt_name,
-        sku: orderItem?.sku_cd,
-        orderDate: order.ord_time,
-        salesChannel: order.shop_name,
-        trackingNumber: order.invoice_no,
-        customerName: order.to_name,
-      },
-    };
-  }
-
   if (step === "register") {
-    // 2단계: 보증서 등록 (사진 포함)
+    // 보증서 등록 (로그인된 회원만)
+    const memberId = formData.get("memberId") as string;
     const customerName = formData.get("customerName") as string;
     const phone = formData.get("phone") as string;
-    const orderId = formData.get("orderId") as string;
-    const orderUniq = formData.get("orderUniq") as string;
-    const productName = formData.get("productName") as string;
-    const productOption = formData.get("productOption") as string;
-    const productSku = formData.get("productSku") as string;
-    const orderDate = formData.get("orderDate") as string;
-    const salesChannel = formData.get("salesChannel") as string;
-    const trackingNumber = formData.get("trackingNumber") as string;
+    const purchaseDate = formData.get("purchaseDate") as string;
     const photoUrl = formData.get("photoUrl") as string;
+
+    if (!memberId) {
+      return { success: false, error: "로그인이 필요합니다." };
+    }
+
+    if (!customerName || !phone) {
+      return { success: false, error: "이름과 연락처를 입력해주세요." };
+    }
 
     if (!photoUrl) {
       return { success: false, error: "제품 사진을 등록해주세요." };
     }
 
+    // 전화번호 정규화
+    const normalizedPhone = phone.replace(/-/g, "");
+
     // 보증서 번호 생성
     const { data: warrantyNumber } = await supabase
       .rpc("generate_warranty_number");
 
-    // 고객 생성 또는 조회
-    let customerId: string | null = null;
-    const { data: existingCustomer } = await supabase
-      .from("customers")
-      .select("id")
-      .eq("phone", phone)
-      .single();
-
-    if (existingCustomer) {
-      customerId = existingCustomer.id;
-      // 이름 업데이트
-      await supabase
-        .from("customers")
-        .update({ name: customerName })
-        .eq("id", customerId);
-    } else {
-      const { data: newCustomer } = await supabase
-        .from("customers")
-        .insert({ phone, name: customerName })
-        .select("id")
-        .single();
-      customerId = newCustomer?.id || null;
-    }
-
-    // 보증서 생성
-    const today = new Date();
-    const warrantyEnd = new Date(today);
-    warrantyEnd.setFullYear(warrantyEnd.getFullYear() + 1);
-
+    // 보증서 생성 (status: pending - 관리자 승인 대기)
     const { data: warranty, error } = await supabase
       .from("warranties")
       .insert({
         warranty_number: warrantyNumber || `SH-W-${Date.now()}`,
-        customer_id: customerId,
-        order_id: orderId || null,
-        tracking_number: trackingNumber,
-        customer_phone: phone,
-        product_name: productName,
-        product_option: productOption,
-        product_sku: productSku,
-        order_date: orderDate ? new Date(orderDate).toISOString().split("T")[0] : null,
-        sales_channel: salesChannel,
-        warranty_start: today.toISOString().split("T")[0],
-        warranty_end: warrantyEnd.toISOString().split("T")[0],
-        status: "pending",
+        member_id: memberId, // 로그인된 회원 ID
+        order_id: null, // 주문 연결 없음
+        customer_phone: normalizedPhone,
+        product_name: "ABC 이동식 아기침대",
+        order_date: purchaseDate ? new Date(purchaseDate).toISOString().split("T")[0] : null,
+        status: "pending", // 승인 대기 상태
         product_photo_url: photoUrl,
         photo_uploaded_at: new Date().toISOString(),
+        // warranty_start, warranty_end는 관리자 승인 시 설정
       })
       .select("warranty_number")
       .single();
@@ -238,48 +115,102 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function WarrantyRegister({ loaderData, actionData }: Route.ComponentProps) {
   const fetcher = useFetcher();
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const [step, setStep] = useState<"input" | "confirm" | "photo" | "complete">("input");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [memberId, setMemberId] = useState<string | null>(null);
+  const [memberInfo, setMemberInfo] = useState<{ name: string; phone: string } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const [step, setStep] = useState<"info" | "photo" | "complete">("info");
   const [formData, setFormData] = useState({
     customerName: "",
     phone: "",
+    purchaseDate: "",
   });
-  const [orderInfo, setOrderInfo] = useState<any>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [uploadedPhotoUrl, setUploadedPhotoUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  // 로그인 체크 및 회원 정보 로드
+  useEffect(() => {
+    const customerId = localStorage.getItem("customerId");
+    const customerName = localStorage.getItem("customerName");
+    
+    if (!customerId) {
+      // 로그인 안 됨 → 로그인 페이지로
+      navigate("/customer/login?redirect=/customer/warranty");
+      return;
+    }
+    
+    setIsLoggedIn(true);
+    setMemberId(customerId);
+    
+    // 회원 정보 가져오기
+    fetch(`/api/customer/member?id=${customerId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.member) {
+          setMemberInfo({ name: data.member.name, phone: data.member.phone });
+          setFormData(prev => ({
+            ...prev,
+            customerName: data.member.name || customerName || "",
+            phone: data.member.phone ? formatPhoneNumber(data.member.phone) : "",
+          }));
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            customerName: customerName || "",
+          }));
+        }
+        setIsLoading(false);
+      })
+      .catch(() => {
+        setFormData(prev => ({
+          ...prev,
+          customerName: customerName || "",
+        }));
+        setIsLoading(false);
+      });
+  }, [navigate]);
+
   // fetcher 결과 처리
   const fetcherData = fetcher.data as any;
   
-  // useEffect로 상태 변경 처리
   useEffect(() => {
     if (!fetcherData) return;
     
-    // 검증 성공 시 다음 단계로 (사진 업로드)
-    if (fetcherData.success && fetcherData.step === "verified" && step === "input") {
-      setOrderInfo(fetcherData.order);
-      setStep("photo");
-    }
-
     // 등록 성공 시 완료 화면
-    if (fetcherData.success && fetcherData.step === "completed" && step === "photo") {
+    if (fetcherData.success && fetcherData.step === "completed") {
       setStep("complete");
     }
-  }, [fetcherData, step]);
+  }, [fetcherData]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleVerify = () => {
-    fetcher.submit(
-      { step: "verify", ...formData },
-      { method: "POST" }
-    );
+  const formatPhoneNumber = (value: string) => {
+    const numbers = value.replace(/[^\d]/g, "");
+    if (numbers.length <= 3) return numbers;
+    if (numbers.length <= 7) return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
+    return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7, 11)}`;
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, phone: formatPhoneNumber(e.target.value) });
+  };
+
+  const goToPhotoStep = () => {
+    if (!formData.customerName || !formData.phone) {
+      setUploadError("이름과 연락처를 입력해주세요.");
+      return;
+    }
+    setUploadError(null);
+    setStep("photo");
   };
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -322,7 +253,7 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
       // Supabase Storage에 업로드
       const timestamp = Date.now();
       const fileExt = photoFile.name.split(".").pop();
-      const fileName = `warranty_${orderInfo?.id || timestamp}_${timestamp}.${fileExt}`;
+      const fileName = `warranty_${timestamp}.${fileExt}`;
 
       const response = await fetch("/api/warranty/upload-photo", {
         method: "POST",
@@ -345,16 +276,10 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
       fetcher.submit(
         { 
           step: "register",
+          memberId: memberId || "",
           customerName: formData.customerName,
           phone: formData.phone,
-          orderId: orderInfo?.id || "",
-          orderUniq: orderInfo?.uniq || "",
-          productName: orderInfo?.productName || "",
-          productOption: orderInfo?.productOption || "",
-          productSku: orderInfo?.sku || "",
-          orderDate: orderInfo?.orderDate || "",
-          salesChannel: orderInfo?.salesChannel || "",
-          trackingNumber: orderInfo?.trackingNumber || "",
+          purchaseDate: formData.purchaseDate,
           photoUrl: url,
         },
         { method: "POST" }
@@ -376,9 +301,37 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
     }
   };
 
+  // 로딩 중
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white dark:from-zinc-900 dark:to-zinc-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-500 mx-auto mb-4"></div>
+          <p className="text-muted-foreground">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 로그인 안 됨 (리다이렉트 전 깜빡임 방지)
+  if (!isLoggedIn) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white dark:from-zinc-900 dark:to-zinc-950">
-      <div className="container max-w-lg mx-auto px-4 py-12">
+      <div className="container max-w-lg mx-auto px-4 py-8">
+        {/* 뒤로가기 */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate("/customer")}
+          className="mb-4"
+        >
+          <ArrowLeftIcon className="h-4 w-4 mr-2" />
+          돌아가기
+        </Button>
+
         {/* 로고/헤더 */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 mb-4">
@@ -393,17 +346,17 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
           {["정보입력", "사진등록", "완료"].map((label, idx) => (
             <div key={label} className="flex items-center">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                idx === 0 && step === "input" ? "bg-amber-500 text-white" :
+                idx === 0 && step === "info" ? "bg-amber-500 text-white" :
                 idx === 1 && step === "photo" ? "bg-amber-500 text-white" :
                 idx === 2 && step === "complete" ? "bg-green-500 text-white" :
-                idx < ["input", "photo", "complete"].indexOf(step) ? "bg-amber-500 text-white" :
+                idx < ["info", "photo", "complete"].indexOf(step) ? "bg-amber-500 text-white" :
                 "bg-muted text-muted-foreground"
               }`}>
                 {idx + 1}
               </div>
               {idx < 2 && (
                 <div className={`w-12 h-0.5 mx-1 ${
-                  idx < ["input", "photo", "complete"].indexOf(step) 
+                  idx < ["info", "photo", "complete"].indexOf(step) 
                     ? "bg-amber-500" 
                     : "bg-muted"
                 }`} />
@@ -413,59 +366,75 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
         </div>
 
         {/* Step 1: 정보 입력 */}
-        {step === "input" && (
+        {step === "info" && (
           <Card>
             <CardHeader>
-              <CardTitle>구매 정보 입력</CardTitle>
+              <CardTitle>보증서 정보 입력</CardTitle>
               <CardDescription>
-                주문 시 입력한 수령자 정보를 입력해주세요
+                제품 구매자 정보를 입력해주세요
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="customerName">수령자 이름</Label>
+                <Label htmlFor="customerName">이름 *</Label>
                 <Input
                   id="customerName"
                   name="customerName"
-                  placeholder="배송받으신 분 이름"
+                  placeholder="구매자 이름"
                   value={formData.customerName}
                   onChange={handleInputChange}
                 />
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="phone">연락처</Label>
+                <Label htmlFor="phone">연락처 *</Label>
                 <Input
                   id="phone"
                   name="phone"
                   type="tel"
-                  placeholder="'-' 없이 숫자만 입력"
+                  placeholder="010-1234-5678"
                   value={formData.phone}
+                  onChange={handlePhoneChange}
+                  maxLength={13}
+                />
+                <p className="text-xs text-muted-foreground">
+                  승인 결과를 카카오톡으로 안내드립니다
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="purchaseDate">구매일 (선택)</Label>
+                <Input
+                  id="purchaseDate"
+                  name="purchaseDate"
+                  type="date"
+                  value={formData.purchaseDate}
                   onChange={handleInputChange}
                 />
               </div>
 
-              {fetcherData?.error && (
+              {uploadError && (
                 <div className="p-3 bg-destructive/10 text-destructive rounded-lg text-sm flex items-start gap-2">
                   <AlertCircleIcon className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  <span className="whitespace-pre-line">{fetcherData.error}</span>
+                  <span>{uploadError}</span>
                 </div>
               )}
 
               <Button 
                 className="w-full" 
-                onClick={handleVerify}
-                disabled={!formData.customerName || !formData.phone || fetcher.state !== "idle"}
+                onClick={goToPhotoStep}
+                disabled={!formData.customerName || !formData.phone}
               >
-                {fetcher.state !== "idle" ? "확인 중..." : "다음"}
+                다음: 사진 등록
                 <ArrowRightIcon className="h-4 w-4 ml-2" />
               </Button>
 
               <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg text-xs text-amber-800 dark:text-amber-200">
                 <p className="font-medium mb-1">📌 등록 안내</p>
                 <ul className="space-y-0.5 list-disc list-inside">
-                  <li>ABC 이동식 아기침대 구매자만 등록 가능</li>
-                  <li>구매 후 30일 이내 등록 필수</li>
-                  <li>실제 제품 사진 등록 필수</li>
+                  <li>ABC 이동식 아기침대 구매자 대상</li>
+                  <li>등록 후 관리자 확인을 거쳐 승인됩니다</li>
+                  <li>승인 결과는 카카오톡으로 안내드립니다</li>
                 </ul>
               </div>
             </CardContent>
@@ -473,7 +442,7 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
         )}
 
         {/* Step 2: 사진 등록 */}
-        {step === "photo" && orderInfo && (
+        {step === "photo" && (
           <Card>
             <CardHeader>
               <CardTitle>제품 사진 등록</CardTitle>
@@ -482,25 +451,22 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* 주문 정보 요약 */}
+              {/* 입력 정보 요약 */}
               <div className="p-4 bg-muted/50 rounded-lg space-y-2">
                 <div className="flex items-center gap-3">
                   <PackageIcon className="h-5 w-5 text-muted-foreground" />
                   <div>
-                    <p className="font-medium">{orderInfo.productName}</p>
-                    {orderInfo.productOption && (
-                      <p className="text-sm text-muted-foreground">{orderInfo.productOption}</p>
-                    )}
+                    <p className="font-medium">ABC 이동식 아기침대</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
-                    <span className="text-muted-foreground">주문일: </span>
-                    {orderInfo.orderDate ? new Date(orderInfo.orderDate).toLocaleDateString("ko-KR") : "-"}
+                    <span className="text-muted-foreground">신청자: </span>
+                    {formData.customerName}
                   </div>
                   <div>
-                    <span className="text-muted-foreground">수령인: </span>
-                    {orderInfo.customerName}
+                    <span className="text-muted-foreground">연락처: </span>
+                    {formData.phone}
                   </div>
                 </div>
               </div>
@@ -570,7 +536,7 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
                 <Button 
                   variant="outline" 
                   className="flex-1" 
-                  onClick={() => setStep("input")}
+                  onClick={() => setStep("info")}
                   disabled={isUploading || fetcher.state !== "idle"}
                 >
                   이전
@@ -603,29 +569,37 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
               </div>
               <h2 className="text-xl font-bold mb-2">등록 완료!</h2>
               <p className="text-muted-foreground mb-6">
-                보증서 등록이 완료되었습니다.<br />
-                관리자 확인 후 카카오톡으로 보증서가 발송됩니다.
+                보증서 등록 신청이 완료되었습니다.<br />
+                관리자 확인 후 <strong>카카오톡</strong>으로 결과를 안내드립니다.
               </p>
 
               <div className="p-4 bg-muted/50 rounded-lg mb-6">
-                <p className="text-sm text-muted-foreground">보증서 번호</p>
+                <p className="text-sm text-muted-foreground">접수 번호</p>
                 <p className="text-lg font-mono font-bold">{fetcherData?.warrantyNumber}</p>
+              </div>
+
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg text-sm text-amber-800 dark:text-amber-200 mb-4">
+                <p>⏳ 영업일 기준 1-2일 내 처리됩니다</p>
               </div>
 
               <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg text-sm text-green-800 dark:text-green-200">
                 <p>✅ 승인 완료 시 1년간 무상 A/S 가능</p>
               </div>
 
-              <p className="text-xs text-muted-foreground mt-4">
-                영업일 기준 1-2일 내 처리됩니다
-              </p>
+              <Button
+                variant="outline"
+                className="mt-6"
+                onClick={() => navigate("/customer")}
+              >
+                홈으로 돌아가기
+              </Button>
             </CardContent>
           </Card>
         )}
 
         {/* 하단 안내 */}
         <div className="mt-8 text-center text-sm text-muted-foreground">
-          <p>문의: 1234-5678</p>
+          <p>문의: 070-7703-8005</p>
           <p className="mt-1">
             <a href="https://sundayhug.com" className="hover:underline">
               sundayhug.com
