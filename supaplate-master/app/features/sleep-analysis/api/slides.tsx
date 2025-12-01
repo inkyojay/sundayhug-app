@@ -15,8 +15,9 @@ import adminClient from "~/core/lib/supa-admin-client.server";
 
 import { downloadImageFromUrl, uploadSlidesToStorage } from "../lib/storage.server";
 import { generateAllSlidesAsPng } from "../lib/slides.server";
-import { getSleepAnalysis, updateAnalysisSlides } from "../queries";
-import type { FeedbackItem, Reference, RiskLevel } from "../schema";
+import { getSleepAnalysis as getSleepAnalysisFromServer } from "../lib/sleep-analysis.server";
+import { updateAnalysisSlides } from "../queries";
+import type { RiskLevel } from "../schema";
 
 export async function loader({ params }: Route.LoaderArgs) {
   const { id } = params;
@@ -26,13 +27,13 @@ export async function loader({ params }: Route.LoaderArgs) {
   }
 
   try {
-    const result = await getSleepAnalysis(id);
+    const result = await getSleepAnalysisFromServer(id);
 
     if (!result) {
       return data({ success: false, error: "Analysis not found" }, { status: 404 });
     }
 
-    const slides = result.analysis.reportSlides as string[] | null;
+    const slides = result.report_slides as string[] | null;
 
     if (!slides || slides.length === 0) {
       return data(
@@ -53,9 +54,9 @@ export async function loader({ params }: Route.LoaderArgs) {
         slides,
         slideUrls: isUrlArray ? slides : null,
         slideCount: slides.length,
-        instagramId: result.analysis.instagramId,
-        phoneNumber: result.analysis.phoneNumber,
-        createdAt: result.analysis.createdAt,
+        instagramId: result.instagram_id,
+        phoneNumber: result.phone_number,
+        createdAt: result.created_at,
         isUrlArray,
       },
     });
@@ -83,36 +84,42 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   try {
-    const result = await getSleepAnalysis(id);
+    const result = await getSleepAnalysisFromServer(id);
 
     if (!result) {
       return data({ success: false, error: "Analysis not found" }, { status: 404 });
     }
 
+    // summary에서 파싱된 report 사용
+    const parsedReport = result.report;
+    
+    if (!parsedReport) {
+      return data({ success: false, error: "Analysis report not found" }, { status: 404 });
+    }
+
     // Build analysis report from database data
     const report = {
-      summary: result.analysis.summary,
-      feedbackItems: result.feedbackItems.map((item: FeedbackItem) => ({
-        id: item.itemNumber,
-        x: Number(item.x),
-        y: Number(item.y),
-        title: item.title,
-        feedback: item.feedback,
-        riskLevel: item.riskLevel as RiskLevel,
+      summary: parsedReport.overall_comment || "",
+      feedbackItems: (parsedReport.feedback_items || []).map((item: any, index: number) => ({
+        id: index + 1,
+        x: 50, // 기본 위치
+        y: 50,
+        title: item.keyword || item.title || "",
+        feedback: item.description || item.feedback || "",
+        riskLevel: (item.danger_level === "높음" ? "High" : 
+                   item.danger_level === "중간" ? "Medium" : 
+                   item.danger_level === "낮음" ? "Low" : "Info") as RiskLevel,
       })),
-      references: result.references.map((ref: Reference) => ({
-        title: ref.title,
-        uri: ref.uri,
-      })),
+      references: [],
     };
 
     // Get image base64
-    let imageBase64 = result.analysis.imageBase64;
+    let imageBase64 = result.image_base64;
 
-    if (!imageBase64 && result.analysis.imageUrl) {
+    if (!imageBase64 && result.image_url) {
       // Download from storage if needed
-      console.log("📥 Downloading image from Storage:", result.analysis.imageUrl);
-      const { buffer } = await downloadImageFromUrl(result.analysis.imageUrl);
+      console.log("📥 Downloading image from Storage:", result.image_url);
+      const { buffer } = await downloadImageFromUrl(result.image_url);
       imageBase64 = buffer.toString("base64");
     }
 

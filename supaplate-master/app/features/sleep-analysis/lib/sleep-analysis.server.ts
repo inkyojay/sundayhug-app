@@ -53,42 +53,33 @@ export async function saveSleepAnalysis(
   }
 
   // Save analysis record
+  // summary에 전체 결과를 JSON으로 저장
+  const summary = JSON.stringify({
+    overall_score: report.overall_score,
+    overall_comment: report.overall_comment,
+    comprehensive_recommendation: report.comprehensive_recommendation,
+    feedback_items: report.feedback_items,
+  });
+
   const { data, error } = await supabase
     .from("sleep_analyses")
     .insert({
-      user_id: metadata.userId,
       phone_number: metadata.phoneNumber,
       instagram_id: metadata.instagramId,
       birth_date: metadata.birthDate,
       age_in_months: metadata.ageInMonths,
       image_url: imageUrl,
-      overall_score: report.overall_score,
-      overall_comment: report.overall_comment,
-      comprehensive_recommendation: report.comprehensive_recommendation,
-      slides_generated: false,
+      summary: summary,
     })
     .select("id")
     .single();
 
   if (error) {
+    console.error("Failed to save analysis:", error);
     throw new Error(`Failed to save analysis: ${error.message}`);
   }
 
-  // Save feedback items
-  if (report.feedback_items && report.feedback_items.length > 0) {
-    const feedbackItems = report.feedback_items.map((item) => ({
-      analysis_id: data.id,
-      emoji: item.emoji,
-      keyword: item.keyword,
-      danger_level: item.danger_level,
-      description: item.description,
-      improvement: item.improvement,
-      reference: item.reference,
-    }));
-
-    await supabase.from("sleep_analysis_feedback_items").insert(feedbackItems);
-  }
-
+  console.log("✅ Analysis saved with ID:", data.id);
   return data.id;
 }
 
@@ -97,10 +88,7 @@ export async function getSleepAnalysis(id: string): Promise<any> {
 
   const { data, error } = await supabase
     .from("sleep_analyses")
-    .select(`
-      *,
-      sleep_analysis_feedback_items (*)
-    `)
+    .select("*")
     .eq("id", id)
     .single();
 
@@ -108,9 +96,20 @@ export async function getSleepAnalysis(id: string): Promise<any> {
     throw new Error(`Failed to get analysis: ${error.message}`);
   }
 
+  // summary에서 JSON 파싱
+  let report = null;
+  if (data.summary) {
+    try {
+      report = JSON.parse(data.summary);
+    } catch (e) {
+      console.error("Failed to parse summary:", e);
+    }
+  }
+
   return {
     ...data,
-    feedback_items: data.sleep_analysis_feedback_items,
+    report,
+    feedback_items: report?.feedback_items || [],
   };
 }
 
