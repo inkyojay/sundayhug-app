@@ -21,12 +21,8 @@ export default {
   ssr: true,
   async prerender() {
     return [
-      "/legal/terms-of-service",
-      "/legal/privacy-policy",
-      "/blog",
       "/sitemap.xml",
       "/robots.txt",
-      ...urls,
     ];
   },
   presets: [
