@@ -78,6 +78,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       warranty_number,
       tracking_number,
       customer_phone,
+      buyer_name,
       product_name,
       product_option,
       warranty_start,
@@ -273,7 +274,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[180px]">보증서번호</TableHead>
-                <TableHead>고객명</TableHead>
+                <TableHead>구매자명</TableHead>
                 <TableHead>제품</TableHead>
                 <TableHead>송장번호</TableHead>
                 <TableHead>보증기간</TableHead>
@@ -289,7 +290,10 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
                     {item.warranty_number}
                   </TableCell>
                   <TableCell>
-                    {item.customers?.name || item.customers?.kakao_nickname || "-"}
+                    <div className="font-medium">{item.buyer_name || "-"}</div>
+                    {item.customers?.name && item.customers.name !== item.buyer_name && (
+                      <div className="text-xs text-muted-foreground">회원: {item.customers.name}</div>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="max-w-[200px]">

@@ -223,8 +223,12 @@ export default function WarrantyPending({ loaderData }: Route.ComponentProps) {
                 {/* 고객 정보 */}
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">고객:</span>
-                    <span>{item.customer_name || item.kakao_nickname || "미인증"}</span>
+                    <span className="text-muted-foreground">구매자:</span>
+                    <span className="font-medium">{item.buyer_name || "-"}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">회원명:</span>
+                    <span>{item.member_name || item.customer_name || item.kakao_nickname || "미인증"}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <PhoneIcon className="h-3 w-3 text-muted-foreground" />

@@ -136,6 +136,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // 자동 연동 후보 주문 검색 (order_id가 없고 pending 상태인 경우)
   let suggestedOrders: any[] = [];
   if (!warranty.order_id && warranty.status === "pending") {
+    // 구매자명 (buyer_name)
+    const buyerName = warranty.buyer_name?.trim() || "";
+    
     // 전화번호로 검색 (하이픈 제거하고 뒤 8자리로 매칭)
     const phone = warranty.customer_phone?.replace(/-/g, "") || "";
     const phoneLast8 = phone.slice(-8);
@@ -143,48 +146,42 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     // 송장번호로 검색
     const trackingNumber = warranty.tracking_number;
 
-    // 주문일 기준 (±7일)
-    const orderDate = warranty.order_date ? new Date(warranty.order_date) : null;
-    
-    let query = adminClient
-      .from("orders")
-      .select(`
-        id,
-        uniq,
-        shop_ord_no,
-        shop_name,
-        shop_sale_name,
-        shop_opt_name,
-        ord_time,
-        ord_status,
-        to_name,
-        to_tel,
-        to_htel,
-        invoice_no,
-        pay_amt
-      `)
-      .order("ord_time", { ascending: false })
-      .limit(20);
+    const orderSelectQuery = `
+      id,
+      uniq,
+      shop_ord_no,
+      shop_name,
+      shop_sale_name,
+      shop_opt_name,
+      ord_time,
+      ord_status,
+      to_name,
+      to_tel,
+      to_htel,
+      invoice_no,
+      pay_amt
+    `;
 
-    // 송장번호로 먼저 검색
-    if (trackingNumber) {
+    // 1. 구매자명 + 전화번호로 먼저 검색 (가장 정확한 매칭)
+    if (buyerName && phoneLast8) {
+      const { data: byNameAndPhone } = await adminClient
+        .from("orders")
+        .select(orderSelectQuery)
+        .ilike("to_name", `%${buyerName}%`)
+        .or(`to_tel.ilike.%${phoneLast8}%,to_htel.ilike.%${phoneLast8}%`)
+        .order("ord_time", { ascending: false })
+        .limit(20);
+      
+      if (byNameAndPhone && byNameAndPhone.length > 0) {
+        suggestedOrders = byNameAndPhone;
+      }
+    }
+
+    // 2. 송장번호로 검색
+    if (suggestedOrders.length === 0 && trackingNumber) {
       const { data: byInvoice } = await adminClient
         .from("orders")
-        .select(`
-          id,
-          uniq,
-          shop_ord_no,
-          shop_name,
-          shop_sale_name,
-          shop_opt_name,
-          ord_time,
-          ord_status,
-          to_name,
-          to_tel,
-          to_htel,
-          invoice_no,
-          pay_amt
-        `)
+        .select(orderSelectQuery)
         .eq("invoice_no", trackingNumber)
         .limit(10);
       
@@ -193,25 +190,25 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       }
     }
 
-    // 송장번호로 못찾으면 전화번호로 검색
+    // 3. 구매자명만으로 검색
+    if (suggestedOrders.length === 0 && buyerName) {
+      const { data: byName } = await adminClient
+        .from("orders")
+        .select(orderSelectQuery)
+        .ilike("to_name", `%${buyerName}%`)
+        .order("ord_time", { ascending: false })
+        .limit(20);
+      
+      if (byName) {
+        suggestedOrders = byName;
+      }
+    }
+
+    // 4. 전화번호만으로 검색 (폴백)
     if (suggestedOrders.length === 0 && phoneLast8) {
       const { data: byPhone } = await adminClient
         .from("orders")
-        .select(`
-          id,
-          uniq,
-          shop_ord_no,
-          shop_name,
-          shop_sale_name,
-          shop_opt_name,
-          ord_time,
-          ord_status,
-          to_name,
-          to_tel,
-          to_htel,
-          invoice_no,
-          pay_amt
-        `)
+        .select(orderSelectQuery)
         .or(`to_tel.ilike.%${phoneLast8}%,to_htel.ilike.%${phoneLast8}%`)
         .order("ord_time", { ascending: false })
         .limit(20);
@@ -565,9 +562,9 @@ export default function WarrantyDetail({ loaderData }: Route.ComponentProps) {
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <div>
-                <p className="text-sm text-muted-foreground">이름</p>
-                <p className="font-medium">
-                  {warranty.customers?.name || warranty.customers?.kakao_nickname || "-"}
+                <p className="text-sm text-muted-foreground">구매자명</p>
+                <p className="font-medium text-lg">
+                  {warranty.buyer_name || "-"}
                 </p>
               </div>
               <div>
@@ -575,12 +572,14 @@ export default function WarrantyDetail({ loaderData }: Route.ComponentProps) {
                 <p className="font-medium font-mono">{warranty.customer_phone}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">이메일</p>
-                <p className="font-medium">{warranty.customers?.email || "-"}</p>
+                <p className="text-sm text-muted-foreground">회원명</p>
+                <p className="font-medium">
+                  {warranty.customers?.name || warranty.customers?.kakao_nickname || "-"}
+                </p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">카카오 ID</p>
-                <p className="font-medium">{warranty.customers?.kakao_id || "-"}</p>
+                <p className="text-sm text-muted-foreground">이메일</p>
+                <p className="font-medium">{warranty.customers?.email || "-"}</p>
               </div>
             </CardContent>
           </Card>

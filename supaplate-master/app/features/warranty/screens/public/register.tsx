@@ -111,6 +111,7 @@ export async function action({ request }: Route.ActionArgs) {
         member_id: memberId, // 로그인된 회원 ID
         customer_id: customerId, // 호환성 유지
         order_id: null, // 주문 연결 없음
+        buyer_name: customerName, // 구매자명 (주문 매핑용)
         customer_phone: normalizedPhone,
         product_name: "ABC 이동식 아기침대",
         order_date: purchaseDate ? new Date(purchaseDate).toISOString().split("T")[0] : null,
