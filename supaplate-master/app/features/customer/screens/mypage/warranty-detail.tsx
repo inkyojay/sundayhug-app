@@ -189,3 +189,4 @@ export default function MypageWarrantyDetailScreen({ loaderData }: Route.Compone
   );
 }
 
+

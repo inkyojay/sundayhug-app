@@ -243,3 +243,4 @@ COMMENT ON TABLE sleep_analysis_references IS '수면 분석 참고 자료 링�
 COMMENT ON TABLE sleep_safety_references IS '수면 안전 가이드 (RAG용)';
 COMMENT ON TABLE phone_otp_verifications IS '전화번호 OTP 인증';
 
+

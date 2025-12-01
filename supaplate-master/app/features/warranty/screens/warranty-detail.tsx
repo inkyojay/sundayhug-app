@@ -486,7 +486,7 @@ export async function action({ request, params }: Route.ActionArgs) {
           {
             customerName: data.buyer_name || data.customers?.name || "고객",
             rejectionReason: rejectionReason,
-            registerUrl: "https://app-sundayhug-members.vercel.app/customer/warranty",
+            registerUrl: "https://app.sundayhug.com/customer/warranty",
           }
         );
 

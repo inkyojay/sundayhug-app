@@ -159,7 +159,7 @@ export async function action({ request }: Route.ActionArgs) {
           {
             customerName: data.buyer_name || data.customers?.name || "고객",
             rejectionReason: rejectionReason || "제출하신 정보 확인이 어렵습니다.",
-            registerUrl: "https://app-sundayhug-members.vercel.app/customer/warranty",
+            registerUrl: "https://app.sundayhug.com/customer/warranty",
           }
         );
 
