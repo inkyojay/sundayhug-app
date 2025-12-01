@@ -36,6 +36,7 @@ import {
 import { Separator } from "~/core/components/ui/separator";
 
 import makeServerClient from "~/core/lib/supa-client.server";
+import { createAdminClient } from "~/core/lib/supa-admin.server";
 
 export const meta: Route.MetaFunction = ({ data }) => {
   return [{ title: `${data?.warranty?.warranty_number || "보증서"} | Sundayhug Admin` }];
@@ -139,17 +140,20 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
-  const [supabase] = makeServerClient(request);
+  // RLS를 우회하기 위해 Admin 클라이언트 사용
+  const adminClient = createAdminClient();
   const { id } = params;
   const formData = await request.formData();
   const actionType = formData.get("action") as string;
+
+  console.log("Detail action received:", { id, actionType });
 
   if (actionType === "approve") {
     const today = new Date();
     const warrantyEnd = new Date(today);
     warrantyEnd.setFullYear(warrantyEnd.getFullYear() + 1);
 
-    const { error } = await supabase
+    const { data, error } = await adminClient
       .from("warranties")
       .update({
         status: "approved",
@@ -158,7 +162,10 @@ export async function action({ request, params }: Route.ActionArgs) {
         warranty_start: today.toISOString().split("T")[0],
         warranty_end: warrantyEnd.toISOString().split("T")[0],
       })
-      .eq("id", id);
+      .eq("id", id)
+      .select();
+
+    console.log("Detail approve result:", { data, error });
 
     if (error) {
       console.error("승인 오류:", error);
@@ -171,13 +178,16 @@ export async function action({ request, params }: Route.ActionArgs) {
   if (actionType === "reject") {
     const reason = formData.get("reason") as string;
     
-    const { error } = await supabase
+    const { data, error } = await adminClient
       .from("warranties")
       .update({
         status: "rejected",
         rejection_reason: reason || "관리자에 의해 거절됨",
       })
-      .eq("id", id);
+      .eq("id", id)
+      .select();
+
+    console.log("Detail reject result:", { data, error });
 
     if (error) {
       console.error("거절 오류:", error);
@@ -189,13 +199,14 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   if (actionType === "sendKakao") {
     // TODO: 카카오 알림톡 발송 로직
-    const { error } = await supabase
+    const { data, error } = await adminClient
       .from("warranties")
       .update({
         kakao_sent: true,
         kakao_sent_at: new Date().toISOString(),
       })
-      .eq("id", id);
+      .eq("id", id)
+      .select();
 
     if (error) {
       console.error("카카오 발송 오류:", error);

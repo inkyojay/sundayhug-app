@@ -36,6 +36,7 @@ import {
 import { Textarea } from "~/core/components/ui/textarea";
 
 import makeServerClient from "~/core/lib/supa-client.server";
+import { createAdminClient } from "~/core/lib/supa-admin.server";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: `승인 대기 | 보증서 관리 | Sundayhug Admin` }];
@@ -56,12 +57,15 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const [supabase] = makeServerClient(request);
+  // RLS를 우회하기 위해 Admin 클라이언트 사용
+  const adminClient = createAdminClient();
   const formData = await request.formData();
   
   const warrantyId = formData.get("warrantyId") as string;
   const actionType = formData.get("action") as string;
   const rejectionReason = formData.get("rejectionReason") as string;
+
+  console.log("Action received:", { warrantyId, actionType, rejectionReason });
 
   if (actionType === "approve") {
     // 승인 처리
@@ -69,7 +73,7 @@ export async function action({ request }: Route.ActionArgs) {
     const warrantyEnd = new Date(today);
     warrantyEnd.setFullYear(warrantyEnd.getFullYear() + 1); // 1년 보증
 
-    const { error } = await supabase
+    const { data, error } = await adminClient
       .from("warranties")
       .update({
         status: "approved",
@@ -78,9 +82,13 @@ export async function action({ request }: Route.ActionArgs) {
         warranty_start: today.toISOString().split("T")[0],
         warranty_end: warrantyEnd.toISOString().split("T")[0],
       })
-      .eq("id", warrantyId);
+      .eq("id", warrantyId)
+      .select();
+
+    console.log("Approve result:", { data, error });
 
     if (error) {
+      console.error("Approve error:", error);
       return { success: false, error: error.message };
     }
 
@@ -89,15 +97,19 @@ export async function action({ request }: Route.ActionArgs) {
     return { success: true, message: "보증서가 승인되었습니다." };
   } else if (actionType === "reject") {
     // 거절 처리
-    const { error } = await supabase
+    const { data, error } = await adminClient
       .from("warranties")
       .update({
         status: "rejected",
         rejection_reason: rejectionReason,
       })
-      .eq("id", warrantyId);
+      .eq("id", warrantyId)
+      .select();
+
+    console.log("Reject result:", { data, error });
 
     if (error) {
+      console.error("Reject error:", error);
       return { success: false, error: error.message };
     }
 
