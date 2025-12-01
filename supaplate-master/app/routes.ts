@@ -97,9 +97,11 @@ export default [
         route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "customer-sleep-result" }),
       ]),
       
-      // 통합 로그인/회원가입
+      // 통합 로그인/회원가입 (Supabase Auth)
       route("/login", "features/customer/screens/login.tsx"),
       route("/register", "features/customer/screens/register.tsx"),
+      route("/auth/callback", "features/customer/screens/auth-callback.tsx"),
+      // 레거시 콜백 (향후 제거 예정)
       route("/kakao/callback", "features/warranty/screens/public/kakao-callback.tsx", { id: "customer-kakao-callback" }),
       route("/naver/callback", "features/customer/screens/naver-callback.tsx"),
       

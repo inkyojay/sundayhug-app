@@ -1,16 +1,14 @@
 /**
- * 고객 회원가입 페이지
+ * 고객 회원가입 페이지 (Supabase Auth 통합)
  * 
- * - 카카오 로그인
- * - 네이버 로그인
- * - 이메일 가입 (전화번호 인증 필수)
+ * - 카카오 로그인 (Supabase OAuth)
+ * - 이메일 가입 (Supabase Auth)
  */
 import type { Route } from "./+types/register";
 
 import { useState, useEffect } from "react";
-import { data, useNavigate, useActionData, Form } from "react-router";
+import { data, useNavigate, useActionData, Form, useLoaderData } from "react-router";
 import { ArrowLeftIcon, Loader2Icon, CheckCircleIcon, MailIcon } from "lucide-react";
-import bcrypt from "bcryptjs";
 
 import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
@@ -28,11 +26,23 @@ export function meta(): Route.MetaDescriptors {
   ];
 }
 
+export async function loader({ request }: Route.LoaderArgs) {
+  const [supabase] = makeServerClient(request);
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  // 이미 로그인되어 있으면 마이페이지로 리다이렉트
+  if (user) {
+    return data({ isLoggedIn: true });
+  }
+  
+  return data({ isLoggedIn: false });
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const step = formData.get("step") as string;
   
-  const [supabase] = makeServerClient(request);
+  const [supabase, headers] = makeServerClient(request);
 
   if (step === "register") {
     const email = formData.get("email") as string;
@@ -40,75 +50,51 @@ export async function action({ request }: Route.ActionArgs) {
     const name = formData.get("name") as string;
     const phone = formData.get("phone") as string;
 
-    if (!email || !password || !phone) {
-      return data({ success: false, error: "모든 필수 항목을 입력해주세요." });
+    if (!email || !password) {
+      return data({ success: false, error: "이메일과 비밀번호를 입력해주세요." });
     }
 
-    // 이메일 중복 확인
-    const { data: existingUser } = await supabase
-      .from("warranty_members")
-      .select("id")
-      .eq("email", email)
-      .single();
-
-    if (existingUser) {
-      return data({ success: false, error: "이미 가입된 이메일입니다." });
-    }
-
-    // 비밀번호 해시
-    const passwordHash = await bcrypt.hash(password, 10);
-    const normalizedPhone = phone.replace(/-/g, "");
-
-    // 전화번호 중복 확인
-    const { data: existingPhone } = await supabase
-      .from("warranty_members")
-      .select("id")
-      .eq("phone", normalizedPhone)
-      .single();
-
-    if (existingPhone) {
-      return data({ success: false, error: "이미 가입된 전화번호입니다." });
-    }
-
-    // 회원 생성
-    const { data: member, error } = await supabase
-      .from("warranty_members")
-      .insert({
-        email,
-        phone: normalizedPhone,
-        password_hash: passwordHash,
-        name: name || null,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("회원가입 오류:", error);
-      // 에러 메시지 상세화
-      if (error.code === "23505") {
-        if (error.message.includes("email")) {
-          return data({ success: false, error: "이미 가입된 이메일입니다." });
-        }
-        if (error.message.includes("phone")) {
-          return data({ success: false, error: "이미 가입된 전화번호입니다." });
-        }
-        return data({ success: false, error: "이미 가입된 정보입니다." });
-      }
-      return data({ success: false, error: `회원가입 실패: ${error.message}` });
-    }
-
-    return data({ 
-      success: true, 
-      memberId: member.id,
-      memberName: member.name || member.email,
-      memberPhone: phone,
+    // Supabase Auth로 회원가입
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name: name || null,
+          phone: phone ? phone.replace(/-/g, "") : null,
+        },
+      },
     });
+
+    if (authError) {
+      console.error("회원가입 오류:", authError);
+      if (authError.message.includes("already registered")) {
+        return data({ success: false, error: "이미 가입된 이메일입니다." });
+      }
+      return data({ success: false, error: `회원가입 실패: ${authError.message}` });
+    }
+
+    // profiles 테이블에 추가 정보 저장
+    if (authData.user) {
+      const normalizedPhone = phone ? phone.replace(/-/g, "") : null;
+      
+      await supabase
+        .from("profiles")
+        .update({
+          name: name || null,
+          phone: normalizedPhone,
+        })
+        .eq("id", authData.user.id);
+    }
+
+    return data({ success: true }, { headers });
   }
 
   return data({ success: false, error: "잘못된 요청입니다." });
 }
 
 export default function CustomerRegisterScreen() {
+  const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   
@@ -116,11 +102,11 @@ export default function CustomerRegisterScreen() {
 
   // 이미 로그인 상태면 마이페이지로 리다이렉트
   useEffect(() => {
-    const customerId = localStorage.getItem("customerId");
-    if (customerId) {
+    if (loaderData?.isLoggedIn) {
       navigate("/customer/mypage");
     }
-  }, [navigate]);
+  }, [loaderData, navigate]);
+
   const [isLoading, setIsLoading] = useState(false);
   
   // 전화번호 인증
@@ -147,11 +133,6 @@ export default function CustomerRegisterScreen() {
   useEffect(() => {
     if (actionData?.success) {
       setStep("complete");
-      if ("memberId" in actionData && actionData.memberId) {
-        localStorage.setItem("customerId", actionData.memberId);
-        localStorage.setItem("customerName", ("memberName" in actionData ? actionData.memberName : "") || "");
-        localStorage.setItem("customerPhone", ("memberPhone" in actionData ? actionData.memberPhone : "") || "");
-      }
     } else if (actionData && "error" in actionData && actionData.error) {
       setError(actionData.error);
     }
@@ -226,23 +207,10 @@ export default function CustomerRegisterScreen() {
     }
   };
 
-  const handleKakaoLogin = () => {
-    const KAKAO_CLIENT_ID = "7474843a05c3daf50d1253676e6badbd";
-    const REDIRECT_URI = `${window.location.origin}/customer/kakao/callback`;
-    const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${KAKAO_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code`;
-    window.location.href = kakaoAuthUrl;
-  };
-
-  const handleNaverLogin = () => {
-    const NAVER_CLIENT_ID = "vg2MoKtr_rnX60RKdUKi";
-    const REDIRECT_URI = `${window.location.origin}/customer/naver/callback`;
-    const STATE = Math.random().toString(36).substring(7); // CSRF 방지
-    
-    // state를 localStorage에 저장 (콜백에서 검증용)
-    localStorage.setItem("naver_state", STATE);
-    
-    const naverAuthUrl = `https://nid.naver.com/oauth2.0/authorize?response_type=code&client_id=${NAVER_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${STATE}`;
-    window.location.href = naverAuthUrl;
+  // 카카오 로그인 (Supabase OAuth)
+  const handleKakaoLogin = async () => {
+    const redirectUrl = `${window.location.origin}/customer/auth/callback`;
+    window.location.href = `/auth/social/start/kakao?redirectTo=${encodeURIComponent(redirectUrl)}`;
   };
 
   const validateForm = () => {
@@ -256,10 +224,6 @@ export default function CustomerRegisterScreen() {
     }
     if (password !== passwordConfirm) {
       setError("비밀번호가 일치하지 않습니다.");
-      return false;
-    }
-    if (!phoneVerified) {
-      setError("전화번호 인증이 필요합니다.");
       return false;
     }
     return true;
@@ -289,7 +253,7 @@ export default function CustomerRegisterScreen() {
             <CardDescription>
               {step === "select" && "가입 방법을 선택해주세요"}
               {step === "email" && "이메일로 가입합니다"}
-              {step === "phone-verify" && "전화번호 인증이 필요합니다"}
+              {step === "phone-verify" && "전화번호를 입력해주세요 (선택)"}
               {step === "complete" && "회원가입이 완료되었습니다"}
             </CardDescription>
           </CardHeader>
@@ -320,19 +284,6 @@ export default function CustomerRegisterScreen() {
                   </svg>
                   카카오로 시작하기
                 </Button>
-
-                {/* 네이버 로그인 - 비활성화
-                <Button
-                  type="button"
-                  onClick={handleNaverLogin}
-                  className="w-full bg-[#03C75A] text-white hover:bg-[#03C75A]/90 h-12"
-                >
-                  <svg viewBox="0 0 24 24" className="h-5 w-5 mr-2 fill-current">
-                    <path d="M16.273 12.845L7.376 0H0v24h7.727V11.155L16.624 24H24V0h-7.727v12.845z" />
-                  </svg>
-                  네이버로 시작하기
-                </Button>
-                */}
 
                 <div className="relative my-6">
                   <Separator />
@@ -432,90 +383,44 @@ export default function CustomerRegisterScreen() {
                   }}
                   className="w-full"
                 >
-                  다음: 전화번호 인증
+                  다음: 전화번호 입력 (선택)
                 </Button>
               </div>
             )}
 
-            {/* Step 3: 전화번호 인증 */}
+            {/* Step 3: 전화번호 입력 (선택) */}
             {step === "phone-verify" && (
               <div className="space-y-4">
-                {!phoneVerified ? (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">전화번호 *</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          id="phone"
-                          type="tel"
-                          placeholder="010-1234-5678"
-                          value={phoneNumber}
-                          onChange={(e) => setPhoneNumber(formatPhoneNumber(e.target.value))}
-                          maxLength={13}
-                          className="flex-1"
-                          disabled={countdown > 0}
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={handleSendOtp}
-                          disabled={phoneNumber.length < 13 || isLoading || countdown > 0}
-                        >
-                          {countdown > 0 ? formatCountdown(countdown) : "인증요청"}
-                        </Button>
-                      </div>
-                    </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">전화번호 (선택)</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    placeholder="010-1234-5678"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(formatPhoneNumber(e.target.value))}
+                    maxLength={13}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    전화번호는 A/S 신청 등에 사용됩니다.
+                  </p>
+                </div>
 
-                    {countdown > 0 && (
-                      <div className="space-y-2">
-                        <Label htmlFor="otp">인증번호</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="otp"
-                            type="text"
-                            inputMode="numeric"
-                            placeholder="6자리 입력"
-                            value={otp}
-                            onChange={(e) => setOtp(e.target.value.replace(/[^\d]/g, ""))}
-                            maxLength={6}
-                            className="flex-1"
-                          />
-                          <Button
-                            type="button"
-                            onClick={handleVerifyOtp}
-                            disabled={otp.length !== 6 || isLoading}
-                          >
-                            {isLoading ? <Loader2Icon className="h-4 w-4 animate-spin" /> : "확인"}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-center py-4">
-                    <CheckCircleIcon className="h-12 w-12 mx-auto text-green-500 mb-2" />
-                    <p className="font-medium text-green-600">전화번호 인증 완료</p>
-                    <p className="text-sm text-muted-foreground">{phoneNumber}</p>
-                  </div>
-                )}
-
-                {phoneVerified && (
-                  <Form method="post" onSubmit={(e) => {
-                    if (!validateForm()) {
-                      e.preventDefault();
-                    }
-                  }}>
-                    <input type="hidden" name="step" value="register" />
-                    <input type="hidden" name="email" value={email} />
-                    <input type="hidden" name="password" value={password} />
-                    <input type="hidden" name="name" value={name} />
-                    <input type="hidden" name="phone" value={phoneNumber} />
-                    
-                    <Button type="submit" className="w-full">
-                      회원가입 완료
-                    </Button>
-                  </Form>
-                )}
+                <Form method="post" onSubmit={(e) => {
+                  if (!validateForm()) {
+                    e.preventDefault();
+                  }
+                }}>
+                  <input type="hidden" name="step" value="register" />
+                  <input type="hidden" name="email" value={email} />
+                  <input type="hidden" name="password" value={password} />
+                  <input type="hidden" name="name" value={name} />
+                  <input type="hidden" name="phone" value={phoneNumber} />
+                  
+                  <Button type="submit" className="w-full">
+                    회원가입 완료
+                  </Button>
+                </Form>
               </div>
             )}
 

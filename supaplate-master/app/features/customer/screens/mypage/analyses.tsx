@@ -1,10 +1,9 @@
 /**
- * 수면 분석 이력
+ * 수면 분석 이력 (Supabase Auth 통합)
  */
 import type { Route } from "./+types/analyses";
 
-import { useEffect, useState } from "react";
-import { Link, useNavigate, useRouteLoaderData } from "react-router";
+import { Link, redirect, useLoaderData, data } from "react-router";
 import { 
   ArrowLeftIcon, 
   MoonIcon,
@@ -12,10 +11,9 @@ import {
   ImageIcon
 } from "lucide-react";
 
-import { createClient } from "@supabase/supabase-js";
 import { Button } from "~/core/components/ui/button";
 import { Card, CardContent } from "~/core/components/ui/card";
-import { Badge } from "~/core/components/ui/badge";
+import makeServerClient from "~/core/lib/supa-client.server";
 
 export function meta(): Route.MetaDescriptors {
   return [
@@ -23,81 +21,41 @@ export function meta(): Route.MetaDescriptors {
   ];
 }
 
+export async function loader({ request }: Route.LoaderArgs) {
+  const [supabase] = makeServerClient(request);
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  // 로그인 안 되어 있으면 로그인 페이지로
+  if (!user) {
+    throw redirect("/customer/login");
+  }
+  
+  // user_id로 수면 분석 이력 조회
+  const { data: analyses, error } = await supabase
+    .from("sleep_analyses")
+    .select("id, image_url, age_in_months, summary, created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("수면 분석 이력 조회 오류:", error);
+  }
+
+  return data({ analyses: analyses || [] });
+}
+
 export default function MypageAnalysesScreen() {
-  const navigate = useNavigate();
-  const rootData = useRouteLoaderData("root") as { env?: { SUPABASE_URL: string; SUPABASE_ANON_KEY: string } } | undefined;
-  const [analyses, setAnalyses] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const customerId = localStorage.getItem("customerId");
-    const customerPhone = localStorage.getItem("customerPhone");
-    
-    console.log("📱 Analyses page - customerId:", customerId, "phone:", customerPhone, "rootData:", rootData);
-    
-    if (!customerId) {
-      navigate("/customer/login");
-      return;
-    }
-
-    // 환경변수 직접 사용 (VITE_ 접두사)
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || rootData?.env?.SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || rootData?.env?.SUPABASE_ANON_KEY;
-    
-    if (supabaseUrl && supabaseKey) {
-      // member_id로 우선 조회, 전화번호로 폴백
-      fetchAnalyses(customerId, customerPhone, { SUPABASE_URL: supabaseUrl, SUPABASE_ANON_KEY: supabaseKey });
-    } else {
-      console.error("Supabase 환경변수가 없습니다");
-      setIsLoading(false);
-    }
-  }, [navigate, rootData]);
-
-  const fetchAnalyses = async (
-    memberId: string,
-    phone: string | null,
-    env: { SUPABASE_URL: string; SUPABASE_ANON_KEY: string }
-  ) => {
-    try {
-      const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
-
-      // member_id로 우선 조회
-      let query = supabase
-        .from("sleep_analyses")
-        .select("id, image_url, age_in_months, summary, created_at, member_id, phone_number");
-
-      // member_id 또는 전화번호로 조회
-      if (phone) {
-        const normalizedPhone = phone.replace(/-/g, "");
-        query = query.or(`member_id.eq.${memberId},phone_number.eq.${normalizedPhone},phone_number.eq.${phone}`);
-      } else {
-        query = query.eq("member_id", memberId);
-      }
-
-      const { data, error } = await query.order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("수면 분석 이력 조회 오류:", error);
-        setAnalyses([]);
-      } else {
-        console.log("📊 Fetched analyses:", data?.length);
-        setAnalyses(data || []);
-      }
-    } catch (error) {
-      console.error("수면 분석 이력 조회 오류:", error);
-      setAnalyses([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { analyses } = useLoaderData<typeof loader>();
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 px-4 py-6">
       <div className="mx-auto max-w-md space-y-4">
         {/* Header */}
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/customer/mypage")}>
-            <ArrowLeftIcon className="h-5 w-5" />
+          <Button variant="ghost" size="icon" asChild>
+            <Link to="/customer/mypage">
+              <ArrowLeftIcon className="h-5 w-5" />
+            </Link>
           </Button>
           <h1 className="text-xl font-semibold">수면 분석 이력</h1>
         </div>
@@ -114,11 +72,7 @@ export default function MypageAnalysesScreen() {
         </Link>
 
         {/* 분석 이력 목록 */}
-        {isLoading ? (
-          <div className="text-center py-8 text-muted-foreground">
-            로딩 중...
-          </div>
-        ) : analyses.length === 0 ? (
+        {analyses.length === 0 ? (
           <div className="text-center py-12">
             <MoonIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
             <p className="text-muted-foreground">분석 이력이 없습니다</p>
@@ -128,8 +82,8 @@ export default function MypageAnalysesScreen() {
           </div>
         ) : (
           <div className="space-y-3">
-            {analyses.map((analysis, index) => (
-              <Link key={analysis.id || index} to={`/customer/sleep/result/${analysis.id}`}>
+            {analyses.map((analysis) => (
+              <Link key={analysis.id} to={`/customer/sleep/result/${analysis.id}`}>
                 <Card className="hover:bg-muted/50 transition-colors">
                   <CardContent className="flex items-center gap-4 p-4">
                     <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
@@ -152,11 +106,6 @@ export default function MypageAnalysesScreen() {
                           ? new Date(analysis.created_at).toLocaleDateString("ko-KR")
                           : "날짜 미상"}
                       </p>
-                      {analysis.summary && (
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                          {analysis.summary}
-                        </p>
-                      )}
                     </div>
                     <ChevronRightIcon className="h-5 w-5 text-muted-foreground" />
                   </CardContent>
@@ -169,12 +118,10 @@ export default function MypageAnalysesScreen() {
         {/* 안내 메시지 */}
         <Card className="bg-muted/50">
           <CardContent className="p-4 text-center text-sm text-muted-foreground">
-            <p>수면 분석 결과는 기기에 저장됩니다.</p>
-            <p>다른 기기에서 확인하려면 결과 URL을 저장해주세요.</p>
+            <p>로그인한 상태에서 분석한 결과만 표시됩니다.</p>
           </CardContent>
         </Card>
       </div>
     </div>
   );
 }
-

@@ -1,11 +1,12 @@
 /**
- * 고객용 레이아웃
+ * 고객용 레이아웃 (Supabase Auth 통합)
  * 
  * - 심플한 헤더 (로고, 로그인/로그아웃)
  * - 하단 네비게이션 (모바일 최적화)
  */
 import { useEffect, useState } from "react";
-import { Link, Outlet, useLocation, useNavigate } from "react-router";
+import { Link, Outlet, useLocation, useNavigate, useRouteLoaderData } from "react-router";
+import { createClient } from "@supabase/supabase-js";
 import { 
   HomeIcon, 
   ShieldCheckIcon, 
@@ -43,33 +44,50 @@ const navItems = [
 export default function CustomerLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const rootData = useRouteLoaderData("root") as { env?: { SUPABASE_URL: string; SUPABASE_ANON_KEY: string } } | undefined;
   
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [customerName, setCustomerName] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
 
-  // 로그인 상태 확인 (클라이언트에서만)
+  // Supabase 클라이언트로 인증 상태 확인
   useEffect(() => {
-    const checkAuth = () => {
-      const customerId = localStorage.getItem("customerId");
-      const name = localStorage.getItem("customerName");
-      setIsLoggedIn(!!customerId);
-      setCustomerName(name);
+    const checkAuth = async () => {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || rootData?.env?.SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || rootData?.env?.SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseKey) {
+        console.error("Supabase 환경변수가 없습니다");
+        return;
+      }
+      
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        setIsLoggedIn(true);
+        // 이름 가져오기
+        const name = user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split("@")[0];
+        setUserName(name || null);
+      } else {
+        setIsLoggedIn(false);
+        setUserName(null);
+      }
     };
     
     checkAuth();
-    
-    // storage 이벤트 리스너 (다른 탭에서 로그인/로그아웃 시)
-    window.addEventListener("storage", checkAuth);
-    
-    // 페이지 이동 시마다 확인
-    return () => window.removeEventListener("storage", checkAuth);
-  }, [location.pathname]);
+  }, [location.pathname, rootData]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("customerId");
-    localStorage.removeItem("customerName");
+  const handleLogout = async () => {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || rootData?.env?.SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || rootData?.env?.SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) return;
+    
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    await supabase.auth.signOut();
+    
     setIsLoggedIn(false);
-    setCustomerName(null);
+    setUserName(null);
     navigate("/customer");
   };
   
@@ -95,7 +113,7 @@ export default function CustomerLayout() {
             {isLoggedIn ? (
               <>
                 <span className="text-sm text-muted-foreground hidden sm:inline">
-                  {customerName}님
+                  {userName}님
                 </span>
                 <Button 
                   variant="ghost" 

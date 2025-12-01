@@ -31,13 +31,12 @@ export async function action({ request }: Route.ActionArgs) {
   const birthDate = formData.get("birthDate") as string;
   const phoneNumber = formData.get("phoneNumber") as string | null;
   const instagramId = formData.get("instagramId") as string | null;
-  const memberId = formData.get("memberId") as string | null;
 
   if (!imageBase64 || !birthDate) {
     return data({ error: "이미지와 생년월일은 필수입니다." }, { status: 400 });
   }
 
-  // 로그인한 사용자 정보 가져오기 (Supabase Auth - Admin/Dashboard용)
+  // Supabase Auth로 로그인한 사용자 ID 가져오기
   const [client] = makeServerClient(request);
   const { data: { user } } = await client.auth.getUser();
   const userId = user?.id ?? null;
@@ -57,7 +56,6 @@ export async function action({ request }: Route.ActionArgs) {
         phoneNumber,
         instagramId,
         userId,
-        memberId,
       });
     } catch (dbError) {
       console.warn("Failed to save to database (continuing):", dbError);
@@ -210,10 +208,7 @@ export default function AnalyzePublicPage() {
     if (data.phoneNumber) form.append("phoneNumber", data.phoneNumber);
     if (data.instagramId) form.append("instagramId", data.instagramId);
     
-    // Customer 앱 로그인 사용자 ID (warranty_members)
-    const customerId = typeof window !== "undefined" ? localStorage.getItem("customerId") : null;
-    if (customerId) form.append("memberId", customerId);
-
+    // user_id는 서버에서 Supabase Auth 세션으로 자동 처리됨
     fetcher.submit(form, { method: "post" });
   };
 

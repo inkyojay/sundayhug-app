@@ -1,5 +1,5 @@
 /**
- * 고객 마이페이지 메인
+ * 고객 마이페이지 메인 (Supabase Auth 통합)
  * 
  * - 내 보증서
  * - 수면 분석 이력
@@ -7,8 +7,7 @@
  */
 import type { Route } from "./+types/index";
 
-import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, redirect, useLoaderData, data } from "react-router";
 import { 
   ShieldCheckIcon, 
   MoonIcon, 
@@ -18,14 +17,41 @@ import {
   SettingsIcon
 } from "lucide-react";
 
-import { Button } from "~/core/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/core/components/ui/card";
-import { Avatar, AvatarFallback } from "~/core/components/ui/avatar";
+import { Card, CardContent } from "~/core/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "~/core/components/ui/avatar";
+import makeServerClient from "~/core/lib/supa-client.server";
 
 export function meta(): Route.MetaDescriptors {
   return [
     { title: "마이페이지 | 썬데이허그" },
   ];
+}
+
+export async function loader({ request }: Route.LoaderArgs) {
+  const [supabase] = makeServerClient(request);
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  // 로그인 안 되어 있으면 로그인 페이지로
+  if (!user) {
+    throw redirect("/customer/login");
+  }
+  
+  // profiles에서 추가 정보 가져오기
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .single();
+  
+  return data({
+    user: {
+      id: user.id,
+      email: user.email,
+      name: profile?.name || user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split("@")[0],
+      phone: profile?.phone,
+      avatarUrl: user.user_metadata?.avatar_url || profile?.kakao_profile_image,
+    },
+  });
 }
 
 const menuItems = [
@@ -60,48 +86,7 @@ const menuItems = [
 ];
 
 export default function CustomerMypageIndexScreen() {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [memberName, setMemberName] = useState<string | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    // URL 쿼리 파라미터로 전달된 경우 (소셜 로그인 콜백)
-    const urlMemberId = searchParams.get("memberId");
-    const urlMemberName = searchParams.get("memberName");
-    const urlMemberPhone = searchParams.get("memberPhone");
-    
-    if (urlMemberId) {
-      localStorage.setItem("customerId", urlMemberId);
-      if (urlMemberName) localStorage.setItem("customerName", urlMemberName);
-      if (urlMemberPhone) localStorage.setItem("customerPhone", urlMemberPhone);
-      // 쿼리 파라미터 제거 후 리다이렉트
-      navigate("/customer/mypage", { replace: true });
-      return;
-    }
-
-    const customerId = localStorage.getItem("customerId");
-    const name = localStorage.getItem("customerName");
-    
-    if (!customerId) {
-      navigate("/customer/login");
-      return;
-    }
-    
-    setIsLoggedIn(true);
-    setMemberName(name || "회원");
-  }, [navigate, searchParams]);
-
-  const handleLogout = () => {
-    localStorage.removeItem("customerId");
-    localStorage.removeItem("customerName");
-    localStorage.removeItem("customerPhone");
-    navigate("/customer");
-  };
-
-  if (!isLoggedIn) {
-    return null;
-  }
+  const { user } = useLoaderData<typeof loader>();
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 px-4 py-6">
@@ -110,12 +95,15 @@ export default function CustomerMypageIndexScreen() {
         <Card>
           <CardContent className="flex items-center gap-4 p-6">
             <Avatar className="h-16 w-16">
+              {user.avatarUrl ? (
+                <AvatarImage src={user.avatarUrl} alt={user.name} />
+              ) : null}
               <AvatarFallback className="bg-primary/10 text-primary text-xl">
                 <UserIcon className="h-8 w-8" />
               </AvatarFallback>
             </Avatar>
             <div className="flex-1">
-              <h2 className="text-xl font-semibold">{memberName}님</h2>
+              <h2 className="text-xl font-semibold">{user.name}님</h2>
               <p className="text-sm text-muted-foreground">
                 환영합니다!
               </p>
@@ -181,4 +169,3 @@ export default function CustomerMypageIndexScreen() {
     </div>
   );
 }
-
