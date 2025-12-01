@@ -115,6 +115,10 @@ export default [
       
       // A/S 신청
       route("/as/:warrantyId", "features/customer/screens/as-request.tsx"),
+      
+      // 법적 문서
+      route("/privacy", "features/customer/screens/privacy.tsx"),
+      route("/terms", "features/customer/screens/terms.tsx"),
     ]),
   ]),
 
