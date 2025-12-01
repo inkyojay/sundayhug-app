@@ -4,8 +4,7 @@
 import type { Route } from "./+types/warranties";
 
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
-import { data } from "react-router";
+import { Link, useNavigate, useRouteLoaderData } from "react-router";
 import { 
   ArrowLeftIcon, 
   ShieldCheckIcon,
@@ -15,39 +14,15 @@ import {
   ChevronRightIcon
 } from "lucide-react";
 
+import { createClient } from "@supabase/supabase-js";
 import { Button } from "~/core/components/ui/button";
 import { Card, CardContent } from "~/core/components/ui/card";
 import { Badge } from "~/core/components/ui/badge";
-import makeServerClient from "~/core/lib/supa-client.server";
 
 export function meta(): Route.MetaDescriptors {
   return [
     { title: "내 보증서 | 썬데이허그" },
   ];
-}
-
-export async function loader({ request }: Route.LoaderArgs) {
-  const url = new URL(request.url);
-  const memberId = url.searchParams.get("memberId");
-  
-  if (!memberId) {
-    return data({ warranties: [] });
-  }
-
-  const [supabase] = makeServerClient(request);
-  
-  const { data: warranties, error } = await supabase
-    .from("warranties")
-    .select("*")
-    .eq("member_id", memberId)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("보증서 조회 오류:", error);
-    return data({ warranties: [] });
-  }
-
-  return data({ warranties: warranties || [] });
 }
 
 const statusConfig = {
@@ -57,8 +32,9 @@ const statusConfig = {
   expired: { label: "만료됨", color: "bg-gray-100 text-gray-800", icon: XCircleIcon },
 };
 
-export default function MypageWarrantiesScreen({ loaderData }: Route.ComponentProps) {
+export default function MypageWarrantiesScreen() {
   const navigate = useNavigate();
+  const rootData = useRouteLoaderData("root") as { env?: { SUPABASE_URL: string; SUPABASE_ANON_KEY: string } } | undefined;
   const [warranties, setWarranties] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -69,17 +45,35 @@ export default function MypageWarrantiesScreen({ loaderData }: Route.ComponentPr
       return;
     }
 
-    // 클라이언트에서 데이터 fetch
-    fetchWarranties(customerId);
-  }, [navigate]);
+    // 클라이언트에서 직접 Supabase 호출
+    if (rootData?.env) {
+      fetchWarranties(customerId, rootData.env);
+    }
+  }, [navigate, rootData]);
 
-  const fetchWarranties = async (memberId: string) => {
+  const fetchWarranties = async (
+    memberId: string, 
+    env: { SUPABASE_URL: string; SUPABASE_ANON_KEY: string }
+  ) => {
     try {
-      const response = await fetch(`/customer/mypage/warranties?memberId=${memberId}`);
-      const result = await response.json();
-      setWarranties(result.warranties || []);
+      // 클라이언트용 Supabase 인스턴스 생성
+      const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
+
+      const { data, error } = await supabase
+        .from("warranties")
+        .select("*")
+        .eq("member_id", memberId)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("보증서 조회 오류:", error);
+        setWarranties([]);
+      } else {
+        setWarranties(data || []);
+      }
     } catch (error) {
       console.error("보증서 조회 오류:", error);
+      setWarranties([]);
     } finally {
       setIsLoading(false);
     }

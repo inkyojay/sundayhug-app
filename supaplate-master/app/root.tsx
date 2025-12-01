@@ -96,6 +96,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     theme: getTheme(),
     locale,
+    // 클라이언트에서 Supabase 사용을 위해 환경 변수 전달
+    env: {
+      SUPABASE_URL: process.env.SUPABASE_URL,
+      SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+    },
   };
 }
 
