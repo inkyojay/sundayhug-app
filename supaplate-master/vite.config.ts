@@ -23,6 +23,7 @@ export default defineConfig((config) => {
   }
   return {
     server: {
+      port: 3000,
       allowedHosts: true,
       watch: {
         ignored: [
