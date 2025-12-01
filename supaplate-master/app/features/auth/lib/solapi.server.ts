@@ -21,19 +21,19 @@ interface SendAlimtalkResult {
 }
 
 /**
- * Solapi 설정 가져오기
+ * Solapi 설정 가져오기 (SMS용 - pfId, templateId는 선택)
  */
 function getSolapiConfig(): SolapiConfig {
   const apiKey = process.env.SOLAPI_API_KEY;
   const apiSecret = process.env.SOLAPI_API_SECRET;
-  const pfId = process.env.SOLAPI_PF_ID;
-  const templateId = process.env.SOLAPI_TEMPLATE_ID;
+  const pfId = process.env.SOLAPI_PF_ID || "";
+  const templateId = process.env.SOLAPI_TEMPLATE_ID || "";
   // 발신번호: 반드시 Solapi에 등록된 번호 사용
   const senderNumber = "07077038005";
 
-  if (!apiKey || !apiSecret || !pfId || !templateId) {
+  if (!apiKey || !apiSecret) {
     throw new Error(
-      "SOLAPI_API_KEY, SOLAPI_API_SECRET, SOLAPI_PF_ID, SOLAPI_TEMPLATE_ID must be set"
+      "SOLAPI_API_KEY, SOLAPI_API_SECRET must be set"
     );
   }
 
