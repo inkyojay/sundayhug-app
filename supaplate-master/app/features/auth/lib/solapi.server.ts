@@ -143,7 +143,8 @@ export async function sendAlimtalkOTP(
 }
 
 /**
- * SMS로 인증번호 발송 (알림톡 실패 시 대체)
+ * SMS로 인증번호 발송
+ * 참고: https://developers.solapi.com/references/messages/sendManyDetail
  */
 export async function sendSmsOTP(
   phoneNumber: string,
@@ -151,32 +152,26 @@ export async function sendSmsOTP(
 ): Promise<SendAlimtalkResult> {
   const config = getSolapiConfig();
 
-  // 전화번호 포맷 정리
-  let formattedPhone = phoneNumber.replace(/-/g, "").replace(/\s/g, "");
-  if (formattedPhone.startsWith("0")) {
-    formattedPhone = "82" + formattedPhone.substring(1);
-  }
-  if (!formattedPhone.startsWith("82")) {
-    formattedPhone = "82" + formattedPhone;
-  }
+  // 전화번호 포맷 정리 (하이픈 제거만, 국가코드 없이)
+  const formattedPhone = phoneNumber.replace(/-/g, "").replace(/\s/g, "");
 
   const authHeader = generateAuthHeader(config.apiKey, config.apiSecret);
 
+  // Solapi API 문서 기반 요청 형식
   const requestBody = {
-    messages: [
-      {
-        to: formattedPhone,
-        from: config.senderNumber,
-        text: `[썬데이허그] 인증번호는 [${otp}] 입니다. 5분 이내에 입력해주세요.`,
-        type: "SMS",
-      },
-    ],
+    message: {
+      to: formattedPhone,
+      from: config.senderNumber,
+      text: `[썬데이허그] 인증번호는 [${otp}] 입니다. 5분 이내에 입력해주세요.`,
+    },
   };
 
   try {
     console.log("📤 SMS 발송 요청:", JSON.stringify(requestBody, null, 2));
+    console.log("📤 발신번호:", config.senderNumber);
+    console.log("📤 수신번호:", formattedPhone);
     
-    const response = await fetch("https://api.solapi.com/messages/v4/send-many", {
+    const response = await fetch("https://api.solapi.com/messages/v4/send", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -192,15 +187,16 @@ export async function sendSmsOTP(
       console.error("❌ Solapi SMS Error:", result);
       return {
         success: false,
-        error: result.errorMessage || "SMS 발송에 실패했습니다.",
+        error: result.errorMessage || result.message || "SMS 발송에 실패했습니다.",
       };
     }
 
-    if (result.groupId) {
-      console.log("✅ SMS 발송 성공:", result.groupId);
+    // 성공 응답 확인
+    if (result.groupId || result.messageId) {
+      console.log("✅ SMS 발송 성공:", result.groupId || result.messageId);
       return {
         success: true,
-        messageId: result.groupId,
+        messageId: result.groupId || result.messageId,
       };
     }
 
