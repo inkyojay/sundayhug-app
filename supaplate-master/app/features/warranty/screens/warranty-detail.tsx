@@ -149,7 +149,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     const warrantyEnd = new Date(today);
     warrantyEnd.setFullYear(warrantyEnd.getFullYear() + 1);
 
-    await supabase
+    const { error } = await supabase
       .from("warranties")
       .update({
         status: "approved",
@@ -160,18 +160,47 @@ export async function action({ request, params }: Route.ActionArgs) {
       })
       .eq("id", id);
 
+    if (error) {
+      console.error("승인 오류:", error);
+      return { success: false, error: `승인 실패: ${error.message}` };
+    }
+
     return { success: true, message: "승인되었습니다." };
+  }
+
+  if (actionType === "reject") {
+    const reason = formData.get("reason") as string;
+    
+    const { error } = await supabase
+      .from("warranties")
+      .update({
+        status: "rejected",
+        rejection_reason: reason || "관리자에 의해 거절됨",
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("거절 오류:", error);
+      return { success: false, error: `거절 실패: ${error.message}` };
+    }
+
+    return { success: true, message: "거절되었습니다." };
   }
 
   if (actionType === "sendKakao") {
     // TODO: 카카오 알림톡 발송 로직
-    await supabase
+    const { error } = await supabase
       .from("warranties")
       .update({
         kakao_sent: true,
         kakao_sent_at: new Date().toISOString(),
       })
       .eq("id", id);
+
+    if (error) {
+      console.error("카카오 발송 오류:", error);
+      return { success: false, error: `카카오톡 발송 실패: ${error.message}` };
+    }
 
     return { success: true, message: "카카오톡이 발송되었습니다." };
   }
