@@ -90,7 +90,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       return data({ success: false, error: "Analysis not found" }, { status: 404 });
     }
 
-    // summary에서 파싱된 report 사용
+    // summary에서 파싱된 report 사용 (Gemini 형식: summary, feedbackItems, references)
     const parsedReport = result.report;
     
     if (!parsedReport) {
@@ -99,18 +99,16 @@ export async function action({ request, params }: Route.ActionArgs) {
 
     // Build analysis report from database data
     const report = {
-      summary: parsedReport.overall_comment || "",
-      feedbackItems: (parsedReport.feedback_items || []).map((item: any, index: number) => ({
-        id: index + 1,
-        x: 50, // 기본 위치
-        y: 50,
-        title: item.keyword || item.title || "",
-        feedback: item.description || item.feedback || "",
-        riskLevel: (item.danger_level === "높음" ? "High" : 
-                   item.danger_level === "중간" ? "Medium" : 
-                   item.danger_level === "낮음" ? "Low" : "Info") as RiskLevel,
+      summary: parsedReport.summary || "",
+      feedbackItems: (parsedReport.feedbackItems || []).map((item: any) => ({
+        id: item.id || 1,
+        x: item.x || 50,
+        y: item.y || 50,
+        title: item.title || "",
+        feedback: item.feedback || "",
+        riskLevel: (item.riskLevel || "Info") as RiskLevel,
       })),
-      references: [],
+      references: parsedReport.references || [],
     };
 
     // Get image base64

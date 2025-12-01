@@ -2,7 +2,8 @@
  * Sleep Analysis Server Utils
  */
 import { createClient } from "@supabase/supabase-js";
-import type { AnalysisReport } from "../types";
+// schema.ts의 AnalysisReport를 사용 (Gemini 반환 형식)
+import type { AnalysisReport } from "../schema";
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -53,13 +54,14 @@ export async function saveSleepAnalysis(
   }
 
   // Save analysis record
-  // summary에 전체 결과를 JSON으로 저장
-  const summary = JSON.stringify({
-    overall_score: report.overall_score,
-    overall_comment: report.overall_comment,
-    comprehensive_recommendation: report.comprehensive_recommendation,
-    feedback_items: report.feedback_items,
+  // summary에 전체 결과를 JSON으로 저장 (Gemini 반환 형식: summary, feedbackItems, references)
+  const summaryJson = JSON.stringify({
+    summary: report.summary,
+    feedbackItems: report.feedbackItems,
+    references: report.references,
   });
+
+  console.log("📝 Saving analysis with summary length:", summaryJson.length);
 
   const { data, error } = await supabase
     .from("sleep_analyses")
@@ -69,7 +71,7 @@ export async function saveSleepAnalysis(
       birth_date: metadata.birthDate,
       age_in_months: metadata.ageInMonths,
       image_url: imageUrl,
-      summary: summary,
+      summary: summaryJson,
     })
     .select("id")
     .single();
@@ -96,20 +98,24 @@ export async function getSleepAnalysis(id: string): Promise<any> {
     throw new Error(`Failed to get analysis: ${error.message}`);
   }
 
-  // summary에서 JSON 파싱
+  // summary에서 JSON 파싱 (Gemini 형식: summary, feedbackItems, references)
   let report = null;
   if (data.summary) {
     try {
       report = JSON.parse(data.summary);
     } catch (e) {
       console.error("Failed to parse summary:", e);
+      // 파싱 실패 시 문자열 그대로 사용
+      report = { summary: data.summary };
     }
   }
 
   return {
     ...data,
     report,
-    feedback_items: report?.feedback_items || [],
+    // feedbackItems 형식으로 반환 (schema.ts 형식)
+    feedbackItems: report?.feedbackItems || [],
+    references: report?.references || [],
   };
 }
 
