@@ -240,6 +240,93 @@ export async function sendWarrantyApprovalAlimtalk(
 }
 
 // =============================================================================
+// 보증서 거절 알림톡
+// =============================================================================
+
+interface WarrantyRejectionData {
+  customerName: string;     // 구매자명
+  rejectionReason: string;  // 거절사유
+  registerUrl: string;      // 재등록 URL
+}
+
+/**
+ * 보증서 거절 알림톡 발송
+ * Template ID: KA01TP251128085827799xO30EZztM9n
+ * PF ID: KA01PF23042615382308323ou8Ro12HU
+ */
+export async function sendWarrantyRejectionAlimtalk(
+  phoneNumber: string,
+  data: WarrantyRejectionData
+): Promise<SendAlimtalkResult> {
+  const config = getSolapiConfig();
+
+  // 전화번호 포맷 정리 (하이픈 제거)
+  const formattedPhone = phoneNumber.replace(/-/g, "").replace(/\s/g, "");
+
+  const authHeader = generateAuthHeader(config.apiKey, config.apiSecret);
+
+  const requestBody = {
+    message: {
+      to: formattedPhone,
+      from: config.senderNumber,
+      kakaoOptions: {
+        pfId: "KA01PF23042615382308323ou8Ro12HU",
+        templateId: "KA01TP251128085827799xO30EZztM9n",
+        variables: {
+          "#{고객명}": data.customerName || "-",
+          "#{거절사유}": data.rejectionReason || "사유 미기재",
+          "#{등록URL}": data.registerUrl,
+        },
+      },
+    },
+  };
+
+  try {
+    console.log("📤 보증서 거절 알림톡 발송 요청:", JSON.stringify(requestBody, null, 2));
+    
+    const response = await fetch("https://api.solapi.com/messages/v4/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: authHeader,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    const result = await response.json();
+    console.log("📥 알림톡 응답:", JSON.stringify(result, null, 2));
+
+    if (!response.ok) {
+      console.error("❌ Solapi 알림톡 Error:", result);
+      return {
+        success: false,
+        error: result.errorMessage || result.message || "알림톡 발송에 실패했습니다.",
+      };
+    }
+
+    // 성공 응답 확인
+    if (result.groupId || result.messageId) {
+      console.log("✅ 보증서 거절 알림톡 발송 성공:", result.groupId || result.messageId);
+      return {
+        success: true,
+        messageId: result.groupId || result.messageId,
+      };
+    }
+
+    return {
+      success: false,
+      error: "알림톡 발송 응답이 올바르지 않습니다.",
+    };
+  } catch (error) {
+    console.error("❌ Solapi 알림톡 request error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "알림톡 발송 중 오류가 발생했습니다.",
+    };
+  }
+}
+
+// =============================================================================
 // SMS OTP 발송
 // =============================================================================
 

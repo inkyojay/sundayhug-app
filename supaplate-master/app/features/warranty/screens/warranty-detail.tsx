@@ -53,7 +53,7 @@ import {
 
 import makeServerClient from "~/core/lib/supa-client.server";
 import { createAdminClient } from "~/core/lib/supa-admin.server";
-import { sendWarrantyApprovalAlimtalk } from "~/features/auth/lib/solapi.server";
+import { sendWarrantyApprovalAlimtalk, sendWarrantyRejectionAlimtalk } from "~/features/auth/lib/solapi.server";
 
 export const meta: Route.MetaFunction = ({ data }) => {
   return [{ title: `${data?.warranty?.warranty_number || "보증서"} | Sundayhug Admin` }];
@@ -458,21 +458,45 @@ export async function action({ request, params }: Route.ActionArgs) {
   // 거절
   if (actionType === "reject") {
     const reason = formData.get("reason") as string;
+    const rejectionReason = reason || "관리자에 의해 거절됨";
     
     const { data, error } = await adminClient
       .from("warranties")
       .update({
         status: "rejected",
-        rejection_reason: reason || "관리자에 의해 거절됨",
+        rejection_reason: rejectionReason,
       })
       .eq("id", id)
-      .select();
+      .select("*, customers(name)")
+      .single();
 
     console.log("Detail reject result:", { data, error });
 
     if (error) {
       console.error("거절 오류:", error);
       return { success: false, error: `거절 실패: ${error.message}` };
+    }
+
+    // 카카오 알림톡 발송 (거절)
+    if (data?.customer_phone) {
+      try {
+        const alimtalkResult = await sendWarrantyRejectionAlimtalk(
+          data.customer_phone,
+          {
+            customerName: data.buyer_name || data.customers?.name || "고객",
+            rejectionReason: rejectionReason,
+            registerUrl: "https://app-sundayhug-members.vercel.app/customer/warranty",
+          }
+        );
+
+        if (alimtalkResult.success) {
+          console.log("✅ 거절 알림톡 발송 완료:", alimtalkResult.messageId);
+        } else {
+          console.error("⚠️ 알림톡 발송 실패 (거절은 완료됨):", alimtalkResult.error);
+        }
+      } catch (alimtalkError) {
+        console.error("⚠️ 알림톡 발송 중 오류 (거절은 완료됨):", alimtalkError);
+      }
     }
 
     return { success: true, message: "거절되었습니다." };

@@ -37,7 +37,7 @@ import { Textarea } from "~/core/components/ui/textarea";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 import { createAdminClient } from "~/core/lib/supa-admin.server";
-import { sendWarrantyApprovalAlimtalk } from "~/features/auth/lib/solapi.server";
+import { sendWarrantyApprovalAlimtalk, sendWarrantyRejectionAlimtalk } from "~/features/auth/lib/solapi.server";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: `승인 대기 | 보증서 관리 | Sundayhug Admin` }];
@@ -141,13 +141,36 @@ export async function action({ request }: Route.ActionArgs) {
         rejection_reason: rejectionReason,
       })
       .eq("id", warrantyId)
-      .select();
+      .select("*, customers(name)")
+      .single();
 
     console.log("Reject result:", { data, error });
 
     if (error) {
       console.error("Reject error:", error);
       return { success: false, error: error.message };
+    }
+
+    // 카카오 알림톡 발송 (거절)
+    if (data?.customer_phone) {
+      try {
+        const alimtalkResult = await sendWarrantyRejectionAlimtalk(
+          data.customer_phone,
+          {
+            customerName: data.buyer_name || data.customers?.name || "고객",
+            rejectionReason: rejectionReason || "제출하신 정보 확인이 어렵습니다.",
+            registerUrl: "https://app-sundayhug-members.vercel.app/customer/warranty",
+          }
+        );
+
+        if (alimtalkResult.success) {
+          console.log("✅ 거절 알림톡 발송 완료:", alimtalkResult.messageId);
+        } else {
+          console.error("⚠️ 알림톡 발송 실패 (거절은 완료됨):", alimtalkResult.error);
+        }
+      } catch (alimtalkError) {
+        console.error("⚠️ 알림톡 발송 중 오류 (거절은 완료됨):", alimtalkError);
+      }
     }
 
     return { success: true, message: "보증서가 거절되었습니다." };
