@@ -16,7 +16,6 @@ import adminClient from "~/core/lib/supa-admin-client.server";
 import { downloadImageFromUrl, uploadSlidesToStorage } from "../lib/storage.server";
 import { generateAllSlidesAsPng } from "../lib/slides.server";
 import { getSleepAnalysis as getSleepAnalysisFromServer } from "../lib/sleep-analysis.server";
-import { updateAnalysisSlides } from "../queries";
 import type { RiskLevel } from "../schema";
 
 export async function loader({ params }: Route.LoaderArgs) {
@@ -130,8 +129,17 @@ export async function action({ request, params }: Route.ActionArgs) {
     const slideUrls = await uploadSlidesToStorage(adminClient, pngBuffers, id);
     console.log(`✅ Uploaded ${slideUrls.length} slides to Storage`);
 
-    // Update database
-    await updateAnalysisSlides(id, slideUrls);
+    // Update database using adminClient (bypasses RLS)
+    const { error: updateError } = await adminClient
+      .from('sleep_analyses')
+      .update({ report_slides: slideUrls })
+      .eq('id', id);
+    
+    if (updateError) {
+      console.error("Failed to update slides in DB:", updateError);
+      throw new Error(`DB update failed: ${updateError.message}`);
+    }
+    console.log(`✅ Updated slides in database`);
 
     return data({
       success: true,
