@@ -27,6 +27,7 @@ export async function saveSleepAnalysis(
     phoneNumber?: string | null;
     instagramId?: string | null;
     userId?: string | null;
+    memberId?: string | null;
   }
 ): Promise<string> {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -72,6 +73,8 @@ export async function saveSleepAnalysis(
       age_in_months: metadata.ageInMonths,
       image_url: imageUrl,
       summary: summaryJson,
+      user_id: metadata.userId,
+      member_id: metadata.memberId,
     })
     .select("id")
     .single();

@@ -40,52 +40,47 @@ export default function MypageAnalysesScreen() {
       return;
     }
 
-    // DB에서 수면 분석 이력 조회 (전화번호 기준)
-    if (customerPhone) {
-      // 환경변수 직접 사용 (VITE_ 접두사)
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || rootData?.env?.SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || rootData?.env?.SUPABASE_ANON_KEY;
-      
-      if (supabaseUrl && supabaseKey) {
-        fetchAnalyses(customerPhone, { SUPABASE_URL: supabaseUrl, SUPABASE_ANON_KEY: supabaseKey });
-      } else {
-        console.error("Supabase 환경변수가 없습니다");
-        setIsLoading(false);
-      }
+    // 환경변수 직접 사용 (VITE_ 접두사)
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || rootData?.env?.SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || rootData?.env?.SUPABASE_ANON_KEY;
+    
+    if (supabaseUrl && supabaseKey) {
+      // member_id로 우선 조회, 전화번호로 폴백
+      fetchAnalyses(customerId, customerPhone, { SUPABASE_URL: supabaseUrl, SUPABASE_ANON_KEY: supabaseKey });
     } else {
-      // 전화번호가 없으면 localStorage에서 가져오기 (폴백)
-      const savedAnalyses = localStorage.getItem("sleepAnalyses");
-      if (savedAnalyses) {
-        try {
-          setAnalyses(JSON.parse(savedAnalyses));
-        } catch (e) {
-          console.error("분석 이력 파싱 오류:", e);
-        }
-      }
+      console.error("Supabase 환경변수가 없습니다");
       setIsLoading(false);
     }
   }, [navigate, rootData]);
 
   const fetchAnalyses = async (
-    phone: string,
+    memberId: string,
+    phone: string | null,
     env: { SUPABASE_URL: string; SUPABASE_ANON_KEY: string }
   ) => {
     try {
       const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
 
-      // 전화번호 정규화 (하이픈 제거)
-      const normalizedPhone = phone.replace(/-/g, "");
-
-      const { data, error } = await supabase
+      // member_id로 우선 조회
+      let query = supabase
         .from("sleep_analyses")
-        .select("id, image_url, age_in_months, summary, created_at")
-        .or(`phone_number.eq.${normalizedPhone},phone_number.eq.${phone}`)
-        .order("created_at", { ascending: false });
+        .select("id, image_url, age_in_months, summary, created_at, member_id, phone_number");
+
+      // member_id 또는 전화번호로 조회
+      if (phone) {
+        const normalizedPhone = phone.replace(/-/g, "");
+        query = query.or(`member_id.eq.${memberId},phone_number.eq.${normalizedPhone},phone_number.eq.${phone}`);
+      } else {
+        query = query.eq("member_id", memberId);
+      }
+
+      const { data, error } = await query.order("created_at", { ascending: false });
 
       if (error) {
         console.error("수면 분석 이력 조회 오류:", error);
         setAnalyses([]);
       } else {
+        console.log("📊 Fetched analyses:", data?.length);
         setAnalyses(data || []);
       }
     } catch (error) {
