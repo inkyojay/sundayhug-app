@@ -3,8 +3,8 @@
  */
 import type { Route } from "./+types/as-request";
 
-import { useState, useEffect } from "react";
-import { data, useNavigate, useParams, useActionData, Form } from "react-router";
+import { useState } from "react";
+import { data, redirect, useNavigate, useParams, useActionData, Form } from "react-router";
 import { ArrowLeftIcon, Loader2Icon, CheckCircleIcon, WrenchIcon } from "lucide-react";
 
 import { Button } from "~/core/components/ui/button";
@@ -29,17 +29,24 @@ export function meta(): Route.MetaDescriptors {
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { warrantyId } = params;
+  const [supabase] = makeServerClient(request);
+  
+  // 로그인 체크
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw redirect("/customer/login");
+  }
   
   if (!warrantyId) {
     return data({ warranty: null });
   }
-
-  const [supabase] = makeServerClient(request);
   
+  // 해당 user의 보증서인지 확인
   const { data: warranty, error } = await supabase
     .from("warranties")
     .select("*")
     .eq("id", warrantyId)
+    .eq("user_id", user.id)
     .single();
 
   if (error) {
@@ -105,12 +112,7 @@ export default function AsRequestScreen({ loaderData }: Route.ComponentProps) {
   const [requestType, setRequestType] = useState("repair");
   const [contactPhone, setContactPhone] = useState("");
 
-  useEffect(() => {
-    const customerId = localStorage.getItem("customerId");
-    if (!customerId) {
-      navigate("/customer/login");
-    }
-  }, [navigate]);
+  // 인증은 loader에서 처리하므로 클라이언트 체크 불필요
 
   const formatPhoneNumber = (value: string) => {
     const numbers = value.replace(/[^\d]/g, "");

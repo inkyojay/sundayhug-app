@@ -131,6 +131,8 @@ export type RiskLevel = "High" | "Medium" | "Low" | "Info";
 
 // Analysis report interface (matches Gemini output)
 export interface AnalysisReport {
+  safetyScore: number; // 0-100점
+  scoreComment: string; // 점수에 대한 한 줄 코멘트
   summary: string;
   feedbackItems: {
     id: number;

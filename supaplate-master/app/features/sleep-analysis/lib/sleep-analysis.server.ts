@@ -72,6 +72,7 @@ export async function saveSleepAnalysis(
       age_in_months: metadata.ageInMonths,
       image_url: imageUrl,
       summary: summaryJson,
+      user_id: metadata.userId,
     })
     .select("id")
     .single();

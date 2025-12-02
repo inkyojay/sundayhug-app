@@ -1,23 +1,21 @@
 /**
- * 내 보증서 목록
+ * 내 보증서 목록 (새로운 디자인)
  */
 import type { Route } from "./+types/warranties";
 
-import { useEffect, useState } from "react";
-import { Link, useNavigate, useRouteLoaderData } from "react-router";
+import { Link, redirect, useLoaderData, data } from "react-router";
 import { 
-  ArrowLeftIcon, 
-  ShieldCheckIcon,
-  ClockIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ChevronRightIcon
+  ArrowLeft, 
+  ShieldCheck,
+  Clock,
+  CheckCircle,
+  XCircle,
+  ChevronRight,
+  Plus
 } from "lucide-react";
 
-import { createClient } from "@supabase/supabase-js";
-import { Button } from "~/core/components/ui/button";
-import { Card, CardContent } from "~/core/components/ui/card";
 import { Badge } from "~/core/components/ui/badge";
+import makeServerClient from "~/core/lib/supa-client.server";
 
 export function meta(): Route.MetaDescriptors {
   return [
@@ -25,98 +23,76 @@ export function meta(): Route.MetaDescriptors {
   ];
 }
 
+export async function loader({ request }: Route.LoaderArgs) {
+  const [supabase] = makeServerClient(request);
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw redirect("/customer/login");
+  }
+  
+  // user_id로 보증서 조회 (Supabase Auth 연동)
+  const { data: warranties, error } = await supabase
+    .from("warranties")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("보증서 조회 오류:", error);
+  }
+
+  return data({ warranties: warranties || [] });
+}
+
 const statusConfig = {
-  pending: { label: "승인 대기", color: "bg-yellow-100 text-yellow-800", icon: ClockIcon },
-  approved: { label: "승인 완료", color: "bg-green-100 text-green-800", icon: CheckCircleIcon },
-  rejected: { label: "거절됨", color: "bg-red-100 text-red-800", icon: XCircleIcon },
-  expired: { label: "만료됨", color: "bg-gray-100 text-gray-800", icon: XCircleIcon },
+  pending: { label: "승인 대기", color: "bg-yellow-100 text-yellow-700", icon: Clock },
+  approved: { label: "승인 완료", color: "bg-green-100 text-green-700", icon: CheckCircle },
+  rejected: { label: "거절됨", color: "bg-red-100 text-red-700", icon: XCircle },
+  expired: { label: "만료됨", color: "bg-gray-100 text-gray-600", icon: XCircle },
 };
 
 export default function MypageWarrantiesScreen() {
-  const navigate = useNavigate();
-  const rootData = useRouteLoaderData("root") as { env?: { SUPABASE_URL: string; SUPABASE_ANON_KEY: string } } | undefined;
-  const [warranties, setWarranties] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const customerId = localStorage.getItem("customerId");
-    if (!customerId) {
-      navigate("/customer/login");
-      return;
-    }
-
-    // 환경변수 직접 사용 (VITE_ 접두사 우선)
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || rootData?.env?.SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || rootData?.env?.SUPABASE_ANON_KEY;
-    
-    if (supabaseUrl && supabaseKey) {
-      fetchWarranties(customerId, { SUPABASE_URL: supabaseUrl, SUPABASE_ANON_KEY: supabaseKey });
-    } else {
-      console.error("Supabase 환경변수가 없습니다");
-      setIsLoading(false);
-    }
-  }, [navigate, rootData]);
-
-  const fetchWarranties = async (
-    memberId: string, 
-    env: { SUPABASE_URL: string; SUPABASE_ANON_KEY: string }
-  ) => {
-    try {
-      // 클라이언트용 Supabase 인스턴스 생성
-      const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
-
-      const { data, error } = await supabase
-        .from("warranties")
-        .select("*")
-        .eq("member_id", memberId)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("보증서 조회 오류:", error);
-        setWarranties([]);
-      } else {
-        setWarranties(data || []);
-      }
-    } catch (error) {
-      console.error("보증서 조회 오류:", error);
-      setWarranties([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { warranties } = useLoaderData<typeof loader>();
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 px-4 py-6">
-      <div className="mx-auto max-w-md space-y-4">
+    <div className="min-h-screen bg-[#F5F5F0]">
+      <div className="mx-auto max-w-2xl px-6 py-10">
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/customer/mypage")}>
-            <ArrowLeftIcon className="h-5 w-5" />
-          </Button>
-          <h1 className="text-xl font-semibold">내 보증서</h1>
+        <div className="flex items-center gap-4 mb-8">
+          <Link 
+            to="/customer/mypage"
+            className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5 text-gray-600" />
+          </Link>
+          <h1 className="text-2xl font-bold text-gray-900">내 보증서</h1>
         </div>
 
         {/* 보증서 등록 버튼 */}
-        <Link to="/customer/warranty">
-          <Card className="bg-primary text-primary-foreground">
-            <CardContent className="flex items-center gap-3 p-4">
-              <ShieldCheckIcon className="h-6 w-6" />
-              <span className="font-medium">새 보증서 등록하기</span>
-              <ChevronRightIcon className="h-5 w-5 ml-auto" />
-            </CardContent>
-          </Card>
+        <Link to="/customer/warranty" className="block mb-6">
+          <div className="bg-[#FF6B35] rounded-2xl p-5 flex items-center justify-between hover:bg-[#FF6B35]/90 transition-colors group">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                <Plus className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <p className="text-white font-semibold text-lg">새 보증서 등록</p>
+                <p className="text-white/80 text-sm">제품 구매 후 보증서를 등록하세요</p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-white/80 group-hover:translate-x-1 transition-transform" />
+          </div>
         </Link>
 
         {/* 보증서 목록 */}
-        {isLoading ? (
-          <div className="text-center py-8 text-muted-foreground">
-            로딩 중...
-          </div>
-        ) : warranties.length === 0 ? (
-          <div className="text-center py-12">
-            <ShieldCheckIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-            <p className="text-muted-foreground">등록된 보증서가 없습니다</p>
-            <p className="text-sm text-muted-foreground mt-1">
+        {warranties.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <ShieldCheck className="w-10 h-10 text-gray-300" />
+            </div>
+            <p className="text-gray-500 font-medium">등록된 보증서가 없습니다</p>
+            <p className="text-sm text-gray-400 mt-1">
               제품을 구매하셨다면 보증서를 등록해주세요
             </p>
           </div>
@@ -128,22 +104,24 @@ export default function MypageWarrantiesScreen() {
               
               return (
                 <Link key={warranty.id} to={`/customer/mypage/warranty/${warranty.id}`}>
-                  <Card className="hover:bg-muted/50 transition-colors">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <h3 className="font-medium">{warranty.product_name || "제품"}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {warranty.product_option}
-                          </p>
-                        </div>
-                        <Badge className={status.color}>
-                          <StatusIcon className="h-3 w-3 mr-1" />
-                          {status.label}
-                        </Badge>
+                  <div className="bg-white rounded-2xl p-5 hover:shadow-md transition-all group border border-gray-100">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900 text-lg">
+                          {warranty.product_name || "제품"}
+                        </h3>
+                        <p className="text-gray-500 text-sm mt-1">
+                          {warranty.product_option}
+                        </p>
                       </div>
-                      
-                      <div className="text-xs text-muted-foreground space-y-1">
+                      <Badge className={`${status.color} px-3 py-1 rounded-full font-medium`}>
+                        <StatusIcon className="w-3.5 h-3.5 mr-1" />
+                        {status.label}
+                      </Badge>
+                    </div>
+                    
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                      <div className="text-sm text-gray-400 space-y-0.5">
                         <p>보증서 번호: {warranty.warranty_number}</p>
                         {warranty.warranty_start && (
                           <p>
@@ -151,8 +129,9 @@ export default function MypageWarrantiesScreen() {
                           </p>
                         )}
                       </div>
-                    </CardContent>
-                  </Card>
+                      <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-gray-500 group-hover:translate-x-1 transition-all" />
+                    </div>
+                  </div>
                 </Link>
               );
             })}
@@ -162,4 +141,3 @@ export default function MypageWarrantiesScreen() {
     </div>
   );
 }
-

@@ -156,6 +156,20 @@ ${references.map((ref) => `- ${ref.title}: ${ref.url} (출처: ${ref.source})`).
   const prompt = `당신은 신생아 및 24개월 미만 영유아를 위한 세계 최고 수준의 소아 수면 안전 전문가입니다.
 제공된 아기 수면 환경 이미지를 매우 철저하고 상세하게 분석해 주세요.
 
+## ⚠️ 중요: 이미지 유효성 검증
+**먼저 이미지가 아기 수면 환경 분석에 적합한지 확인하세요.**
+
+다음과 같은 경우 분석을 거부하고, analysisRejected: true를 반환하세요:
+- 아기 침대, 요람, 수면 공간이 보이지 않는 경우
+- 수면과 관련 없는 사진 (음식, 풍경, 물건, 문서, 스크린샷 등)
+- 이미지가 너무 어둡거나 흐려서 수면 환경을 식별할 수 없는 경우
+- 아기 방/수면 공간이 아닌 다른 장소의 사진
+
+적합한 사진의 예시:
+- 아기 침대/요람/바운서의 전체 또는 일부가 보이는 사진
+- 아기가 자고 있는 모습이 담긴 사진
+- 수면 환경(매트리스, 이불, 베개 등)이 보이는 사진
+
 ## 아기 정보
 - **월령**: 생후 약 ${ageInMonths}개월 (${ageInfo.ageGroupKorean})
 - **발달 단계**: ${ageInfo.developmentStage}
@@ -237,10 +251,34 @@ ${ragReferences}
 - AAP, CDC, WHO, 한국소아과학회 등 공신력 있는 기관
 - 최소 3개 이상 포함
 
+**안전 점수 (safetyScore) 계산:**
+- 100점 만점으로 수면 환경의 안전도를 평가
+- High 위험 요소: 각 -20점
+- Medium 위험 요소: 각 -10점  
+- Low 위험 요소: 각 -5점
+- Info (칭찬): 각 +2점 (최대 100점)
+- 최저 0점, 최고 100점으로 제한
+
+**점수 등급:**
+- 90-100: 매우 안전 (⭐⭐⭐⭐⭐)
+- 75-89: 안전 (⭐⭐⭐⭐)
+- 60-74: 보통 (⭐⭐⭐)
+- 40-59: 주의 필요 (⭐⭐)
+- 0-39: 위험 (⭐)
+
+**scoreComment:**
+- 점수에 맞는 한 줄 코멘트 (예: "안전한 수면 환경이에요!", "몇 가지 개선이 필요해요")
+
 **최종 결과물:**
 - 단일 원시 JSON 객체
 - 마크다운 서식 없이 순수 JSON만 출력
 - 모든 텍스트는 한국어, riskLevel만 영문
+- safetyScore는 정수로 반환
+
+**분석 불가 시:**
+- analysisRejected: true
+- rejectionReason: 분석을 거부하는 이유 설명 (예: "이 이미지는 아기 수면 환경이 아닌 배송 조회 화면입니다. 아기 침대나 수면 공간이 보이는 사진을 올려주세요.")
+- summary, feedbackItems, references, safetyScore, scoreComment는 빈/기본 값으로 반환
 `;
 
   const imagePart = fileToGenerativePart(imageBase64, imageMimeType);
@@ -254,6 +292,10 @@ ${ragReferences}
         responseSchema: {
           type: Type.OBJECT,
           properties: {
+            analysisRejected: { type: Type.BOOLEAN },
+            rejectionReason: { type: Type.STRING },
+            safetyScore: { type: Type.NUMBER },
+            scoreComment: { type: Type.STRING },
             summary: { type: Type.STRING },
             feedbackItems: {
               type: Type.ARRAY,
@@ -293,7 +335,18 @@ ${ragReferences}
       jsonText = jsonText.substring(startIndex, endIndex + 1);
     }
 
-    const parsedResult = JSON.parse(jsonText) as AnalysisReport;
+    const parsedResult = JSON.parse(jsonText) as AnalysisReport & { 
+      analysisRejected?: boolean; 
+      rejectionReason?: string;
+    };
+
+    // 분석 불가 이미지 처리
+    if (parsedResult.analysisRejected) {
+      throw new Error(
+        parsedResult.rejectionReason || 
+        "이 이미지는 아기 수면 환경 분석에 적합하지 않습니다. 아기 침대나 수면 공간이 보이는 사진을 올려주세요."
+      );
+    }
 
     // Ensure references exist
     if (!parsedResult.references || parsedResult.references.length === 0) {

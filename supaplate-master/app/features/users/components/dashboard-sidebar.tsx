@@ -12,10 +12,12 @@
  */
 import {
   BarChart3Icon,
+  BookOpenIcon,
   BoxIcon,
   FolderTreeIcon,
   LayoutDashboardIcon,
   MegaphoneIcon,
+  MessageSquareIcon,
   PackageIcon,
   Settings2Icon,
   ShieldCheckIcon,
@@ -122,6 +124,32 @@ const data = {
         {
           title: "A/S 관리",
           url: "/dashboard/warranty/as",
+        },
+      ],
+    },
+    {
+      title: "블로그 관리",
+      url: "/dashboard/blog",
+      icon: BookOpenIcon,
+      items: [
+        {
+          title: "글 목록",
+          url: "/dashboard/blog",
+        },
+        {
+          title: "새 글 작성",
+          url: "/dashboard/blog/new",
+        },
+      ],
+    },
+    {
+      title: "AI 상담 관리",
+      url: "/dashboard/chat/knowledge",
+      icon: MessageSquareIcon,
+      items: [
+        {
+          title: "상담 지식",
+          url: "/dashboard/chat/knowledge",
         },
       ],
     },

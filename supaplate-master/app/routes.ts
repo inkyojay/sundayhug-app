@@ -68,13 +68,22 @@ export default [
     ...prefix("/warranty", [
       route("/upload-photo", "features/warranty/api/upload-photo.tsx"),
     ]),
-    // 수면 분석 API (프로덕션에서 비활성화 - develop 브랜치에서 활성화)
-    // ...prefix("/sleep", [
-    //   route("/analyze", "features/sleep-analysis/api/analyze.tsx"),
-    //   route("/analyze-from-url", "features/sleep-analysis/api/analyze-from-url.tsx"),
-    //   route("/:id/slides", "features/sleep-analysis/api/slides.tsx"),
-    //   route("/seed-references", "features/sleep-analysis/api/seed-references.tsx"),
-    // ]),
+    // 수면 분석 API
+    ...prefix("/sleep", [
+      route("/analyze", "features/sleep-analysis/api/analyze.tsx"),
+      route("/analyze-from-url", "features/sleep-analysis/api/analyze-from-url.tsx"),
+      route("/:id/slides", "features/sleep-analysis/api/slides.tsx"),
+      route("/:id/share-card", "features/sleep-analysis/api/share-card.route.ts"),
+      route("/seed-references", "features/sleep-analysis/api/seed-references.tsx"),
+    ]),
+    // 블로그 API
+    ...prefix("/blog", [
+      route("/generate-audio", "features/blog/api/generate-audio.tsx"),
+    ]),
+    // 채팅 API
+    ...prefix("/chat", [
+      route("/send", "features/chat/api/send-message.tsx"),
+    ]),
   ]),
 
   // ========================================
@@ -91,15 +100,31 @@ export default [
         route("/view/:id", "features/warranty/screens/public/view.tsx"),
       ]),
       
-      // 수면 분석기 (프로덕션에서 비활성화 - develop 브랜치에서 활성화)
-      // ...prefix("/sleep", [
-      //   index("features/sleep-analysis/screens/analyze-public.tsx"),
-      //   route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "customer-sleep-result" }),
+      // 수면 분석 허브
+      ...prefix("/sleep", [
+        index("features/customer/screens/sleep-hub.tsx"),
+        route("/analyze", "features/sleep-analysis/screens/analyze-public.tsx"),
+        route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "customer-sleep-result" }),
+      ]),
+      
+      // 블로그 (준비 중 - 비활성화)
+      // ...prefix("/blog", [
+      //   index("features/customer/screens/blog/index.tsx"),
+      //   route("/:postId", "features/customer/screens/blog/post.tsx"),
       // ]),
       
-      // 통합 로그인/회원가입
+      // AI 육아 상담 (준비 중 - 비활성화)
+      // ...prefix("/chat", [
+      //   index("features/chat/screens/chat-list.tsx"),
+      //   route("/baby-profile", "features/chat/screens/baby-profile.tsx"),
+      //   route("/:sessionId", "features/chat/screens/chat-room.tsx"),
+      // ]),
+      
+      // 통합 로그인/회원가입 (Supabase Auth)
       route("/login", "features/customer/screens/login.tsx"),
       route("/register", "features/customer/screens/register.tsx"),
+      route("/auth/callback", "features/customer/screens/auth-callback.tsx"),
+      // 레거시 콜백 (향후 제거 예정)
       route("/kakao/callback", "features/warranty/screens/public/kakao-callback.tsx", { id: "customer-kakao-callback" }),
       route("/naver/callback", "features/customer/screens/naver-callback.tsx"),
       
@@ -109,8 +134,7 @@ export default [
         route("/profile", "features/customer/screens/mypage/profile.tsx"),
         route("/warranties", "features/customer/screens/mypage/warranties.tsx"),
         route("/warranty/:id", "features/customer/screens/mypage/warranty-detail.tsx"),
-        // 수면 분석 이력 (프로덕션에서 비활성화)
-        // route("/analyses", "features/customer/screens/mypage/analyses.tsx"),
+        route("/analyses", "features/customer/screens/mypage/analyses.tsx"),
         route("/as", "features/customer/screens/mypage/as-list.tsx"),
       ]),
       
@@ -204,12 +228,24 @@ export default [
           route("/:id", "features/warranty/screens/warranty-detail.tsx"),
         ]),
         
-        // 수면 분석 관리 (프로덕션에서 비활성화 - develop 브랜치에서 활성화)
-        // ...prefix("/sleep", [
-        //   index("features/sleep-analysis/screens/analyze.tsx"),
-        //   route("/history", "features/sleep-analysis/screens/history.tsx"),
-        //   route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "dashboard-sleep-result" }),
-        // ]),
+        // 수면 분석 관리 (관리자용)
+        ...prefix("/sleep", [
+          index("features/sleep-analysis/screens/analyze.tsx"),
+          route("/history", "features/sleep-analysis/screens/history.tsx"),
+          route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "dashboard-sleep-result" }),
+        ]),
+        
+        // 블로그 관리 (관리자용)
+        ...prefix("/blog", [
+          index("features/blog/screens/admin/posts-list.tsx"),
+          route("/:postId/edit", "features/blog/screens/admin/post-edit.tsx", { id: "blog-post-edit" }),
+          route("/new", "features/blog/screens/admin/post-edit.tsx", { id: "blog-post-new" }),
+        ]),
+        
+        // AI 상담 지식 관리 (관리자용)
+        ...prefix("/chat", [
+          route("/knowledge", "features/chat/screens/admin/knowledge-list.tsx"),
+        ]),
       ]),
       
       // 계정 설정

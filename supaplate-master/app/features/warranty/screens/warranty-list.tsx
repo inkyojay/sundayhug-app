@@ -1,5 +1,9 @@
 /**
  * 보증서 관리 - 전체 목록 (관리자용)
+ * 
+ * 기능:
+ * - 보증서 목록 조회/검색/필터
+ * - 체크박스로 선택 후 일괄 삭제
  */
 import type { Route } from "./+types/warranty-list";
 
@@ -10,9 +14,11 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   ClockIcon,
+  Trash2Icon,
   AlertTriangleIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useFetcher, useRevalidator } from "react-router";
 
 import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
@@ -39,8 +45,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/core/components/ui/select";
+import { Checkbox } from "~/core/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "~/core/components/ui/dialog";
 
 import makeServerClient from "~/core/lib/supa-client.server";
+import adminClient from "~/core/lib/supa-admin-client.server";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: `보증서 관리 | Sundayhug Admin` }];
@@ -118,6 +134,41 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+// 삭제 Action (adminClient 사용 - RLS bypass)
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const actionType = formData.get("actionType") as string;
+
+  if (actionType === "delete") {
+    const idsJson = formData.get("ids") as string;
+    const ids = JSON.parse(idsJson) as string[];
+
+    if (ids.length === 0) {
+      return { success: false, error: "삭제할 항목을 선택해주세요." };
+    }
+
+    try {
+      // adminClient 사용 (service_role key로 RLS bypass)
+      const { error } = await adminClient
+        .from("warranties")
+        .delete()
+        .in("id", ids);
+
+      if (error) {
+        console.error("삭제 오류:", error);
+        return { success: false, error: `삭제 중 오류가 발생했습니다: ${error.message}` };
+      }
+
+      return { success: true, message: `${ids.length}개 보증서가 삭제되었습니다.` };
+    } catch (error: any) {
+      console.error("삭제 예외:", error);
+      return { success: false, error: error.message || "삭제 중 오류가 발생했습니다." };
+    }
+  }
+
+  return { success: false, error: "알 수 없는 액션입니다." };
+}
+
 // 상태별 배지 스타일
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   pending: { label: "승인 대기", variant: "outline" },
@@ -129,6 +180,33 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
 export default function WarrantyList({ loaderData }: Route.ComponentProps) {
   const { warranties, stats, totalCount, currentPage, totalPages, search, statusFilter } = loaderData;
   const [searchInput, setSearchInput] = useState(search);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
+
+  const fetcher = useFetcher();
+  const revalidator = useRevalidator();
+  const isDeleting = fetcher.state === "submitting";
+  const hasHandledRef = useRef(false);
+
+  // 삭제 결과 처리
+  useEffect(() => {
+    if (fetcher.data && fetcher.state === "idle" && !hasHandledRef.current) {
+      hasHandledRef.current = true;
+      if (fetcher.data.success) {
+        setDeleteMessage(`✅ ${fetcher.data.message}`);
+        setSelectedIds(new Set());
+        setShowDeleteDialog(false);
+        revalidator.revalidate();
+      } else {
+        setDeleteMessage(`❌ ${fetcher.data.error}`);
+      }
+      setTimeout(() => setDeleteMessage(null), 5000);
+    }
+    if (fetcher.state === "submitting") {
+      hasHandledRef.current = false;
+    }
+  }, [fetcher.data, fetcher.state, revalidator]);
 
   const buildUrl = (overrides: Record<string, string | null> = {}) => {
     const params = new URLSearchParams();
@@ -153,8 +231,71 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
     window.location.href = buildUrl({ status: value === "all" ? null : value });
   };
 
+  // 전체 선택/해제
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(warranties.map((w: any) => w.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  // 개별 선택
+  const handleSelectOne = (id: string, checked: boolean) => {
+    const newSet = new Set(selectedIds);
+    if (checked) {
+      newSet.add(id);
+    } else {
+      newSet.delete(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  // 삭제 실행
+  const handleDelete = () => {
+    fetcher.submit(
+      { actionType: "delete", ids: JSON.stringify(Array.from(selectedIds)) },
+      { method: "POST" }
+    );
+  };
+
+  const isAllSelected = warranties.length > 0 && selectedIds.size === warranties.length;
+  const isSomeSelected = selectedIds.size > 0 && selectedIds.size < warranties.length;
+
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
+      {/* 삭제 결과 메시지 */}
+      {deleteMessage && (
+        <div className={`p-4 rounded-lg ${deleteMessage.startsWith("✅") ? "bg-green-500/10 text-green-500" : "bg-destructive/10 text-destructive"}`}>
+          {deleteMessage}
+        </div>
+      )}
+
+      {/* 삭제 확인 다이얼로그 */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangleIcon className="h-5 w-5" />
+              보증서 삭제
+            </DialogTitle>
+            <DialogDescription>
+              선택한 <strong>{selectedIds.size}개</strong>의 보증서를 삭제하시겠습니까?
+              <br />
+              <span className="text-destructive">이 작업은 되돌릴 수 없습니다.</span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={isDeleting}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? "삭제 중..." : "삭제"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
@@ -164,12 +305,20 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
           </h1>
           <p className="text-muted-foreground">디지털 보증서 발급 현황</p>
         </div>
-        <Button asChild>
-          <a href="/dashboard/warranty/pending">
-            <ClockIcon className="h-4 w-4 mr-2" />
-            승인 대기 ({stats.pending_count})
-          </a>
-        </Button>
+        <div className="flex gap-2">
+          {selectedIds.size > 0 && (
+            <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+              <Trash2Icon className="h-4 w-4 mr-2" />
+              선택 삭제 ({selectedIds.size})
+            </Button>
+          )}
+          <Button asChild>
+            <a href="/dashboard/warranty/pending">
+              <ClockIcon className="h-4 w-4 mr-2" />
+              승인 대기 ({stats.pending_count})
+            </a>
+          </Button>
+        </div>
       </div>
 
       {/* 통계 카드 */}
@@ -264,15 +413,32 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
       {/* 보증서 테이블 */}
       <Card>
         <CardHeader>
-          <CardTitle>보증서 목록</CardTitle>
-          <CardDescription>
-            총 {totalCount.toLocaleString()}개
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>보증서 목록</CardTitle>
+              <CardDescription>
+                총 {totalCount.toLocaleString()}개
+                {selectedIds.size > 0 && (
+                  <span className="ml-2 text-primary">
+                    ({selectedIds.size}개 선택됨)
+                  </span>
+                )}
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[50px]">
+                  <Checkbox
+                    checked={isAllSelected}
+                    onCheckedChange={handleSelectAll}
+                    aria-label="전체 선택"
+                    className={isSomeSelected ? "opacity-50" : ""}
+                  />
+                </TableHead>
                 <TableHead className="w-[180px]">보증서번호</TableHead>
                 <TableHead>구매자명</TableHead>
                 <TableHead>제품</TableHead>
@@ -285,7 +451,17 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
             </TableHeader>
             <TableBody>
               {warranties.map((item: any) => (
-                <TableRow key={item.id}>
+                <TableRow 
+                  key={item.id}
+                  className={selectedIds.has(item.id) ? "bg-muted/50" : ""}
+                >
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedIds.has(item.id)}
+                      onCheckedChange={(checked) => handleSelectOne(item.id, !!checked)}
+                      aria-label={`${item.warranty_number} 선택`}
+                    />
+                  </TableCell>
                   <TableCell className="font-mono text-xs">
                     {item.warranty_number}
                   </TableCell>
@@ -334,7 +510,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
               ))}
               {warranties.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                     {search || statusFilter !== "all" ? "검색 결과가 없습니다" : "등록된 보증서가 없습니다"}
                   </TableCell>
                 </TableRow>
@@ -373,4 +549,3 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
     </div>
   );
 }
-

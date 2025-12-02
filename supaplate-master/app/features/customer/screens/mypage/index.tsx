@@ -1,26 +1,22 @@
 /**
- * 고객 마이페이지 메인
+ * 고객 마이페이지 메인 (Bento Grid 스타일)
  * 
- * - 내 보증서
- * - 수면 분석 이력
- * - A/S 신청 이력
+ * - Hello, 이름 인사말
+ * - Bento 카드 레이아웃 (수면분석, A/S, 보증서, 분석이력, 내정보)
  */
 import type { Route } from "./+types/index";
 
-import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, redirect, useLoaderData, data } from "react-router";
 import { 
-  ShieldCheckIcon, 
-  MoonIcon, 
-  WrenchIcon,
-  ChevronRightIcon,
-  UserIcon,
-  SettingsIcon
+  Moon, 
+  Headphones,
+  Shield,
+  FileText,
+  User,
+  ChevronRight
 } from "lucide-react";
 
-import { Button } from "~/core/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/core/components/ui/card";
-import { Avatar, AvatarFallback } from "~/core/components/ui/avatar";
+import makeServerClient from "~/core/lib/supa-client.server";
 
 export function meta(): Route.MetaDescriptors {
   return [
@@ -28,158 +24,176 @@ export function meta(): Route.MetaDescriptors {
   ];
 }
 
-const menuItems = [
-  {
-    title: "내 정보 변경",
-    description: "이름, 이메일, 전화번호, 비밀번호, 아이 정보",
-    icon: SettingsIcon,
-    href: "/customer/mypage/profile",
-    color: "text-gray-500",
-  },
-  {
-    title: "내 보증서",
-    description: "등록한 제품 보증서를 확인하세요",
-    icon: ShieldCheckIcon,
-    href: "/customer/mypage/warranties",
-    color: "text-blue-500",
-  },
-  // 수면 분석 이력 (프로덕션에서 비활성화 - develop 브랜치에서 활성화)
-  // {
-  //   title: "수면 분석 이력",
-  //   description: "AI 수면 환경 분석 결과를 확인하세요",
-  //   icon: MoonIcon,
-  //   href: "/customer/mypage/analyses",
-  //   color: "text-purple-500",
-  // },
-  {
-    title: "A/S 신청 이력",
-    description: "신청한 A/S 진행 상황을 확인하세요",
-    icon: WrenchIcon,
-    href: "/customer/mypage/as",
-    color: "text-orange-500",
-  },
-];
+export async function loader({ request }: Route.LoaderArgs) {
+  const [supabase] = makeServerClient(request);
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  // 로그인 안 되어 있으면 로그인 페이지로
+  if (!user) {
+    throw redirect("/customer/login");
+  }
+  
+  // profiles에서 추가 정보 가져오기
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .single();
+  
+  // 이름에서 first name 추출 (한글이면 전체, 영문이면 첫 단어)
+  const fullName = profile?.name || user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split("@")[0] || "회원";
+  const firstName = fullName.includes(" ") ? fullName.split(" ")[0] : fullName;
+  
+  return data({
+    user: {
+      id: user.id,
+      email: user.email,
+      name: fullName,
+      firstName: firstName,
+      phone: profile?.phone,
+      avatarUrl: user.user_metadata?.avatar_url || profile?.kakao_profile_image,
+      isVip: true,
+    },
+  });
+}
 
 export default function CustomerMypageIndexScreen() {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [memberName, setMemberName] = useState<string | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    // URL 쿼리 파라미터로 전달된 경우 (소셜 로그인 콜백)
-    const urlMemberId = searchParams.get("memberId");
-    const urlMemberName = searchParams.get("memberName");
-    const urlMemberPhone = searchParams.get("memberPhone");
-    
-    if (urlMemberId) {
-      localStorage.setItem("customerId", urlMemberId);
-      if (urlMemberName) localStorage.setItem("customerName", urlMemberName);
-      if (urlMemberPhone) localStorage.setItem("customerPhone", urlMemberPhone);
-      // 쿼리 파라미터 제거 후 리다이렉트
-      navigate("/customer/mypage", { replace: true });
-      return;
-    }
-
-    const customerId = localStorage.getItem("customerId");
-    const name = localStorage.getItem("customerName");
-    
-    if (!customerId) {
-      navigate("/customer/login");
-      return;
-    }
-    
-    setIsLoggedIn(true);
-    setMemberName(name || "회원");
-  }, [navigate, searchParams]);
-
-  const handleLogout = () => {
-    localStorage.removeItem("customerId");
-    localStorage.removeItem("customerName");
-    localStorage.removeItem("customerPhone");
-    navigate("/customer");
-  };
-
-  if (!isLoggedIn) {
-    return null;
-  }
+  const { user } = useLoaderData<typeof loader>();
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 px-4 py-6">
-      <div className="mx-auto max-w-md space-y-6">
-        {/* Profile Section */}
-        <Card>
-          <CardContent className="flex items-center gap-4 p-6">
-            <Avatar className="h-16 w-16">
-              <AvatarFallback className="bg-primary/10 text-primary text-xl">
-                <UserIcon className="h-8 w-8" />
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
-              <h2 className="text-xl font-semibold">{memberName}님</h2>
-              <p className="text-sm text-muted-foreground">
-                환영합니다!
-              </p>
+    <div className="min-h-screen bg-[#F5F5F0]">
+      <div className="mx-auto max-w-6xl px-6 py-10 md:py-16">
+        {/* Greeting Section */}
+        <div className="mb-10">
+          <h1 className="text-4xl md:text-5xl font-light tracking-tight">
+            <span className="font-bold text-gray-900">Hello,</span>{" "}
+            <span className="text-gray-400">{user.firstName}님.</span>
+          </h1>
+          <p className="mt-3 text-gray-500 text-lg">
+            오늘도 썬데이허그와 함께 편안한 하루 보내세요.
+          </p>
+        </div>
+
+        {/* Bento Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
+          {/* 수면 분석 - Large Dark Card */}
+          <Link 
+            to="/customer/sleep"
+            className="col-span-2 row-span-2 group"
+          >
+            <div className="h-full min-h-[280px] md:min-h-[360px] bg-[#1A1A1A] rounded-3xl p-6 md:p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.01]">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-gray-400 text-sm font-medium tracking-wider uppercase">
+                    AI Sleep Tech
+                  </p>
+                  <h2 className="text-white text-3xl md:text-4xl font-bold mt-2">
+                    수면 분석
+                  </h2>
+                </div>
+                <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center">
+                  <Moon className="w-6 h-6 text-white" />
+                </div>
+              </div>
+              
+              <div>
+                <p className="text-gray-400 text-base md:text-lg">
+                  AI가 우리 아이 수면 환경을 분석하고<br />
+                  맞춤 솔루션을 제공해드립니다.
+                </p>
+                <div className="mt-4 flex items-center text-gray-500 group-hover:text-white transition-colors">
+                  <span className="text-sm font-medium">분석하기</span>
+                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Quick Actions */}
-        <div className="grid grid-cols-2 gap-3">
-          <Link to="/customer/warranty">
-            <Card className="hover:bg-muted/50 transition-colors">
-              <CardContent className="p-4 text-center">
-                <ShieldCheckIcon className="h-8 w-8 mx-auto mb-2 text-primary" />
-                <p className="text-sm font-medium">보증서 등록</p>
-              </CardContent>
-            </Card>
           </Link>
-          <Link to="/customer/sleep">
-            <Card className="hover:bg-muted/50 transition-colors">
-              <CardContent className="p-4 text-center">
-                <MoonIcon className="h-8 w-8 mx-auto mb-2 text-purple-500" />
-                <p className="text-sm font-medium">수면 분석</p>
-              </CardContent>
-            </Card>
+
+          {/* 내 보증서 - Medium White Card */}
+          <Link 
+            to="/customer/mypage/warranties"
+            className="group"
+          >
+            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
+              <div className="flex justify-between items-start">
+                <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
+                  Warranty
+                </p>
+                <div className="w-10 h-10 bg-emerald-50 rounded-full flex items-center justify-center">
+                  <Shield className="w-5 h-5 text-emerald-600" />
+                </div>
+              </div>
+              
+              <h3 className="text-gray-900 text-lg md:text-xl font-bold">
+                내 보증서
+              </h3>
+            </div>
+          </Link>
+
+          {/* 분석 이력 - Medium White Card */}
+          <Link 
+            to="/customer/mypage/analyses"
+            className="group"
+          >
+            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
+              <div className="flex justify-between items-start">
+                <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
+                  History
+                </p>
+                <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                </div>
+              </div>
+              
+              <h3 className="text-gray-900 text-lg md:text-xl font-bold">
+                분석 이력
+              </h3>
+            </div>
+          </Link>
+
+          {/* A/S 접수 - Small White Card */}
+          <Link 
+            to="/customer/mypage/as"
+            className="group"
+          >
+            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
+              <div className="flex justify-between items-start">
+                <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
+                  Support
+                </p>
+                <div className="w-10 h-10 bg-orange-50 rounded-full flex items-center justify-center">
+                  <Headphones className="w-5 h-5 text-orange-600" />
+                </div>
+              </div>
+              
+              <h3 className="text-gray-900 text-lg md:text-xl font-bold">
+                A/S 접수
+              </h3>
+            </div>
+          </Link>
+
+          {/* 내 정보 - Small White Card */}
+          <Link 
+            to="/customer/mypage/profile"
+            className="group"
+          >
+            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
+              <div className="flex justify-between items-start">
+                <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
+                  Profile
+                </p>
+                <div className="w-10 h-10 bg-purple-50 rounded-full flex items-center justify-center">
+                  <User className="w-5 h-5 text-purple-600" />
+                </div>
+              </div>
+              
+              <h3 className="text-gray-900 text-lg md:text-xl font-bold">
+                내 정보
+              </h3>
+            </div>
           </Link>
         </div>
-
-        {/* Menu Items */}
-        <div className="space-y-3">
-          {menuItems.map((item) => (
-            <Link key={item.href} to={item.href}>
-              <Card className="hover:bg-muted/50 transition-colors">
-                <CardContent className="flex items-center gap-4 p-4">
-                  <div className={`p-2 rounded-full bg-muted ${item.color}`}>
-                    <item.icon className="h-5 w-5" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-medium">{item.title}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {item.description}
-                    </p>
-                  </div>
-                  <ChevronRightIcon className="h-5 w-5 text-muted-foreground" />
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-
-        {/* Support */}
-        <Card className="bg-muted/50">
-          <CardContent className="p-4 text-center text-sm text-muted-foreground">
-            <p>문의사항이 있으시면</p>
-            <p>
-              <a href="tel:15339093" className="font-medium text-primary">
-                1533-9093
-              </a>
-              으로 연락주세요
-            </p>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
 }
-

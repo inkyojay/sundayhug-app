@@ -1,5 +1,10 @@
 /**
- * 주문 관리 - 주문 현황
+ * 주문 관리 - 주문 현황 (그룹핑 버전)
+ * 
+ * 개선사항:
+ * - 주문번호(shop_ord_no) 기준으로 그룹핑
+ * - 클릭하면 세부 품목 펼쳐짐
+ * - 배치 동기화로 속도 향상
  */
 import type { Route } from "./+types/orders";
 
@@ -11,10 +16,14 @@ import {
   PackageCheckIcon,
   ClockIcon,
   FilterIcon,
-  ExternalLinkIcon,
-  DownloadIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   DatabaseIcon,
   CalendarIcon,
+  PackageIcon,
+  UserIcon,
+  MapPinIcon,
+  PhoneIcon,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useFetcher, useRevalidator } from "react-router";
@@ -30,26 +39,53 @@ import {
 } from "~/core/components/ui/card";
 import { Input } from "~/core/components/ui/input";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "~/core/components/ui/table";
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "~/core/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "~/core/components/ui/collapsible";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: `주문 관리 | Sundayhug Admin` }];
 };
+
+// 주문 그룹 타입
+interface OrderGroup {
+  shop_ord_no: string;
+  shop_name: string;
+  ord_status: string;
+  to_name: string;
+  to_tel: string;
+  to_htel: string;
+  to_addr1: string;
+  to_addr2: string;
+  invoice_no: string | null;
+  carr_name: string | null;
+  ord_time: string;
+  pay_amt: number;
+  ship_msg: string | null;
+  items: Array<{
+    id: string;
+    uniq: string;
+    shop_sale_name: string;
+    shop_opt_name: string;
+    sale_cnt: number;
+    pay_amt: number;
+    sales: number;
+    ord_status: string;
+    invoice_no: string | null;
+  }>;
+  itemCount: number;
+  totalQty: number;
+}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
@@ -59,7 +95,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const statusFilter = url.searchParams.get("status") || "all";
   const shopFilter = url.searchParams.get("shop") || "all";
   const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = 50;
+  const limit = 100; // 그룹핑 전이라 넉넉히
   const offset = (page - 1) * limit;
 
   // 통계 데이터
@@ -107,6 +143,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       shop_opt_name,
       sale_cnt,
       pay_amt,
+      sales,
       to_name,
       to_tel,
       to_htel,
@@ -136,10 +173,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     query = query.or(`shop_ord_no.ilike.%${search}%,to_name.ilike.%${search}%,invoice_no.ilike.%${search}%,to_tel.ilike.%${search}%,to_htel.ilike.%${search}%`);
   }
 
-  // 전체 개수 쿼리
+  // 전체 개수 쿼리 (그룹핑 전)
   let countQuery = supabase
     .from("orders")
-    .select("*", { count: "exact", head: true });
+    .select("shop_ord_no", { count: "exact", head: false });
   
   if (statusFilter !== "all") {
     countQuery = countQuery.eq("ord_status", statusFilter);
@@ -151,19 +188,76 @@ export async function loader({ request }: Route.LoaderArgs) {
     countQuery = countQuery.or(`shop_ord_no.ilike.%${search}%,to_name.ilike.%${search}%,invoice_no.ilike.%${search}%,to_tel.ilike.%${search}%,to_htel.ilike.%${search}%`);
   }
   
-  const { count: totalCount } = await countQuery;
+  const { data: countData } = await countQuery;
+  const uniqueOrderNos = new Set(countData?.map((o: any) => o.shop_ord_no));
+  const totalOrderGroups = uniqueOrderNos.size;
 
   // 페이지네이션 적용
   query = query.range(offset, offset + limit - 1);
 
   const { data: orders } = await query;
 
+  // 주문번호로 그룹핑
+  const groupedOrders: Record<string, OrderGroup> = {};
+  
+  orders?.forEach((order: any) => {
+    const key = order.shop_ord_no || order.uniq;
+    
+    if (!groupedOrders[key]) {
+      groupedOrders[key] = {
+        shop_ord_no: order.shop_ord_no || order.uniq,
+        shop_name: order.shop_name,
+        ord_status: order.ord_status,
+        to_name: order.to_name,
+        to_tel: order.to_tel,
+        to_htel: order.to_htel,
+        to_addr1: order.to_addr1,
+        to_addr2: order.to_addr2,
+        invoice_no: order.invoice_no,
+        carr_name: order.carr_name,
+        ord_time: order.ord_time,
+        pay_amt: 0,
+        ship_msg: order.ship_msg,
+        items: [],
+        itemCount: 0,
+        totalQty: 0,
+      };
+    }
+    
+    groupedOrders[key].items.push({
+      id: order.id,
+      uniq: order.uniq,
+      shop_sale_name: order.shop_sale_name,
+      shop_opt_name: order.shop_opt_name,
+      sale_cnt: order.sale_cnt,
+      pay_amt: order.pay_amt,
+      sales: order.sales,
+      ord_status: order.ord_status,
+      invoice_no: order.invoice_no,
+    });
+    
+    // pay_amt가 0이면 sales 사용 (카페24는 pay_amt가 0, sales에 금액 있음)
+    const itemAmt = parseFloat(order.pay_amt || 0) || parseFloat(order.sales || 0);
+    groupedOrders[key].pay_amt += itemAmt;
+    groupedOrders[key].itemCount += 1;
+    groupedOrders[key].totalQty += order.sale_cnt || 0;
+  });
+
+  const orderGroups = Object.values(groupedOrders).sort(
+    (a, b) => new Date(b.ord_time).getTime() - new Date(a.ord_time).getTime()
+  );
+
+  // 페이지네이션 (그룹 기준)
+  const groupsPerPage = 20;
+  const paginatedGroups = orderGroups.slice(0, groupsPerPage);
+  const totalPages = Math.ceil(totalOrderGroups / groupsPerPage);
+
   return {
-    orders: orders || [],
+    orderGroups: paginatedGroups,
     stats,
-    totalCount: totalCount || 0,
+    totalCount: totalOrderGroups,
     currentPage: page,
-    totalPages: Math.ceil((totalCount || 0) / limit),
+    totalPages,
     search,
     filters: { status: statusFilter, shop: shopFilter },
     shopOptions: shopStatsResult,
@@ -176,17 +270,14 @@ export async function action({ request }: Route.ActionArgs) {
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
 
   const formData = await request.formData();
-  const actionType = formData.get("actionType") as string; // "query" or "sync"
+  const actionType = formData.get("actionType") as string;
   const startDate = formData.get("startDate") as string;
   const endDate = formData.get("endDate") as string;
 
-  // 날짜로부터 daysAgo 계산
   const start = startDate ? new Date(startDate) : new Date();
-  const end = endDate ? new Date(endDate) : new Date();
   const today = new Date();
   const daysAgo = Math.ceil((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 
-  // forceRefresh: sync면 true (PlayAuto API 호출), query면 false (캐시 우선)
   const forceRefresh = actionType === "sync";
 
   try {
@@ -200,7 +291,7 @@ export async function action({ request }: Route.ActionArgs) {
         },
         body: JSON.stringify({ 
           forceRefresh,
-          daysAgo: Math.max(daysAgo, 1), // 최소 1일
+          daysAgo: Math.max(daysAgo, 1),
         }),
       }
     );
@@ -209,7 +300,7 @@ export async function action({ request }: Route.ActionArgs) {
     
     if (response.ok && result.success) {
       const message = forceRefresh 
-        ? `PlayAuto에서 ${result.data?.ordersSynced || 0}개 주문 동기화 완료!`
+        ? `PlayAuto에서 ${result.data?.ordersSynced || 0}개 주문 동기화 완료! (${result.data?.durationMs || 0}ms)`
         : `${result.data?.orderCount || 0}개 주문 조회 완료 (${result.source === "cache" ? "캐시" : "API"})`;
       return { success: true, message, data: result.data, source: result.source };
     } else {
@@ -221,9 +312,10 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Orders({ loaderData }: Route.ComponentProps) {
-  const { orders, stats, totalCount, currentPage, totalPages, search, filters, shopOptions } = loaderData;
+  const { orderGroups, stats, totalCount, currentPage, totalPages, search, filters, shopOptions } = loaderData;
   const [searchInput, setSearchInput] = useState(search);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   
   // 날짜 범위 (기본: 최근 7일)
   const today = new Date();
@@ -286,7 +378,6 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
     window.location.href = "/dashboard/orders";
   };
 
-  // 주문 조회 (캐시 우선)
   const handleQuery = () => {
     fetcher.submit(
       { actionType: "query", startDate, endDate },
@@ -294,12 +385,23 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
     );
   };
 
-  // 데이터 동기화 (PlayAuto API 강제 호출)
   const handleSync = () => {
     fetcher.submit(
       { actionType: "sync", startDate, endDate },
       { method: "POST" }
     );
+  };
+
+  const toggleOrder = (ordNo: string) => {
+    setExpandedOrders(prev => {
+      const next = new Set(prev);
+      if (next.has(ordNo)) {
+        next.delete(ordNo);
+      } else {
+        next.add(ordNo);
+      }
+      return next;
+    });
   };
 
   const hasActiveFilters = search || filters.status !== "all" || filters.shop !== "all";
@@ -548,7 +650,7 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
         </CardContent>
       </Card>
 
-      {/* 주문 테이블 */}
+      {/* 주문 목록 (그룹핑) */}
       <Card>
         <CardHeader>
           <CardTitle>주문 목록</CardTitle>
@@ -556,86 +658,137 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
             {hasActiveFilters ? "필터링된 결과" : "전체 주문"} ({totalCount.toLocaleString()}건)
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[120px]">주문번호</TableHead>
-                <TableHead className="w-[100px]">상태</TableHead>
-                <TableHead className="w-[100px]">판매채널</TableHead>
-                <TableHead>상품명</TableHead>
-                <TableHead className="w-[80px]">수량</TableHead>
-                <TableHead className="w-[80px]">수령인</TableHead>
-                <TableHead className="w-[120px]">송장번호</TableHead>
-                <TableHead className="w-[130px]">주문일시</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orders.map((order: any) => (
-                <TableRow key={order.id}>
-                  <TableCell className="font-mono text-xs">
-                    {order.shop_ord_no || order.uniq}
-                  </TableCell>
-                  <TableCell>
-                    {getStatusBadge(order.ord_status)}
-                  </TableCell>
-                  <TableCell>
-                    {getShopBadge(order.shop_name)}
-                  </TableCell>
-                  <TableCell className="max-w-[250px]">
-                    <div className="truncate text-sm font-medium">
-                      {order.shop_sale_name}
-                    </div>
-                    {order.shop_opt_name && (
-                      <div className="truncate text-xs text-muted-foreground">
-                        {order.shop_opt_name}
+        <CardContent className="space-y-3">
+          {orderGroups.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              {hasActiveFilters ? "검색 결과가 없습니다" : "주문 데이터가 없습니다"}
+            </div>
+          ) : (
+            orderGroups.map((group) => (
+              <Collapsible 
+                key={group.shop_ord_no} 
+                open={expandedOrders.has(group.shop_ord_no)}
+                onOpenChange={() => toggleOrder(group.shop_ord_no)}
+              >
+                {/* 주문 요약 (헤더) */}
+                <CollapsibleTrigger asChild>
+                  <div className="w-full p-4 rounded-lg border bg-card hover:bg-muted/50 cursor-pointer transition-colors">
+                    <div className="flex items-center gap-4">
+                      {/* 펼침 아이콘 */}
+                      <div className="flex-shrink-0">
+                        {expandedOrders.has(group.shop_ord_no) ? (
+                          <ChevronDownIcon className="h-5 w-5 text-muted-foreground" />
+                        ) : (
+                          <ChevronRightIcon className="h-5 w-5 text-muted-foreground" />
+                        )}
                       </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {order.sale_cnt}
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">{order.to_name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {order.to_htel || order.to_tel}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {order.invoice_no ? (
-                      <div className="flex items-center gap-1">
-                        <span className="font-mono text-xs">{order.invoice_no}</span>
+                      
+                      {/* 주문 정보 */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1">
+                          <span className="font-mono text-sm font-medium">
+                            {group.shop_ord_no}
+                          </span>
+                          {getStatusBadge(group.ord_status)}
+                          {getShopBadge(group.shop_name)}
+                          {group.itemCount > 1 && (
+                            <Badge variant="secondary" className="text-xs">
+                              {group.itemCount}개 품목
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <UserIcon className="h-3 w-3" />
+                            {group.to_name}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <PhoneIcon className="h-3 w-3" />
+                            {group.to_htel || group.to_tel}
+                          </span>
+                          <span>
+                            {new Date(group.ord_time).toLocaleDateString("ko-KR")}
+                          </span>
+                        </div>
                       </div>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">
-                    {order.ord_time 
-                      ? new Date(order.ord_time).toLocaleString("ko-KR", {
-                          month: "2-digit",
-                          day: "2-digit",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
-                      : "-"
-                    }
-                  </TableCell>
-                </TableRow>
-              ))}
-              {orders.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                    {hasActiveFilters ? "검색 결과가 없습니다" : "주문 데이터가 없습니다"}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+
+                      {/* 금액 & 송장 */}
+                      <div className="text-right flex-shrink-0">
+                        <div className="font-bold">
+                          {group.pay_amt.toLocaleString()}원
+                        </div>
+                        {group.invoice_no && (
+                          <div className="text-xs text-muted-foreground">
+                            {group.carr_name}: {group.invoice_no}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CollapsibleTrigger>
+                
+                {/* 세부 품목 (펼침) */}
+                <CollapsibleContent>
+                  <div className="ml-9 mt-2 space-y-2 pb-2">
+                    {/* 배송 정보 */}
+                    <div className="p-3 rounded-lg bg-muted/30 text-sm">
+                      <div className="flex items-start gap-2">
+                        <MapPinIcon className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                        <div>
+                          <span className="font-medium">{group.to_name}</span>
+                          <span className="mx-2 text-muted-foreground">|</span>
+                          <span>{group.to_htel || group.to_tel}</span>
+                          <div className="text-muted-foreground mt-1">
+                            {group.to_addr1} {group.to_addr2}
+                          </div>
+                          {group.ship_msg && (
+                            <div className="text-orange-500 mt-1">
+                              📝 {group.ship_msg}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 품목 목록 */}
+                    {group.items.map((item, idx) => (
+                      <div 
+                        key={item.id} 
+                        className="flex items-center gap-4 p-3 rounded-lg border bg-background"
+                      >
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm font-medium">
+                          {idx + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">
+                            {item.shop_sale_name}
+                          </div>
+                          {item.shop_opt_name && (
+                            <div className="text-sm text-muted-foreground truncate">
+                              옵션: {item.shop_opt_name}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-center flex-shrink-0">
+                          <div className="font-bold">{item.sale_cnt}개</div>
+                        </div>
+                        <div className="text-right flex-shrink-0 w-24">
+                          <div className="font-medium">
+                            {(item.pay_amt || item.sales || 0).toLocaleString()}원
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            ))
+          )}
 
           {/* 페이지네이션 */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4">
+            <div className="flex items-center justify-between pt-4">
               <p className="text-sm text-muted-foreground">
                 페이지 {currentPage} / {totalPages}
               </p>
@@ -664,7 +817,3 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
     </div>
   );
 }
-
-
-
-

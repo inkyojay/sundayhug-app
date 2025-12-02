@@ -9,6 +9,8 @@ export interface UploadFormData {
   birthDate: string;
   phoneNumber?: string;
   instagramId?: string;
+  newBabyName?: string;
+  newBabyGender?: string;
 }
 
 export interface FeedbackItem {
