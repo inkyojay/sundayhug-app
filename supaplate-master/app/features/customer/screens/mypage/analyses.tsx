@@ -1,18 +1,17 @@
 /**
- * 수면 분석 이력 (Supabase Auth 통합)
+ * 수면 분석 이력 (새로운 디자인)
  */
 import type { Route } from "./+types/analyses";
 
 import { Link, redirect, useLoaderData, data } from "react-router";
 import { 
-  ArrowLeftIcon, 
-  MoonIcon,
-  ChevronRightIcon,
-  ImageIcon
+  ArrowLeft, 
+  Moon,
+  ChevronRight,
+  Image,
+  Plus
 } from "lucide-react";
 
-import { Button } from "~/core/components/ui/button";
-import { Card, CardContent } from "~/core/components/ui/card";
 import makeServerClient from "~/core/lib/supa-client.server";
 
 export function meta(): Route.MetaDescriptors {
@@ -25,12 +24,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
   const { data: { user } } = await supabase.auth.getUser();
   
-  // 로그인 안 되어 있으면 로그인 페이지로
   if (!user) {
     throw redirect("/customer/login");
   }
   
-  // user_id로 수면 분석 이력 조회
   const { data: analyses, error } = await supabase
     .from("sleep_analyses")
     .select("id, image_url, age_in_months, summary, created_at")
@@ -48,35 +45,43 @@ export default function MypageAnalysesScreen() {
   const { analyses } = useLoaderData<typeof loader>();
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 px-4 py-6">
-      <div className="mx-auto max-w-md space-y-4">
+    <div className="min-h-screen bg-[#F5F5F0]">
+      <div className="mx-auto max-w-2xl px-6 py-10">
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" asChild>
-            <Link to="/customer/mypage">
-              <ArrowLeftIcon className="h-5 w-5" />
-            </Link>
-          </Button>
-          <h1 className="text-xl font-semibold">수면 분석 이력</h1>
+        <div className="flex items-center gap-4 mb-8">
+          <Link 
+            to="/customer/mypage"
+            className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5 text-gray-600" />
+          </Link>
+          <h1 className="text-2xl font-bold text-gray-900">수면 분석 이력</h1>
         </div>
 
         {/* 새 분석 버튼 */}
-        <Link to="/customer/sleep">
-          <Card className="bg-purple-500 text-white">
-            <CardContent className="flex items-center gap-3 p-4">
-              <MoonIcon className="h-6 w-6" />
-              <span className="font-medium">새로운 수면 환경 분석하기</span>
-              <ChevronRightIcon className="h-5 w-5 ml-auto" />
-            </CardContent>
-          </Card>
+        <Link to="/customer/sleep" className="block mb-6">
+          <div className="bg-[#1A1A1A] rounded-2xl p-5 flex items-center justify-between hover:bg-[#2A2A2A] transition-colors group">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center">
+                <Plus className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <p className="text-white font-semibold text-lg">새로운 분석 시작</p>
+                <p className="text-gray-400 text-sm">AI가 수면 환경을 분석해드려요</p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-gray-500 group-hover:translate-x-1 transition-transform" />
+          </div>
         </Link>
 
         {/* 분석 이력 목록 */}
         {analyses.length === 0 ? (
-          <div className="text-center py-12">
-            <MoonIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-            <p className="text-muted-foreground">분석 이력이 없습니다</p>
-            <p className="text-sm text-muted-foreground mt-1">
+          <div className="text-center py-16">
+            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Moon className="w-10 h-10 text-gray-300" />
+            </div>
+            <p className="text-gray-500 font-medium">분석 이력이 없습니다</p>
+            <p className="text-sm text-gray-400 mt-1">
               아기의 수면 환경을 AI로 분석해보세요
             </p>
           </div>
@@ -84,43 +89,50 @@ export default function MypageAnalysesScreen() {
           <div className="space-y-3">
             {analyses.map((analysis) => (
               <Link key={analysis.id} to={`/customer/sleep/result/${analysis.id}`}>
-                <Card className="hover:bg-muted/50 transition-colors">
-                  <CardContent className="flex items-center gap-4 p-4">
-                    <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
-                      {analysis.image_url ? (
-                        <img 
-                          src={analysis.image_url} 
-                          alt="분석 이미지"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <ImageIcon className="h-6 w-6 text-muted-foreground" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium">
-                        {analysis.age_in_months ? `${analysis.age_in_months}개월 아기` : "수면 환경 분석"}
+                <div className="bg-white rounded-2xl p-4 hover:shadow-md transition-all group border border-gray-100 flex items-center gap-4">
+                  <div className="w-20 h-20 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden flex-shrink-0">
+                    {analysis.image_url ? (
+                      <img 
+                        src={analysis.image_url} 
+                        alt="분석 이미지"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Image className="w-8 h-8 text-gray-300" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900">
+                      {analysis.age_in_months ? `${analysis.age_in_months}개월 아기` : "수면 환경 분석"}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {analysis.created_at 
+                        ? new Date(analysis.created_at).toLocaleDateString("ko-KR", {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric"
+                          })
+                        : "날짜 미상"}
+                    </p>
+                    {analysis.summary && (
+                      <p className="text-sm text-gray-400 mt-2 line-clamp-1">
+                        {analysis.summary}
                       </p>
-                      <p className="text-sm text-muted-foreground">
-                        {analysis.created_at 
-                          ? new Date(analysis.created_at).toLocaleDateString("ko-KR")
-                          : "날짜 미상"}
-                      </p>
-                    </div>
-                    <ChevronRightIcon className="h-5 w-5 text-muted-foreground" />
-                  </CardContent>
-                </Card>
+                    )}
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-gray-500 group-hover:translate-x-1 transition-all flex-shrink-0" />
+                </div>
               </Link>
             ))}
           </div>
         )}
 
         {/* 안내 메시지 */}
-        <Card className="bg-muted/50">
-          <CardContent className="p-4 text-center text-sm text-muted-foreground">
-            <p>로그인한 상태에서 분석한 결과만 표시됩니다.</p>
-          </CardContent>
-        </Card>
+        <div className="mt-8 p-4 bg-white/60 rounded-2xl border border-gray-200/50 text-center">
+          <p className="text-sm text-gray-400">
+            로그인한 상태에서 분석한 결과만 표시됩니다.
+          </p>
+        </div>
       </div>
     </div>
   );

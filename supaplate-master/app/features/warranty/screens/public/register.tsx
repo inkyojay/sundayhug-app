@@ -1,36 +1,23 @@
 /**
- * 보증서 등록 페이지 (고객용 - 로그인 필수)
- * 
- * 대상: ABC 이동식 아기침대
- * 흐름: 정보입력 → 사진등록 → 완료 (주문 검증 없음)
- * 승인: 관리자가 확인 후 카카오톡 알림톡으로 결과 전달
- * 
- * 전제조건: 회원가입 완료 (전화번호 인증 또는 소셜 로그인)
+ * 보증서 등록 페이지 (새로운 디자인)
  */
 import type { Route } from "./+types/register";
 
 import {
-  ShieldCheckIcon,
-  CheckCircleIcon,
-  ArrowRightIcon,
-  PackageIcon,
-  CameraIcon,
-  AlertCircleIcon,
-  UploadIcon,
-  XIcon,
-  ArrowLeftIcon,
+  ShieldCheck,
+  CheckCircle,
+  ArrowRight,
+  Package,
+  Camera,
+  AlertCircle,
+  Upload,
+  X,
+  ArrowLeft,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { useFetcher, useNavigate } from "react-router";
+import { useFetcher, useNavigate, redirect, data, useLoaderData } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "~/core/components/ui/card";
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
 
@@ -44,26 +31,44 @@ export const meta: Route.MetaFunction = () => {
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
-  return {};
+  const [supabase] = makeServerClient(request);
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw redirect("/customer/login?redirect=/customer/warranty");
+  }
+  
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("name, phone")
+    .eq("id", user.id)
+    .single();
+  
+  return data({
+    user: {
+      id: user.id,
+      name: profile?.name || user.user_metadata?.name || "",
+      phone: profile?.phone || "",
+    },
+  });
 }
 
 export async function action({ request }: Route.ActionArgs) {
   const [supabase] = makeServerClient(request);
-  const formData = await request.formData();
+  const { data: { user } } = await supabase.auth.getUser();
   
+  if (!user) {
+    return { success: false, error: "로그인이 필요합니다." };
+  }
+  
+  const formData = await request.formData();
   const step = formData.get("step") as string;
 
   if (step === "register") {
-    // 보증서 등록 (로그인된 회원만)
-    const memberId = formData.get("memberId") as string;
     const customerName = formData.get("customerName") as string;
     const phone = formData.get("phone") as string;
     const purchaseDate = formData.get("purchaseDate") as string;
     const photoUrl = formData.get("photoUrl") as string;
-
-    if (!memberId) {
-      return { success: false, error: "로그인이 필요합니다." };
-    }
 
     if (!customerName || !phone) {
       return { success: false, error: "이름과 연락처를 입력해주세요." };
@@ -73,14 +78,11 @@ export async function action({ request }: Route.ActionArgs) {
       return { success: false, error: "제품 사진을 등록해주세요." };
     }
 
-    // 전화번호 정규화
     const normalizedPhone = phone.replace(/-/g, "");
 
-    // 보증서 번호 생성
     const { data: warrantyNumber } = await supabase
       .rpc("generate_warranty_number");
 
-    // 고객 생성 또는 조회 (customer_id 호환성 유지)
     let customerId: string | null = null;
     const { data: existingCustomer } = await supabase
       .from("customers")
@@ -103,22 +105,20 @@ export async function action({ request }: Route.ActionArgs) {
       customerId = newCustomer?.id || null;
     }
 
-    // 보증서 생성 (status: pending - 관리자 승인 대기)
     const { data: warranty, error } = await supabase
       .from("warranties")
       .insert({
         warranty_number: warrantyNumber || `SH-W-${Date.now()}`,
-        member_id: memberId, // 로그인된 회원 ID
-        customer_id: customerId, // 호환성 유지
-        order_id: null, // 주문 연결 없음
-        buyer_name: customerName, // 구매자명 (주문 매핑용)
+        user_id: user.id,
+        customer_id: customerId,
+        order_id: null,
+        buyer_name: customerName,
         customer_phone: normalizedPhone,
         product_name: "ABC 이동식 아기침대",
         order_date: purchaseDate ? new Date(purchaseDate).toISOString().split("T")[0] : null,
-        status: "pending", // 승인 대기 상태
+        status: "pending",
         product_photo_url: photoUrl,
         photo_uploaded_at: new Date().toISOString(),
-        // warranty_start, warranty_end는 관리자 승인 시 설정
       })
       .select("warranty_number")
       .single();
@@ -138,20 +138,16 @@ export async function action({ request }: Route.ActionArgs) {
   return { success: false, error: "알 수 없는 요청입니다." };
 }
 
-export default function WarrantyRegister({ loaderData, actionData }: Route.ComponentProps) {
+export default function WarrantyRegister() {
+  const { user } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [memberId, setMemberId] = useState<string | null>(null);
-  const [memberInfo, setMemberInfo] = useState<{ name: string; phone: string } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  
   const [step, setStep] = useState<"info" | "photo" | "complete">("info");
   const [formData, setFormData] = useState({
-    customerName: "",
-    phone: "",
+    customerName: user.name,
+    phone: user.phone ? formatPhoneNumber(user.phone) : "",
     purchaseDate: "",
   });
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -160,69 +156,24 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // 로그인 체크 및 회원 정보 로드
-  useEffect(() => {
-    const customerId = localStorage.getItem("customerId");
-    const customerName = localStorage.getItem("customerName");
-    
-    if (!customerId) {
-      // 로그인 안 됨 → 로그인 페이지로
-      navigate("/customer/login?redirect=/customer/warranty");
-      return;
-    }
-    
-    setIsLoggedIn(true);
-    setMemberId(customerId);
-    
-    // 회원 정보 가져오기
-    fetch(`/api/customer/member?id=${customerId}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.member) {
-          setMemberInfo({ name: data.member.name, phone: data.member.phone });
-          setFormData(prev => ({
-            ...prev,
-            customerName: data.member.name || customerName || "",
-            phone: data.member.phone ? formatPhoneNumber(data.member.phone) : "",
-          }));
-        } else {
-          setFormData(prev => ({
-            ...prev,
-            customerName: customerName || "",
-          }));
-        }
-        setIsLoading(false);
-      })
-      .catch(() => {
-        setFormData(prev => ({
-          ...prev,
-          customerName: customerName || "",
-        }));
-        setIsLoading(false);
-      });
-  }, [navigate]);
-
-  // fetcher 결과 처리
   const fetcherData = fetcher.data as any;
   
   useEffect(() => {
     if (!fetcherData) return;
-    
-    // 등록 성공 시 완료 화면
     if (fetcherData.success && fetcherData.step === "completed") {
       setStep("complete");
     }
   }, [fetcherData]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const formatPhoneNumber = (value: string) => {
+  function formatPhoneNumber(value: string) {
     const numbers = value.replace(/[^\d]/g, "");
     if (numbers.length <= 3) return numbers;
     if (numbers.length <= 7) return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
     return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7, 11)}`;
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -242,13 +193,11 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // 파일 크기 체크 (5MB)
     if (file.size > 5 * 1024 * 1024) {
       setUploadError("파일 크기는 5MB 이하여야 합니다.");
       return;
     }
 
-    // 파일 타입 체크
     if (!["image/jpeg", "image/png", "image/webp", "image/heic"].includes(file.type)) {
       setUploadError("JPG, PNG, WEBP, HEIC 형식만 지원합니다.");
       return;
@@ -257,7 +206,6 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
     setUploadError(null);
     setPhotoFile(file);
     
-    // 미리보기 생성
     const reader = new FileReader();
     reader.onloadend = () => {
       setPhotoPreview(reader.result as string);
@@ -275,7 +223,6 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
     setUploadError(null);
 
     try {
-      // Supabase Storage에 업로드
       const timestamp = Date.now();
       const fileExt = photoFile.name.split(".").pop();
       const fileName = `warranty_${timestamp}.${fileExt}`;
@@ -297,11 +244,9 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
       const { url } = await response.json();
       setUploadedPhotoUrl(url);
 
-      // 보증서 등록 진행
       fetcher.submit(
         { 
           step: "register",
-          memberId: memberId || "",
           customerName: formData.customerName,
           phone: formData.phone,
           purchaseDate: formData.purchaseDate,
@@ -326,64 +271,47 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
     }
   };
 
-  // 로딩 중
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white dark:from-zinc-900 dark:to-zinc-950 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-500 mx-auto mb-4"></div>
-          <p className="text-muted-foreground">로딩 중...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // 로그인 안 됨 (리다이렉트 전 깜빡임 방지)
-  if (!isLoggedIn) {
-    return null;
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white dark:from-zinc-900 dark:to-zinc-950">
-      <div className="container max-w-lg mx-auto px-4 py-8">
-        {/* 뒤로가기 */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate("/customer")}
-          className="mb-4"
+    <div className="min-h-screen bg-[#F5F5F0]">
+      <div className="mx-auto max-w-lg px-6 py-10">
+        {/* Back Button */}
+        <button
+          onClick={() => step === "photo" ? setStep("info") : navigate("/customer")}
+          className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors mb-8"
         >
-          <ArrowLeftIcon className="h-4 w-4 mr-2" />
-          돌아가기
-        </Button>
+          <ArrowLeft className="w-5 h-5" />
+          <span className="text-sm font-medium">
+            {step === "photo" ? "이전" : "홈으로"}
+          </span>
+        </button>
 
-        {/* 로고/헤더 */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 mb-4">
-            <ShieldCheckIcon className="h-8 w-8 text-amber-600" />
+        {/* Header */}
+        <div className="text-center mb-10">
+          <div className="w-16 h-16 bg-[#FF6B35]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <ShieldCheck className="w-8 h-8 text-[#FF6B35]" />
           </div>
-          <h1 className="text-2xl font-bold">썬데이허그</h1>
-          <p className="text-muted-foreground">ABC 이동식 아기침대 보증서</p>
+          <h1 className="text-2xl font-bold text-gray-900">보증서 등록</h1>
+          <p className="text-gray-500 mt-2">ABC 이동식 아기침대</p>
         </div>
 
-        {/* 단계 표시 */}
-        <div className="flex items-center justify-center gap-2 mb-8">
+        {/* Progress */}
+        <div className="flex items-center justify-center gap-3 mb-10">
           {["정보입력", "사진등록", "완료"].map((label, idx) => (
             <div key={label} className="flex items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                idx === 0 && step === "info" ? "bg-amber-500 text-white" :
-                idx === 1 && step === "photo" ? "bg-amber-500 text-white" :
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
+                idx === 0 && step === "info" ? "bg-[#FF6B35] text-white" :
+                idx === 1 && step === "photo" ? "bg-[#FF6B35] text-white" :
                 idx === 2 && step === "complete" ? "bg-green-500 text-white" :
-                idx < ["info", "photo", "complete"].indexOf(step) ? "bg-amber-500 text-white" :
-                "bg-muted text-muted-foreground"
+                idx < ["info", "photo", "complete"].indexOf(step) ? "bg-[#FF6B35] text-white" :
+                "bg-gray-200 text-gray-500"
               }`}>
                 {idx + 1}
               </div>
               {idx < 2 && (
-                <div className={`w-12 h-0.5 mx-1 ${
+                <div className={`w-12 h-1 mx-2 rounded-full transition-colors ${
                   idx < ["info", "photo", "complete"].indexOf(step) 
-                    ? "bg-amber-500" 
-                    : "bg-muted"
+                    ? "bg-[#FF6B35]" 
+                    : "bg-gray-200"
                 }`} />
               )}
             </div>
@@ -392,27 +320,29 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
 
         {/* Step 1: 정보 입력 */}
         {step === "info" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>보증서 정보 입력</CardTitle>
-              <CardDescription>
-                제품 구매자 정보를 입력해주세요
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <div className="bg-white rounded-2xl p-6 border border-gray-100">
+            <h2 className="font-semibold text-gray-900 text-lg mb-1">구매자 정보</h2>
+            <p className="text-gray-500 text-sm mb-6">제품 구매자 정보를 입력해주세요</p>
+            
+            <div className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="customerName">이름 *</Label>
+                <Label htmlFor="customerName" className="text-sm font-medium text-gray-700">
+                  이름 *
+                </Label>
                 <Input
                   id="customerName"
                   name="customerName"
                   placeholder="구매자 이름"
                   value={formData.customerName}
                   onChange={handleInputChange}
+                  className="h-12 rounded-xl border-gray-200 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone">연락처 *</Label>
+                <Label htmlFor="phone" className="text-sm font-medium text-gray-700">
+                  연락처 *
+                </Label>
                 <Input
                   id="phone"
                   name="phone"
@@ -421,215 +351,211 @@ export default function WarrantyRegister({ loaderData, actionData }: Route.Compo
                   value={formData.phone}
                   onChange={handlePhoneChange}
                   maxLength={13}
+                  className="h-12 rounded-xl border-gray-200 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-gray-400">
                   승인 결과를 카카오톡으로 안내드립니다
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="purchaseDate">구매일 (선택)</Label>
+                <Label htmlFor="purchaseDate" className="text-sm font-medium text-gray-700">
+                  구매일 (선택)
+                </Label>
                 <Input
                   id="purchaseDate"
                   name="purchaseDate"
                   type="date"
                   value={formData.purchaseDate}
                   onChange={handleInputChange}
+                  className="h-12 rounded-xl border-gray-200 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
                 />
               </div>
 
               {uploadError && (
-                <div className="p-3 bg-destructive/10 text-destructive rounded-lg text-sm flex items-start gap-2">
-                  <AlertCircleIcon className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <div className="p-4 bg-red-50 text-red-700 rounded-xl text-sm flex items-start gap-2">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
                   <span>{uploadError}</span>
                 </div>
               )}
 
               <Button 
-                className="w-full" 
+                className="w-full h-12 rounded-xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white font-medium"
                 onClick={goToPhotoStep}
                 disabled={!formData.customerName || !formData.phone}
               >
                 다음: 사진 등록
-                <ArrowRightIcon className="h-4 w-4 ml-2" />
+                <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
 
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg text-xs text-amber-800 dark:text-amber-200">
-                <p className="font-medium mb-1">📌 등록 안내</p>
-                <ul className="space-y-0.5 list-disc list-inside">
-                  <li>ABC 이동식 아기침대 구매자 대상</li>
-                  <li>등록 후 관리자 확인을 거쳐 승인됩니다</li>
-                  <li>승인 결과는 카카오톡으로 안내드립니다</li>
+              <div className="p-4 bg-[#FFF8F5] rounded-xl text-sm text-[#FF6B35]">
+                <p className="font-medium mb-2">📌 등록 안내</p>
+                <ul className="space-y-1 text-gray-600">
+                  <li>• ABC 이동식 아기침대 구매자 대상</li>
+                  <li>• 등록 후 관리자 확인을 거쳐 승인됩니다</li>
+                  <li>• 승인 결과는 카카오톡으로 안내드립니다</li>
                 </ul>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
 
         {/* Step 2: 사진 등록 */}
         {step === "photo" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>제품 사진 등록</CardTitle>
-              <CardDescription>
-                실제 제품이 보이는 사진을 등록해주세요
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* 입력 정보 요약 */}
-              <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-                <div className="flex items-center gap-3">
-                  <PackageIcon className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">ABC 이동식 아기침대</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">신청자: </span>
-                    {formData.customerName}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">연락처: </span>
-                    {formData.phone}
-                  </div>
-                </div>
+          <div className="bg-white rounded-2xl p-6 border border-gray-100">
+            <h2 className="font-semibold text-gray-900 text-lg mb-1">제품 사진</h2>
+            <p className="text-gray-500 text-sm mb-6">실제 제품이 보이는 사진을 등록해주세요</p>
+
+            {/* 입력 정보 요약 */}
+            <div className="p-4 bg-gray-50 rounded-xl mb-6">
+              <div className="flex items-center gap-3 mb-3">
+                <Package className="h-5 w-5 text-gray-400" />
+                <span className="font-medium text-gray-900">ABC 이동식 아기침대</span>
               </div>
+              <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
+                <div>신청자: {formData.customerName}</div>
+                <div>연락처: {formData.phone}</div>
+              </div>
+            </div>
 
-              {/* 사진 업로드 */}
-              <div className="space-y-3">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/heic"
-                  onChange={handlePhotoSelect}
-                  className="hidden"
-                />
+            {/* 사진 업로드 */}
+            <div className="space-y-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/heic"
+                onChange={handlePhotoSelect}
+                className="hidden"
+              />
 
-                {!photoPreview ? (
-                  <div 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center cursor-pointer hover:border-amber-500 hover:bg-amber-50/50 transition-colors"
+              {!photoPreview ? (
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center cursor-pointer hover:border-[#FF6B35] hover:bg-[#FFF8F5] transition-colors"
+                >
+                  <Camera className="h-12 w-12 mx-auto text-gray-300 mb-3" />
+                  <p className="font-medium text-gray-700">사진 선택</p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    JPG, PNG, WEBP, HEIC (최대 5MB)
+                  </p>
+                </div>
+              ) : (
+                <div className="relative">
+                  <img 
+                    src={photoPreview} 
+                    alt="제품 사진 미리보기" 
+                    className="w-full rounded-2xl object-cover max-h-64"
+                  />
+                  <button
+                    onClick={removePhoto}
+                    className="absolute top-3 right-3 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
                   >
-                    <CameraIcon className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-                    <p className="font-medium">사진 선택</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      JPG, PNG, WEBP, HEIC (최대 5MB)
-                    </p>
-                  </div>
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="p-4 bg-red-50 text-red-700 rounded-xl text-sm flex items-start gap-2">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                  {uploadError}
+                </div>
+              )}
+
+              {fetcherData?.error && (
+                <div className="p-4 bg-red-50 text-red-700 rounded-xl text-sm flex items-start gap-2">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                  {fetcherData.error}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-blue-50 rounded-xl text-sm text-blue-700 mt-6 mb-6">
+              <p className="font-medium mb-2">📷 사진 촬영 팁</p>
+              <ul className="space-y-1 text-blue-600">
+                <li>• 제품 전체가 보이도록 촬영</li>
+                <li>• 밝은 곳에서 선명하게 촬영</li>
+                <li>• 제품 라벨이 보이면 더 좋습니다</li>
+              </ul>
+            </div>
+
+            <div className="flex gap-3">
+              <Button 
+                variant="outline" 
+                className="flex-1 h-12 rounded-xl border-gray-200" 
+                onClick={() => setStep("info")}
+                disabled={isUploading || fetcher.state !== "idle"}
+              >
+                이전
+              </Button>
+              <Button 
+                className="flex-1 h-12 rounded-xl bg-[#FF6B35] hover:bg-[#FF6B35]/90"
+                onClick={handlePhotoUpload}
+                disabled={!photoFile || isUploading || fetcher.state !== "idle"}
+              >
+                {isUploading || fetcher.state !== "idle" ? (
+                  "등록 중..."
                 ) : (
-                  <div className="relative">
-                    <img 
-                      src={photoPreview} 
-                      alt="제품 사진 미리보기" 
-                      className="w-full rounded-lg object-cover max-h-64"
-                    />
-                    <button
-                      onClick={removePhoto}
-                      className="absolute top-2 right-2 p-1.5 bg-black/50 rounded-full text-white hover:bg-black/70"
-                    >
-                      <XIcon className="h-4 w-4" />
-                    </button>
-                  </div>
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    보증서 등록
+                  </>
                 )}
-
-                {uploadError && (
-                  <div className="p-3 bg-destructive/10 text-destructive rounded-lg text-sm flex items-start gap-2">
-                    <AlertCircleIcon className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    {uploadError}
-                  </div>
-                )}
-
-                {fetcherData?.error && (
-                  <div className="p-3 bg-destructive/10 text-destructive rounded-lg text-sm flex items-start gap-2">
-                    <AlertCircleIcon className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    {fetcherData.error}
-                  </div>
-                )}
-              </div>
-
-              <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg text-xs text-blue-800 dark:text-blue-200">
-                <p className="font-medium mb-1">📷 사진 촬영 팁</p>
-                <ul className="space-y-0.5 list-disc list-inside">
-                  <li>제품 전체가 보이도록 촬영</li>
-                  <li>밝은 곳에서 선명하게 촬영</li>
-                  <li>제품 라벨이 보이면 더 좋습니다</li>
-                </ul>
-              </div>
-
-              <div className="flex gap-3">
-                <Button 
-                  variant="outline" 
-                  className="flex-1" 
-                  onClick={() => setStep("info")}
-                  disabled={isUploading || fetcher.state !== "idle"}
-                >
-                  이전
-                </Button>
-                <Button 
-                  className="flex-1" 
-                  onClick={handlePhotoUpload}
-                  disabled={!photoFile || isUploading || fetcher.state !== "idle"}
-                >
-                  {isUploading || fetcher.state !== "idle" ? (
-                    <>등록 중...</>
-                  ) : (
-                    <>
-                      <UploadIcon className="h-4 w-4 mr-2" />
-                      보증서 등록
-                    </>
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+              </Button>
+            </div>
+          </div>
         )}
 
         {/* Step 3: 완료 */}
         {step === "complete" && (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
-                <CheckCircleIcon className="h-8 w-8 text-green-600" />
-              </div>
-              <h2 className="text-xl font-bold mb-2">등록 완료!</h2>
-              <p className="text-muted-foreground mb-6">
-                보증서 등록 신청이 완료되었습니다.<br />
-                관리자 확인 후 <strong>카카오톡</strong>으로 결과를 안내드립니다.
-              </p>
+          <div className="bg-white rounded-2xl p-8 border border-gray-100 text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="h-8 w-8 text-green-600" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">등록 완료!</h2>
+            <p className="text-gray-500 mb-6">
+              보증서 등록 신청이 완료되었습니다.<br />
+              관리자 확인 후 <strong>카카오톡</strong>으로 결과를 안내드립니다.
+            </p>
 
-              <div className="p-4 bg-muted/50 rounded-lg mb-6">
-                <p className="text-sm text-muted-foreground">접수 번호</p>
-                <p className="text-lg font-mono font-bold">{fetcherData?.warrantyNumber}</p>
-              </div>
+            <div className="p-4 bg-gray-50 rounded-xl mb-6">
+              <p className="text-sm text-gray-500">접수 번호</p>
+              <p className="text-lg font-mono font-bold text-gray-900">{fetcherData?.warrantyNumber}</p>
+            </div>
 
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg text-sm text-amber-800 dark:text-amber-200 mb-4">
-                <p>⏳ 영업일 기준 1-2일 내 처리됩니다</p>
+            <div className="space-y-3 mb-6">
+              <div className="p-3 bg-yellow-50 rounded-xl text-sm text-yellow-700">
+                ⏳ 영업일 기준 1-2일 내 처리됩니다
               </div>
-
-              <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg text-sm text-green-800 dark:text-green-200">
-                <p>✅ 승인 완료 시 1년간 무상 A/S 가능</p>
+              <div className="p-3 bg-green-50 rounded-xl text-sm text-green-700">
+                ✅ 승인 완료 시 1년간 무상 A/S 가능
               </div>
+            </div>
 
-              <Button
-                variant="outline"
-                className="mt-6"
-                onClick={() => navigate("/customer")}
-              >
-                홈으로 돌아가기
-              </Button>
-            </CardContent>
-          </Card>
+            <Button
+              variant="outline"
+              className="h-12 rounded-xl px-8"
+              onClick={() => navigate("/customer")}
+            >
+              홈으로 돌아가기
+            </Button>
+          </div>
         )}
 
         {/* 하단 안내 */}
-        <div className="mt-8 text-center text-sm text-muted-foreground">
-          <p>문의: 070-7703-8005</p>
-          <p className="mt-1">
-            <a href="https://sundayhug.com" className="hover:underline">
-              sundayhug.com
-            </a>
-          </p>
+        <div className="mt-10 text-center text-sm text-gray-400">
+          <a 
+            href="https://pf.kakao.com/_crxgDxj/chat"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 hover:text-[#FAE100] transition-colors"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 3c5.799 0 10.5 3.664 10.5 8.185 0 4.52-4.701 8.184-10.5 8.184a13.5 13.5 0 01-1.727-.11l-4.408 2.883c-.501.265-.678.236-.472-.413l.892-3.678c-2.88-1.46-4.785-3.99-4.785-6.866C1.5 6.665 6.201 3 12 3z" />
+            </svg>
+            카카오톡 상담 문의
+          </a>
+          <p className="mt-1">sundayhug.com</p>
         </div>
       </div>
     </div>

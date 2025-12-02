@@ -1,13 +1,11 @@
 /**
- * Sleep Analysis Page (Public/Customer)
- *
- * 고객용 수면 분석 페이지
+ * Sleep Analysis Page (새로운 디자인)
  */
 import type { Route } from "./+types/analyze-public";
 
 import { useState, useEffect } from "react";
 import { Link, useFetcher, data } from "react-router";
-import { Loader2, Moon, Baby, Shield, Clock, Thermometer, Music } from "lucide-react";
+import { Loader2, Moon, Baby, Shield, Clock, Thermometer, Music, ArrowLeft } from "lucide-react";
 
 import { Button } from "~/core/components/ui/button";
 import makeServerClient from "~/core/lib/supa-client.server";
@@ -15,7 +13,8 @@ import { UploadForm } from "../components/upload-form";
 import { AnalysisResult } from "../components/analysis-result";
 import { analyzeSleepEnvironment } from "../lib/gemini.server";
 import { saveSleepAnalysis, calculateAgeInMonths } from "../lib/sleep-analysis.server";
-import type { AnalysisReport, UploadFormData } from "../types";
+import type { AnalysisReport } from "../schema";
+import type { UploadFormData } from "../types";
 
 export const meta: Route.MetaFunction = () => {
   return [
@@ -36,16 +35,13 @@ export async function action({ request }: Route.ActionArgs) {
     return data({ error: "이미지와 생년월일은 필수입니다." }, { status: 400 });
   }
 
-  // Supabase Auth로 로그인한 사용자 ID 가져오기
   const [client] = makeServerClient(request);
   const { data: { user } } = await client.auth.getUser();
   const userId = user?.id ?? null;
 
   try {
-    // Analyze with Gemini
     const report = await analyzeSleepEnvironment(imageBase64, imageMimeType, birthDate);
 
-    // Try to save to database (optional - don't fail if DB is not ready)
     let analysisId: string | undefined;
     try {
       const ageInMonths = calculateAgeInMonths(birthDate);
@@ -82,36 +78,42 @@ const sleepTips = [
     title: "신생아 수면 시간",
     tip: "신생아는 하루 16~17시간의 수면이 필요해요. 낮과 밤의 구분 없이 2~4시간 간격으로 잠을 자는 것이 정상이에요.",
     color: "from-indigo-500 to-purple-600",
+    bgColor: "bg-indigo-50",
   },
   {
     icon: Shield,
     title: "안전한 수면 환경",
     tip: "아기는 단단하고 평평한 매트리스에서 등을 대고 자야 해요. 베개, 이불, 인형은 질식 위험이 있어요.",
     color: "from-emerald-500 to-teal-600",
+    bgColor: "bg-emerald-50",
   },
   {
     icon: Thermometer,
     title: "적정 실내 온도",
     tip: "아기 방의 적정 온도는 20~22°C예요. 너무 덥거나 추우면 수면의 질이 떨어지고 영아돌연사 위험이 높아져요.",
     color: "from-orange-500 to-red-500",
+    bgColor: "bg-orange-50",
   },
   {
     icon: Clock,
     title: "수면 루틴의 중요성",
     tip: "생후 3개월부터 일정한 수면 루틴을 만들어주세요. 목욕 → 수유 → 자장가 순서로 규칙적인 패턴이 도움돼요.",
     color: "from-blue-500 to-cyan-600",
+    bgColor: "bg-blue-50",
   },
   {
     icon: Music,
     title: "백색소음 효과",
     tip: "엄마 배 속 소리와 비슷한 백색소음은 아기를 안정시켜요. 볼륨은 50dB 이하로 아기와 거리를 두고 사용하세요.",
     color: "from-pink-500 to-rose-600",
+    bgColor: "bg-pink-50",
   },
   {
     icon: Baby,
     title: "낮잠 vs 밤잠",
     tip: "생후 4개월이 지나면 낮잠을 줄이고 밤잠을 늘려주세요. 저녁 7~8시 취침이 성장 호르몬 분비에 좋아요.",
     color: "from-violet-500 to-purple-600",
+    bgColor: "bg-violet-50",
   },
 ];
 
@@ -122,7 +124,7 @@ function LoadingWithTips() {
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTipIndex((prev) => (prev + 1) % sleepTips.length);
-    }, 4000); // 4초마다 전환
+    }, 4000);
 
     return () => clearInterval(interval);
   }, []);
@@ -131,55 +133,58 @@ function LoadingWithTips() {
   const Icon = currentTip.icon;
 
   return (
-    <div className="flex flex-col items-center justify-center py-8 px-4">
+    <div className="flex flex-col items-center justify-center py-12 px-4">
       {/* 로딩 스피너와 메시지 */}
-      <div className="flex items-center gap-3 mb-8">
-        <Loader2 className="text-primary h-8 w-8 animate-spin" />
-        <p className="text-lg font-semibold">AI가 이미지를 분석하고 있습니다...</p>
+      <div className="flex items-center gap-3 mb-10">
+        <div className="relative">
+          <div className="w-12 h-12 border-4 border-gray-200 rounded-full"></div>
+          <div className="absolute top-0 left-0 w-12 h-12 border-4 border-[#FF6B35] border-t-transparent rounded-full animate-spin"></div>
+        </div>
+        <p className="text-xl font-semibold text-gray-900">AI가 분석 중입니다...</p>
       </div>
 
       {/* 수면 팁 카드 */}
       <div className="w-full max-w-md">
         <div 
-          className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${currentTip.color} p-6 text-white shadow-xl transition-all duration-500`}
+          className={`relative overflow-hidden rounded-3xl bg-gradient-to-br ${currentTip.color} p-8 text-white shadow-xl transition-all duration-500`}
         >
           {/* 배경 패턴 */}
           <div className="absolute inset-0 opacity-10">
-            <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white" />
-            <div className="absolute -bottom-4 -left-4 h-24 w-24 rounded-full bg-white" />
+            <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white" />
+            <div className="absolute -bottom-6 -left-6 h-28 w-28 rounded-full bg-white" />
           </div>
 
           {/* 콘텐츠 */}
           <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="rounded-full bg-white/20 p-2">
-                <Icon className="h-6 w-6" />
+            <div className="flex items-center gap-3 mb-5">
+              <div className="rounded-2xl bg-white/20 p-3">
+                <Icon className="h-7 w-7" />
               </div>
-              <h3 className="text-lg font-bold">{currentTip.title}</h3>
+              <h3 className="text-xl font-bold">{currentTip.title}</h3>
             </div>
-            <p className="text-white/90 leading-relaxed text-sm">
+            <p className="text-white/90 leading-relaxed">
               {currentTip.tip}
             </p>
           </div>
         </div>
 
         {/* 인디케이터 */}
-        <div className="flex justify-center gap-2 mt-4">
+        <div className="flex justify-center gap-2 mt-6">
           {sleepTips.map((_, index) => (
             <button
               key={index}
               onClick={() => setCurrentTipIndex(index)}
-              className={`h-2 rounded-full transition-all duration-300 ${
+              className={`h-2.5 rounded-full transition-all duration-300 ${
                 index === currentTipIndex 
-                  ? "w-6 bg-primary" 
-                  : "w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50"
+                  ? "w-8 bg-[#FF6B35]" 
+                  : "w-2.5 bg-gray-300 hover:bg-gray-400"
               }`}
             />
           ))}
         </div>
 
         {/* 안내 메시지 */}
-        <p className="text-center text-muted-foreground text-sm mt-6">
+        <p className="text-center text-gray-500 text-sm mt-8">
           💡 분석에는 약 10~20초가 소요됩니다
         </p>
       </div>
@@ -208,7 +213,6 @@ export default function AnalyzePublicPage() {
     if (data.phoneNumber) form.append("phoneNumber", data.phoneNumber);
     if (data.instagramId) form.append("instagramId", data.instagramId);
     
-    // user_id는 서버에서 Supabase Auth 세션으로 자동 처리됨
     fetcher.submit(form, { method: "post" });
   };
 
@@ -224,7 +228,6 @@ export default function AnalyzePublicPage() {
     
     setIsDownloading(true);
     try {
-      // Generate slides via API
       const response = await fetch(`/api/sleep/${analysisId}/slides`, {
         method: "POST",
       });
@@ -235,7 +238,6 @@ export default function AnalyzePublicPage() {
         throw new Error(responseData.error || "슬라이드 생성에 실패했습니다.");
       }
       
-      // Download each slide as blob
       const slideUrls = responseData.data.slideUrls as string[];
       
       for (let i = 0; i < slideUrls.length; i++) {
@@ -268,42 +270,58 @@ export default function AnalyzePublicPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <header className="mb-8 text-center">
-        <h1 className="text-3xl font-bold">AI 수면 환경 분석기</h1>
-        <p className="text-muted-foreground mt-2">
-          아기의 수면 공간 사진을 올려주세요
-        </p>
-      </header>
-
-      <main>
-        {/* Loading State with Sleep Tips */}
-        {isLoading && <LoadingWithTips />}
-
-        {/* Error State */}
-        {error && !isLoading && (
-          <div className="bg-destructive/10 border-destructive text-destructive mx-auto max-w-2xl rounded-lg border px-4 py-3">
-            <strong className="font-bold">오류 발생: </strong>
-            <span>{error}</span>
+    <div className="min-h-screen bg-[#F5F5F0]">
+      <div className="mx-auto max-w-2xl px-6 py-10">
+        {/* Header */}
+        <div className="text-center mb-10">
+          <Link 
+            to="/customer"
+            className="inline-flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors mb-6"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span className="text-sm font-medium">홈으로</span>
+          </Link>
+          
+          <div className="w-16 h-16 bg-[#1A1A1A] rounded-full flex items-center justify-center mx-auto mb-4">
+            <Moon className="w-8 h-8 text-white" />
           </div>
-        )}
+          <h1 className="text-3xl font-bold text-gray-900">AI 수면 환경 분석</h1>
+          <p className="text-gray-500 mt-2">
+            아기의 수면 공간 사진을 올려주세요
+          </p>
+        </div>
 
-        {/* Result or Upload Form */}
-        {!isLoading && (
-          report && formData ? (
-            <AnalysisResult
-              report={report}
-              imagePreview={formData.imagePreview}
-              analysisId={analysisId}
-              onReset={handleReset}
-              onDownloadSlides={handleDownloadSlides}
-              isDownloading={isDownloading}
-            />
-          ) : (
-            <UploadForm onSubmit={handleSubmit} isLoading={isLoading} />
-          )
-        )}
-      </main>
+        <main>
+          {/* Loading State with Sleep Tips */}
+          {isLoading && <LoadingWithTips />}
+
+          {/* Error State */}
+          {error && !isLoading && (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl px-5 py-4 mb-6">
+              <strong className="font-bold">오류 발생: </strong>
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* Result or Upload Form */}
+          {!isLoading && (
+            report && formData ? (
+              <AnalysisResult
+                report={report}
+                imagePreview={formData.imagePreview}
+                analysisId={analysisId}
+                onReset={handleReset}
+                onDownloadSlides={handleDownloadSlides}
+                isDownloading={isDownloading}
+              />
+            ) : (
+              <div className="bg-white rounded-2xl p-6 border border-gray-100">
+                <UploadForm onSubmit={handleSubmit} isLoading={isLoading} />
+              </div>
+            )
+          )}
+        </main>
+      </div>
     </div>
   );
 }
