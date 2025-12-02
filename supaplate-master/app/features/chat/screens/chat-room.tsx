@@ -97,72 +97,6 @@ export async function action({ request, params }: Route.ActionArgs) {
   const formData = await request.formData();
   const actionType = formData.get("actionType") as string;
 
-  if (actionType === "send") {
-    const message = formData.get("message") as string;
-    let sessionId = params.sessionId;
-
-    // 새 세션 생성
-    if (sessionId === "new") {
-      const { data: newSession, error: sessionError } = await supabase
-        .from("chat_sessions")
-        .insert({
-          user_id: user.id,
-          title: message.slice(0, 50) + (message.length > 50 ? "..." : ""),
-          topic: "general",
-        })
-        .select()
-        .single();
-
-      if (sessionError || !newSession) {
-        return data({ error: "세션 생성 실패" }, { status: 500 });
-      }
-      sessionId = newSession.id;
-    }
-
-    // 사용자 메시지 저장
-    const { error: msgError } = await supabase
-      .from("chat_messages")
-      .insert({
-        session_id: sessionId,
-        role: "user",
-        content: message,
-      });
-
-    if (msgError) {
-      return data({ error: "메시지 저장 실패" }, { status: 500 });
-    }
-
-    // TODO: AI 응답 생성 (API 호출)
-    // 임시로 더미 응답
-    const aiResponse = `안녕하세요! 육아 상담 AI입니다. 
-
-"${message.slice(0, 30)}..." 에 대해 답변드릴게요.
-
-이 기능은 아직 개발 중입니다. 곧 실제 AI 상담이 가능해질 거예요! 🍼
-
-📚 **참고**: 실제 서비스에서는 검증된 육아 지식을 기반으로 답변해드립니다.`;
-
-    // AI 응답 저장
-    await supabase
-      .from("chat_messages")
-      .insert({
-        session_id: sessionId,
-        role: "assistant",
-        content: aiResponse,
-        sources: JSON.stringify([
-          { name: "대한소아과학회", url: "https://pediatrics.or.kr" }
-        ]),
-      });
-
-    // 세션 업데이트
-    await supabase
-      .from("chat_sessions")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", sessionId);
-
-    return data({ success: true, sessionId });
-  }
-
   if (actionType === "feedback") {
     const messageId = formData.get("messageId") as string;
     const helpful = formData.get("helpful") === "true";
@@ -183,34 +117,59 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function ChatRoomScreen() {
-  const { session, messages, babyProfile, isNew } = useLoaderData<typeof loader>();
+  const { session, messages: initialMessages, babyProfile, isNew } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
+  const chatFetcher = useFetcher();
   const [inputValue, setInputValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [localMessages, setLocalMessages] = useState(initialMessages);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const isLoading = fetcher.state !== "idle";
+  const isLoading = chatFetcher.state !== "idle";
+
+  // 초기 메시지 동기화
+  useEffect(() => {
+    setLocalMessages(initialMessages);
+  }, [initialMessages]);
 
   // 새 메시지 시 스크롤
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, fetcher.data]);
+  }, [localMessages]);
 
-  // 메시지 전송 후 리다이렉트
+  // AI 응답 처리
   useEffect(() => {
-    if (fetcher.data?.success && fetcher.data?.sessionId && isNew) {
-      window.location.href = `/customer/chat/${fetcher.data.sessionId}`;
+    if (chatFetcher.data?.success && chatFetcher.data?.message) {
+      setLocalMessages(prev => [...prev, chatFetcher.data.message]);
+      
+      // 새 세션이면 리다이렉트
+      if (isNew && chatFetcher.data?.sessionId) {
+        window.location.href = `/customer/chat/${chatFetcher.data.sessionId}`;
+      }
     }
-  }, [fetcher.data, isNew]);
+  }, [chatFetcher.data, isNew]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
 
-    fetcher.submit(
-      { actionType: "send", message: inputValue },
-      { method: "post" }
+    // 사용자 메시지 로컬에 추가 (즉시 표시)
+    const userMessage = {
+      id: `temp-${Date.now()}`,
+      role: "user" as const,
+      content: inputValue,
+      created_at: new Date().toISOString(),
+    };
+    setLocalMessages(prev => [...prev, userMessage]);
+
+    // API 호출
+    chatFetcher.submit(
+      { 
+        message: inputValue,
+        sessionId: session?.id || "new"
+      },
+      { method: "post", action: "/api/chat/send" }
     );
     setInputValue("");
   };
@@ -262,7 +221,7 @@ export default function ChatRoomScreen() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
         {/* Welcome Message */}
-        {messages.length === 0 && (
+        {localMessages.length === 0 && (
           <div className="mb-6">
             <div className="flex gap-3">
               <div className="w-9 h-9 bg-gradient-to-br from-[#FF6B35] to-orange-400 rounded-full flex items-center justify-center flex-shrink-0">
@@ -298,7 +257,7 @@ export default function ChatRoomScreen() {
         )}
 
         {/* Message List */}
-        {messages.map((msg) => (
+        {localMessages.map((msg) => (
           <div key={msg.id} className={`mb-4 flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
             <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
               msg.role === "user" 

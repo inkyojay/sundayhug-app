@@ -79,6 +79,10 @@ export default [
     ...prefix("/blog", [
       route("/generate-audio", "features/blog/api/generate-audio.tsx"),
     ]),
+    // 채팅 API
+    ...prefix("/chat", [
+      route("/send", "features/chat/api/send-message.tsx"),
+    ]),
   ]),
 
   // ========================================
@@ -235,6 +239,11 @@ export default [
           index("features/blog/screens/admin/posts-list.tsx"),
           route("/:postId/edit", "features/blog/screens/admin/post-edit.tsx", { id: "blog-post-edit" }),
           route("/new", "features/blog/screens/admin/post-edit.tsx", { id: "blog-post-new" }),
+        ]),
+        
+        // AI 상담 지식 관리 (관리자용)
+        ...prefix("/chat", [
+          route("/knowledge", "features/chat/screens/admin/knowledge-list.tsx"),
         ]),
       ]),
       

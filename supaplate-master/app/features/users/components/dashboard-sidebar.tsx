@@ -17,6 +17,7 @@ import {
   FolderTreeIcon,
   LayoutDashboardIcon,
   MegaphoneIcon,
+  MessageSquareIcon,
   PackageIcon,
   Settings2Icon,
   ShieldCheckIcon,
@@ -138,6 +139,17 @@ const data = {
         {
           title: "새 글 작성",
           url: "/dashboard/blog/new",
+        },
+      ],
+    },
+    {
+      title: "AI 상담 관리",
+      url: "/dashboard/chat/knowledge",
+      icon: MessageSquareIcon,
+      items: [
+        {
+          title: "상담 지식",
+          url: "/dashboard/chat/knowledge",
         },
       ],
     },
