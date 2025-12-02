@@ -109,7 +109,7 @@ export async function action({ request }: Route.ActionArgs) {
       .from("warranties")
       .insert({
         warranty_number: warrantyNumber || `SH-W-${Date.now()}`,
-        user_id: user.id,
+        user_id: user.id,  // Supabase Auth user_id 저장
         customer_id: customerId,
         order_id: null,
         buyer_name: customerName,
@@ -335,7 +335,7 @@ export default function WarrantyRegister() {
                   placeholder="구매자 이름"
                   value={formData.customerName}
                   onChange={handleInputChange}
-                  className="h-12 rounded-xl border-gray-200 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
+                  className="h-12 rounded-xl border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
                 />
               </div>
 
@@ -351,7 +351,7 @@ export default function WarrantyRegister() {
                   value={formData.phone}
                   onChange={handlePhoneChange}
                   maxLength={13}
-                  className="h-12 rounded-xl border-gray-200 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
+                  className="h-12 rounded-xl border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
                 />
                 <p className="text-xs text-gray-400">
                   승인 결과를 카카오톡으로 안내드립니다
@@ -368,7 +368,7 @@ export default function WarrantyRegister() {
                   type="date"
                   value={formData.purchaseDate}
                   onChange={handleInputChange}
-                  className="h-12 rounded-xl border-gray-200 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
+                  className="h-12 rounded-xl border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
                 />
               </div>
 
@@ -482,7 +482,7 @@ export default function WarrantyRegister() {
             <div className="flex gap-3">
               <Button 
                 variant="outline" 
-                className="flex-1 h-12 rounded-xl border-gray-200" 
+                className="flex-1 h-12 rounded-xl border-gray-300 bg-white text-gray-700 hover:bg-gray-50" 
                 onClick={() => setStep("info")}
                 disabled={isUploading || fetcher.state !== "idle"}
               >

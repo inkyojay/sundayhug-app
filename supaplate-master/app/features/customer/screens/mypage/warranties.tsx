@@ -31,7 +31,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw redirect("/customer/login");
   }
   
-  // user_id로 보증서 조회
+  // user_id로 보증서 조회 (Supabase Auth 연동)
   const { data: warranties, error } = await supabase
     .from("warranties")
     .select("*")

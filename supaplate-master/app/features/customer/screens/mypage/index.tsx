@@ -8,7 +8,6 @@ import type { Route } from "./+types/index";
 
 import { Link, redirect, useLoaderData, data } from "react-router";
 import { 
-  ShieldCheck, 
   Moon, 
   Headphones,
   MessageCircleQuestion,
@@ -74,65 +73,33 @@ export default function CustomerMypageIndexScreen() {
         </div>
 
         {/* Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-5">
-          {/* 정품 인증 - Large Card */}
-          <Link 
-            to="/customer/warranty"
-            className="md:col-span-2 md:row-span-2 group"
-          >
-            <div className="h-full min-h-[320px] md:min-h-[400px] bg-[#FF6B35] rounded-3xl p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.02]">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-white/80 text-sm font-medium tracking-wider uppercase">
-                    Product Registration
-                  </p>
-                  <h2 className="text-white text-3xl md:text-4xl font-bold mt-2">
-                    정품 인증
-                  </h2>
-                </div>
-                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                  <ShieldCheck className="w-6 h-6 text-white" />
-                </div>
-              </div>
-              
-              <div>
-                <p className="text-white/90 text-base md:text-lg">
-                  구매하신 제품의 시리얼 넘버를 등록하고<br />
-                  프리미엄 보증 혜택을 받아보세요.
-                </p>
-                <div className="mt-4 flex items-center text-white/80 group-hover:text-white transition-colors">
-                  <span className="text-sm font-medium">등록하기</span>
-                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </div>
-            </div>
-          </Link>
-
-          {/* 수면 분석 - Medium Dark Card */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5">
+          {/* 수면 분석 - Large Dark Card */}
           <Link 
             to="/customer/sleep"
-            className="md:col-span-1 md:row-span-2 group"
+            className="md:col-span-2 md:row-span-2 group"
           >
-            <div className="h-full min-h-[180px] md:min-h-[400px] bg-[#1A1A1A] rounded-3xl p-6 md:p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.02]">
+            <div className="h-full min-h-[280px] md:min-h-[400px] bg-[#1A1A1A] rounded-3xl p-6 md:p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.02]">
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-gray-400 text-sm font-medium tracking-wider uppercase">
                     AI Sleep Tech
                   </p>
-                  <h2 className="text-white text-2xl md:text-3xl font-bold mt-2">
+                  <h2 className="text-white text-3xl md:text-4xl font-bold mt-2">
                     수면 분석
                   </h2>
                 </div>
-                <div className="w-10 h-10 md:w-12 md:h-12 bg-white/10 rounded-full flex items-center justify-center">
-                  <Moon className="w-5 h-5 md:w-6 md:h-6 text-white" />
+                <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center">
+                  <Moon className="w-6 h-6 text-white" />
                 </div>
               </div>
               
               <div>
-                <p className="text-gray-400 text-sm md:text-base">
-                  우리 아이 수면 패턴 분석 리포트 확인하기
+                <p className="text-gray-400 text-base md:text-lg">
+                  AI가 우리 아이 수면 환경을 분석하고<br />
+                  맞춤 솔루션을 제공해드립니다.
                 </p>
-                <div className="mt-3 flex items-center text-gray-500 group-hover:text-white transition-colors">
+                <div className="mt-4 flex items-center text-gray-500 group-hover:text-white transition-colors">
                   <span className="text-sm font-medium">분석하기</span>
                   <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                 </div>

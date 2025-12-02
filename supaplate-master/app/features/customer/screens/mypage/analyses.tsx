@@ -8,7 +8,6 @@ import {
   ArrowLeft, 
   Moon,
   ChevronRight,
-  Image,
   Plus
 } from "lucide-react";
 
@@ -30,7 +29,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   
   const { data: analyses, error } = await supabase
     .from("sleep_analyses")
-    .select("id, image_url, age_in_months, summary, created_at")
+    .select("id, age_in_months, summary, created_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -39,6 +38,20 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   return data({ analyses: analyses || [] });
+}
+
+// summary JSON 파싱 헬퍼 함수
+function parseSummary(summary: string | null): string {
+  if (!summary) return "";
+  
+  try {
+    // JSON 형태인 경우 파싱
+    const parsed = JSON.parse(summary);
+    return parsed.summary || summary;
+  } catch {
+    // JSON이 아니면 그대로 반환
+    return summary;
+  }
 }
 
 export default function MypageAnalysesScreen() {
@@ -90,16 +103,8 @@ export default function MypageAnalysesScreen() {
             {analyses.map((analysis) => (
               <Link key={analysis.id} to={`/customer/sleep/result/${analysis.id}`}>
                 <div className="bg-white rounded-2xl p-4 hover:shadow-md transition-all group border border-gray-100 flex items-center gap-4">
-                  <div className="w-20 h-20 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden flex-shrink-0">
-                    {analysis.image_url ? (
-                      <img 
-                        src={analysis.image_url} 
-                        alt="분석 이미지"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <Image className="w-8 h-8 text-gray-300" />
-                    )}
+                  <div className="w-10 h-10 rounded-full bg-[#1A1A1A] flex items-center justify-center flex-shrink-0">
+                    <Moon className="w-5 h-5 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-gray-900">
@@ -116,7 +121,7 @@ export default function MypageAnalysesScreen() {
                     </p>
                     {analysis.summary && (
                       <p className="text-sm text-gray-400 mt-2 line-clamp-1">
-                        {analysis.summary}
+                        {parseSummary(analysis.summary)}
                       </p>
                     )}
                   </div>

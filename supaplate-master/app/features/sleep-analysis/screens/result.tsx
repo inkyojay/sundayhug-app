@@ -1,24 +1,19 @@
 /**
- * Sleep Analysis Result Page
+ * Sleep Analysis Result Page (Customer)
  *
- * Displays a specific analysis result by ID.
+ * 사진 + 종합 분석 + 상세 내용만 표시
  */
 import type { Route } from "./+types/result";
 
-import { ArrowLeft } from "lucide-react";
-import { useState } from "react";
-import { data, Link, useLoaderData } from "react-router";
+import { ArrowLeft, AlertTriangle, CheckCircle, AlertCircle, Moon } from "lucide-react";
+import { data, Link, useLoaderData, redirect } from "react-router";
 
-import { Button } from "~/core/components/ui/button";
+import { Badge } from "~/core/components/ui/badge";
 import makeServerClient from "~/core/lib/supa-client.server";
-
-import { AnalysisResult } from "../components/analysis-result";
-import { getSleepAnalysis } from "../queries";
-import type { AnalysisReport, FeedbackItem, Reference, RiskLevel } from "../schema";
 
 export const meta: Route.MetaFunction = () => {
   return [
-    { title: `분석 결과 | ${import.meta.env.VITE_APP_NAME}` },
+    { title: `분석 결과 | 썬데이허그` },
   ];
 };
 
@@ -29,153 +24,164 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response("Analysis ID is required", { status: 400 });
   }
 
-  const [client] = makeServerClient(request);
-  const { data: { user } } = await client.auth.getUser();
+  const [supabase] = makeServerClient(request);
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const result = await getSleepAnalysis(id);
-  
-  if (!result) {
+  // 분석 데이터 조회
+  const { data: analysis, error: analysisError } = await supabase
+    .from("sleep_analyses")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (analysisError || !analysis) {
+    console.error("분석 조회 오류:", analysisError);
     throw new Response("Analysis not found", { status: 404 });
   }
 
-  // 권한 체크: 
-  // - userId가 없는 분석은 누구나 볼 수 있음 (비로그인 분석)
-  // - userId가 있고 로그인한 경우, 본인 분석만 볼 수 있음
-  // - userId가 있지만 로그인 안 한 경우, 일단 허용 (URL 공유 등)
-  if (user && result.analysis.userId && result.analysis.userId !== user.id) {
+  // 권한 체크
+  if (user && analysis.user_id && analysis.user_id !== user.id) {
     throw new Response("Unauthorized", { status: 403 });
   }
 
-  // Convert to AnalysisReport format
-  const report: AnalysisReport = {
-    summary: result.analysis.summary,
-    feedbackItems: result.feedbackItems.map((item: FeedbackItem) => ({
-      id: item.itemNumber,
-      x: Number(item.x),
-      y: Number(item.y),
-      title: item.title,
-      feedback: item.feedback,
-      riskLevel: item.riskLevel as RiskLevel,
-    })),
-    references: result.references.map((ref: Reference) => ({
-      title: ref.title,
-      uri: ref.uri,
-    })),
-  };
-
-  // Build image preview from URL or base64
-  let imagePreview: string | null = null;
-  if (result.analysis.imageUrl) {
-    imagePreview = result.analysis.imageUrl;
-  } else if (result.analysis.imageBase64) {
-    // Check if it already has data URL prefix
-    if (result.analysis.imageBase64.startsWith("data:")) {
-      imagePreview = result.analysis.imageBase64;
-    } else {
-      imagePreview = `data:image/jpeg;base64,${result.analysis.imageBase64}`;
-    }
-  }
+  // 피드백 항목 조회
+  const { data: feedbackItems } = await supabase
+    .from("sleep_analysis_feedback_items")
+    .select("*")
+    .eq("analysis_id", id)
+    .order("item_number", { ascending: true });
 
   return data({
-    report,
-    analysisId: id,
-    imagePreview,
-    createdAt: result.analysis.createdAt,
+    analysis,
+    feedbackItems: feedbackItems || [],
   });
 }
 
+const riskConfig = {
+  높음: { color: "bg-red-100 text-red-700 border-red-200", icon: AlertTriangle, iconColor: "text-red-500" },
+  중간: { color: "bg-yellow-100 text-yellow-700 border-yellow-200", icon: AlertCircle, iconColor: "text-yellow-500" },
+  낮음: { color: "bg-green-100 text-green-700 border-green-200", icon: CheckCircle, iconColor: "text-green-500" },
+};
+
 export default function ResultPage() {
-  const { report, analysisId, imagePreview, createdAt } = useLoaderData<typeof loader>();
-  const [isDownloading, setIsDownloading] = useState(false);
+  const { analysis, feedbackItems } = useLoaderData<typeof loader>();
 
-  // Use placeholder if no image available
-  const displayImage = imagePreview || "/images/placeholder.png";
+  // 이미지 URL 결정
+  const imageUrl = analysis.image_url || 
+    (analysis.image_base64?.startsWith("data:") 
+      ? analysis.image_base64 
+      : analysis.image_base64 
+        ? `data:image/jpeg;base64,${analysis.image_base64}` 
+        : null);
 
-  const handleDownloadSlides = async () => {
-    if (!analysisId) return;
-    
-    setIsDownloading(true);
-    try {
-      // Generate slides via API
-      const response = await fetch(`/api/sleep/${analysisId}/slides`, {
-        method: "POST",
-      });
-      
-      const responseData = await response.json();
-      
-      if (!responseData.success || !responseData.data?.slideUrls) {
-        throw new Error(responseData.error || "슬라이드 생성에 실패했습니다.");
-      }
-      
-      // Download each slide as blob (직접 다운로드)
-      const slideUrls = responseData.data.slideUrls as string[];
-      
-      for (let i = 0; i < slideUrls.length; i++) {
-        const slideUrl = slideUrls[i];
-        
-        // Fetch the image as blob
-        const imgResponse = await fetch(slideUrl);
-        const blob = await imgResponse.blob();
-        
-        // Create blob URL and download
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = `수면분석-슬라이드-${i + 1}.png`;
-        link.style.display = "none";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        // Release blob URL
-        URL.revokeObjectURL(blobUrl);
-        
-        // Small delay between downloads
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-      
-      alert(`${slideUrls.length}장의 슬라이드가 사진 폴더에 저장되었습니다!`);
-    } catch (err) {
-      console.error("Download error:", err);
-      alert(err instanceof Error ? err.message : "다운로드 중 오류가 발생했습니다.");
-    } finally {
-      setIsDownloading(false);
-    }
-  };
+  // summary 파싱 (JSON 형식일 수 있음)
+  let summaryText = analysis.summary;
+  try {
+    const parsed = JSON.parse(analysis.summary);
+    summaryText = parsed.summary || analysis.summary;
+  } catch {
+    // JSON이 아니면 그대로 사용
+  }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
-        <Button asChild variant="ghost" size="sm">
-          <Link to="/sleep/history">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            분석 이력으로 돌아가기
+    <div className="min-h-screen bg-[#F5F5F0]">
+      <div className="mx-auto max-w-2xl px-6 py-10">
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-8">
+          <Link 
+            to="/customer/mypage/analyses"
+            className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors shadow-sm"
+          >
+            <ArrowLeft className="w-5 h-5 text-gray-600" />
           </Link>
-        </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">수면 분석 결과</h1>
+            <p className="text-sm text-gray-500">
+              {analysis.created_at 
+                ? new Date(analysis.created_at).toLocaleDateString("ko-KR", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })
+                : ""}
+            </p>
+          </div>
+        </div>
+
+        {/* 분석 이미지 */}
+        {imageUrl && (
+          <div className="bg-white rounded-2xl overflow-hidden mb-6 border border-gray-100">
+            <img 
+              src={imageUrl} 
+              alt="수면 환경 사진"
+              className="w-full object-cover max-h-80"
+            />
+          </div>
+        )}
+
+        {/* 종합 분석 */}
+        <div className="bg-white rounded-2xl p-6 mb-6 border border-gray-100">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-[#1A1A1A] rounded-full flex items-center justify-center">
+              <Moon className="w-5 h-5 text-white" />
+            </div>
+            <h2 className="font-bold text-gray-900 text-lg">종합 분석</h2>
+          </div>
+          <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+            {summaryText}
+          </p>
+        </div>
+
+        {/* 상세 분석 항목 */}
+        {feedbackItems.length > 0 && (
+          <div className="bg-white rounded-2xl p-6 border border-gray-100">
+            <h2 className="font-bold text-gray-900 text-lg mb-4">📋 상세 분석</h2>
+            
+            <div className="space-y-4">
+              {feedbackItems.map((item: any, index: number) => {
+                const risk = riskConfig[item.risk_level as keyof typeof riskConfig] || riskConfig["낮음"];
+                const RiskIcon = risk.icon;
+                
+                return (
+                  <div 
+                    key={item.id || index} 
+                    className={`rounded-xl p-4 border ${risk.color}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <RiskIcon className={`w-5 h-5 ${risk.iconColor} flex-shrink-0 mt-0.5`} />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="font-semibold text-gray-900">{item.title}</h3>
+                          <Badge variant="outline" className={`text-xs ${risk.color}`}>
+                            위험도: {item.risk_level}
+                          </Badge>
+                        </div>
+                        <p className="text-gray-700 text-sm leading-relaxed">
+                          {item.feedback}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 새 분석 버튼 */}
+        <div className="mt-8">
+          <Link to="/customer/sleep/analyze" className="block">
+            <div className="bg-[#1A1A1A] rounded-2xl p-5 flex items-center justify-center hover:bg-[#2A2A2A] transition-colors">
+              <span className="text-white font-medium">새로운 분석 시작하기</span>
+            </div>
+          </Link>
+        </div>
+
+        {/* 하단 안내 */}
+        <div className="mt-6 text-center text-sm text-gray-400">
+          <p>AI 분석 결과는 참고용이며, 전문가 상담을 권장합니다.</p>
+        </div>
       </div>
-
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold">분석 결과</h1>
-        <p className="text-muted-foreground mt-1">
-          {new Date(createdAt).toLocaleDateString("ko-KR", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </p>
-      </header>
-
-      <AnalysisResult
-        report={report}
-        imagePreview={displayImage}
-        analysisId={analysisId}
-        onReset={() => window.location.href = "/sleep"}
-        onDownloadSlides={handleDownloadSlides}
-        isDownloading={isDownloading}
-      />
     </div>
   );
 }
-
