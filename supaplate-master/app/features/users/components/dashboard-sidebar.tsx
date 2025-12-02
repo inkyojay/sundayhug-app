@@ -23,6 +23,7 @@ import {
   ShieldCheckIcon,
   ShoppingCartIcon,
   StoreIcon,
+  ToggleLeftIcon,
   TruckIcon,
   WrenchIcon,
 } from "lucide-react";
@@ -194,6 +195,10 @@ const data = {
       url: "#",
       icon: Settings2Icon,
       items: [
+        {
+          title: "Feature Flags",
+          url: "/dashboard/feature-flags",
+        },
         {
           title: "계정 설정",
           url: "/account/edit",

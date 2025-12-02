@@ -30,6 +30,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
   const { data: { user } } = await supabase.auth.getUser();
   
+  // Feature Flags (환경변수 기반 - Vercel Production에서만 false 설정)
+  const features = {
+    chatEnabled: process.env.FEATURE_CHAT_ENABLED !== 'false',
+    blogEnabled: process.env.FEATURE_BLOG_ENABLED !== 'false',
+  };
+  
   if (user) {
     const name = user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split("@")[0];
     const firstName = name?.includes(" ") ? name.split(" ")[0] : name;
@@ -37,6 +43,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       isLoggedIn: true,
       userName: name || "회원",
       firstName: firstName || "회원",
+      features,
     });
   }
   
@@ -44,11 +51,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     isLoggedIn: false,
     userName: null,
     firstName: null,
+    features,
   });
 }
 
 export default function CustomerHomeScreen() {
-  const { isLoggedIn, firstName } = useLoaderData<typeof loader>();
+  const { isLoggedIn, firstName, features } = useLoaderData<typeof loader>();
 
   return (
     <div className="min-h-screen bg-[#F5F5F0]">
@@ -207,7 +215,80 @@ export default function CustomerHomeScreen() {
           </Link>
         </div>
 
-        {/* Quick Links - 2개만 */}
+        {/* 추가 서비스 - AI 상담 & 블로그 (Feature Flag로 제어) */}
+        {(features.chatEnabled || features.blogEnabled) && (
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* AI 육아 상담 */}
+            {features.chatEnabled && (
+              <Link 
+                to="/customer/chat"
+                className="group"
+              >
+                <div className="h-full min-h-[180px] bg-gradient-to-br from-orange-500 to-orange-600 rounded-3xl p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.02]">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-orange-200 text-sm font-medium tracking-wider uppercase">
+                        AI Parenting
+                      </p>
+                      <h2 className="text-white text-2xl md:text-3xl font-bold mt-1">
+                        AI 육아 상담
+                      </h2>
+                    </div>
+                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                      <MessageCircleQuestion className="w-5 h-5 text-white" />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <p className="text-orange-100 text-sm md:text-base">
+                      수면, 수유, 발달 고민을 AI가 답변해 드려요
+                    </p>
+                    <div className="mt-3 flex items-center text-white/80 group-hover:text-white transition-colors">
+                      <span className="text-sm font-medium">상담하기</span>
+                      <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            )}
+
+            {/* 블로그 */}
+            {features.blogEnabled && (
+              <Link 
+                to="/customer/blog"
+                className="group"
+              >
+                <div className="h-full min-h-[180px] bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-3xl p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.02]">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-emerald-200 text-sm font-medium tracking-wider uppercase">
+                        Parenting Guide
+                      </p>
+                      <h2 className="text-white text-2xl md:text-3xl font-bold mt-1">
+                        육아 블로그
+                      </h2>
+                    </div>
+                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                      <Sparkles className="w-5 h-5 text-white" />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <p className="text-emerald-100 text-sm md:text-base">
+                      수면 가이드, 제품 활용법, 육아 꿀팁
+                    </p>
+                    <div className="mt-3 flex items-center text-white/80 group-hover:text-white transition-colors">
+                      <span className="text-sm font-medium">둘러보기</span>
+                      <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            )}
+          </div>
+        )}
+
+        {/* Quick Links */}
         <div className="mt-8 grid grid-cols-2 gap-4">
           <a 
             href="https://www.sundayhug.kr/sleepport.html"

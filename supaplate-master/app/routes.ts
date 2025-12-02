@@ -107,18 +107,18 @@ export default [
         route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "customer-sleep-result" }),
       ]),
       
-      // 블로그 (준비 중 - 비활성화)
-      // ...prefix("/blog", [
-      //   index("features/customer/screens/blog/index.tsx"),
-      //   route("/:postId", "features/customer/screens/blog/post.tsx"),
-      // ]),
+      // 블로그
+      ...prefix("/blog", [
+        index("features/customer/screens/blog/index.tsx"),
+        route("/:postId", "features/customer/screens/blog/post.tsx"),
+      ]),
       
-      // AI 육아 상담 (준비 중 - 비활성화)
-      // ...prefix("/chat", [
-      //   index("features/chat/screens/chat-list.tsx"),
-      //   route("/baby-profile", "features/chat/screens/baby-profile.tsx"),
-      //   route("/:sessionId", "features/chat/screens/chat-room.tsx"),
-      // ]),
+      // AI 육아 상담
+      ...prefix("/chat", [
+        index("features/chat/screens/chat-list.tsx"),
+        route("/baby-profile", "features/chat/screens/baby-profile.tsx"),
+        route("/:sessionId", "features/chat/screens/chat-room.tsx"),
+      ]),
       
       // 통합 로그인/회원가입 (Supabase Auth)
       route("/login", "features/customer/screens/login.tsx"),
@@ -246,6 +246,9 @@ export default [
         ...prefix("/chat", [
           route("/knowledge", "features/chat/screens/admin/knowledge-list.tsx"),
         ]),
+        
+        // Feature Flags 관리
+        route("/feature-flags", "features/settings/screens/feature-flags.tsx"),
       ]),
       
       // 계정 설정
