@@ -4,6 +4,98 @@
 
 ---
 
+## 📅 2025년 12월 3일 (화) - 야간 작업
+
+### 🎯 블로그 대량 업로드 및 Feature Flags 시스템
+
+#### 1. 블로그 글 168개 업로드
+- CSV 파일에서 블로그 데이터 파싱
+- `blog_posts` 테이블에 168개 글 업로드
+- 자동 slug 생성 (한글 제목 → 영문 URL)
+- 카테고리: sleep-guide (수면 가이드)
+
+#### 2. 블로그 벡터 임베딩 (RAG 연동)
+- 168개 블로그 글 → 벡터 임베딩
+- `chat_knowledge` 테이블에 저장
+- AI 상담에서 블로그 내용도 참고 가능
+- **총 지식 베이스: 257개** (89 + 168)
+
+#### 3. Feature Flags 시스템 (환경변수 기반)
+- `FEATURE_CHAT_ENABLED`, `FEATURE_BLOG_ENABLED` 환경변수
+- 기본값: true (활성화)
+- Vercel Production에서만 false 설정 → 해당 기능 비활성화
+- 코드 수정 없이 기능 on/off 가능
+
+#### 4. 홈 화면 Feature Flags 적용
+- AI 육아 상담 카드: `features.chatEnabled`로 조건부 렌더링
+- 블로그 카드: `features.blogEnabled`로 조건부 렌더링
+- 오렌지/에메랄드 그라데이션 카드 디자인
+
+#### 5. routes.ts 라우트 활성화
+- `/customer/chat/*` - AI 육아 상담
+- `/customer/blog/*` - 육아 블로그
+
+---
+
+### 🔧 수정/추가된 파일
+
+```
+app/features/customer/screens/home.tsx      # Feature Flags 조건부 렌더링
+app/features/settings/screens/feature-flags.tsx  # Feature Flags 관리 페이지 (신규)
+app/features/users/components/dashboard-sidebar.tsx  # 사이드바 메뉴 추가
+app/routes.ts                               # 블로그/채팅 라우트 활성화
+data/blog-*.csv                             # 블로그 템플릿 파일
+```
+
+---
+
+### 🗃️ DB 변경사항
+
+```sql
+-- Feature Flags 테이블 (향후 확장용)
+CREATE TABLE feature_flags (
+  key TEXT UNIQUE,
+  enabled BOOLEAN,
+  name TEXT,
+  description TEXT,
+  category TEXT
+);
+
+-- 블로그 168개 업로드
+INSERT INTO blog_posts (...) -- 168 rows
+INSERT INTO chat_knowledge (...) -- 168 rows (벡터 임베딩)
+```
+
+---
+
+### 🔑 환경변수 (Vercel Production)
+
+```bash
+FEATURE_CHAT_ENABLED=false   # AI 상담 비활성화
+FEATURE_BLOG_ENABLED=false   # 블로그 비활성화
+OPENAI_API_KEY=sk-proj-...   # 벡터 임베딩용
+```
+
+---
+
+### ✅ 완료된 TODO
+
+- [x] 블로그 168개 업로드
+- [x] 블로그 벡터 임베딩 (RAG)
+- [x] Feature Flags 환경변수 기반 시스템
+- [x] 홈 화면 조건부 렌더링
+- [x] routes.ts 라우트 활성화
+
+---
+
+### 🔜 향후 작업 예정
+
+- [ ] AI 상담 기능 테스트 및 개선
+- [ ] 블로그 기능 테스트 및 개선
+- [ ] main 브랜치 배포 (준비 완료 시)
+
+---
+
 ## 📅 2025년 12월 3일 (화) - 오후 추가 작업
 
 ### 🎯 벡터 RAG 시스템 구축 (OpenAI Embeddings)
