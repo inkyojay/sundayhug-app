@@ -11,7 +11,7 @@ import { Link, useLoaderData, data } from "react-router";
 import { 
   ShieldCheck, 
   Moon, 
-  Headphones,
+  BookOpen,
   MessageCircleQuestion,
   ChevronRight,
   Sparkles
@@ -172,23 +172,23 @@ export default function CustomerHomeScreen() {
             </div>
           </Link>
 
-          {/* 고객지원 - Small White Card */}
+          {/* 블로그 - Small White Card */}
           <Link 
-            to="/customer/support"
+            to="/customer/blog"
             className="group"
           >
             <div className="h-full min-h-[140px] md:min-h-[190px] bg-white rounded-3xl p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
               <div className="flex justify-between items-start">
                 <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
-                  Support
+                  Blog
                 </p>
                 <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                  <Headphones className="w-5 h-5 text-gray-600" />
+                  <BookOpen className="w-5 h-5 text-gray-600" />
                 </div>
               </div>
               
               <h3 className="text-gray-900 text-xl md:text-2xl font-bold">
-                고객지원
+                블로그
               </h3>
             </div>
           </Link>
@@ -228,14 +228,16 @@ export default function CustomerHomeScreen() {
 
         {/* Quick Links */}
         <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Link 
-            to="/customer/faq"
+          <a 
+            href="https://www.sundayhug.kr/sleepport.html"
+            target="_blank"
+            rel="noopener noreferrer"
             className="bg-white/60 backdrop-blur rounded-2xl p-5 hover:bg-white transition-colors border border-gray-200/50 group"
           >
             <MessageCircleQuestion className="w-6 h-6 text-gray-400 mb-3" />
-            <h4 className="font-semibold text-gray-900">자주 묻는 질문</h4>
+            <h4 className="font-semibold text-gray-900">ABC 사용 설명서</h4>
             <ChevronRight className="w-4 h-4 text-gray-400 mt-2 group-hover:translate-x-1 transition-transform" />
-          </Link>
+          </a>
 
           <a 
             href="https://pf.kakao.com/_crxgDxj/chat"

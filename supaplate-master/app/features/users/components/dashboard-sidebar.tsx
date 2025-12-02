@@ -12,6 +12,7 @@
  */
 import {
   BarChart3Icon,
+  BookOpenIcon,
   BoxIcon,
   FolderTreeIcon,
   LayoutDashboardIcon,
@@ -122,6 +123,21 @@ const data = {
         {
           title: "A/S 관리",
           url: "/dashboard/warranty/as",
+        },
+      ],
+    },
+    {
+      title: "블로그 관리",
+      url: "/dashboard/blog",
+      icon: BookOpenIcon,
+      items: [
+        {
+          title: "글 목록",
+          url: "/dashboard/blog",
+        },
+        {
+          title: "새 글 작성",
+          url: "/dashboard/blog/new",
         },
       ],
     },

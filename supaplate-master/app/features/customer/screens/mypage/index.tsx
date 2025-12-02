@@ -161,15 +161,17 @@ export default function CustomerMypageIndexScreen() {
             </div>
           </Link>
 
-          {/* 자주 묻는 질문 - Small White Card */}
-          <Link 
-            to="/customer/faq"
+          {/* ABC 사용 설명서 - Small White Card */}
+          <a 
+            href="https://www.sundayhug.kr/sleepport.html"
+            target="_blank"
+            rel="noopener noreferrer"
             className="group"
           >
             <div className="h-full min-h-[140px] md:min-h-[190px] bg-white rounded-3xl p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
               <div className="flex justify-between items-start">
                 <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
-                  FAQ
+                  Manual
                 </p>
                 <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
                   <MessageCircleQuestion className="w-5 h-5 text-gray-600" />
@@ -177,10 +179,10 @@ export default function CustomerMypageIndexScreen() {
               </div>
               
               <h3 className="text-gray-900 text-xl md:text-2xl font-bold">
-                자주 묻는 질문
+                ABC 사용 설명서
               </h3>
             </div>
-          </Link>
+          </a>
         </div>
 
         {/* Additional Quick Links */}

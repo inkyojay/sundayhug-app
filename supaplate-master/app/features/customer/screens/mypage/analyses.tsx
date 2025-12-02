@@ -59,7 +59,7 @@ export default function MypageAnalysesScreen() {
         </div>
 
         {/* 새 분석 버튼 */}
-        <Link to="/customer/sleep" className="block mb-6">
+        <Link to="/customer/sleep/analyze" className="block mb-6">
           <div className="bg-[#1A1A1A] rounded-2xl p-5 flex items-center justify-between hover:bg-[#2A2A2A] transition-colors group">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center">

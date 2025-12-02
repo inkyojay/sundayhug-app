@@ -25,9 +25,9 @@ import makeServerClient from "~/core/lib/supa-client.server";
 
 const navItems = [
   { label: "홈", href: "/customer" },
-  { label: "서비스 소개", href: "/customer/about" },
+  { label: "수면 분석", href: "/customer/sleep" },
   { label: "정품 인증", href: "/customer/warranty" },
-  { label: "고객지원", href: "/customer/support" },
+  { label: "블로그", href: "/customer/blog" },
 ];
 
 const mobileNavItems = [

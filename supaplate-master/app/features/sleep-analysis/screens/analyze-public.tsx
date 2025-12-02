@@ -275,11 +275,11 @@ export default function AnalyzePublicPage() {
         {/* Header */}
         <div className="text-center mb-10">
           <Link 
-            to="/customer"
+            to="/customer/sleep"
             className="inline-flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors mb-6"
           >
             <ArrowLeft className="w-5 h-5" />
-            <span className="text-sm font-medium">홈으로</span>
+            <span className="text-sm font-medium">수면 분석</span>
           </Link>
           
           <div className="w-16 h-16 bg-[#1A1A1A] rounded-full flex items-center justify-center mx-auto mb-4">

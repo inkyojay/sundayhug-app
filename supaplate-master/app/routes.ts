@@ -75,6 +75,10 @@ export default [
       route("/:id/slides", "features/sleep-analysis/api/slides.tsx"),
       route("/seed-references", "features/sleep-analysis/api/seed-references.tsx"),
     ]),
+    // 블로그 API
+    ...prefix("/blog", [
+      route("/generate-audio", "features/blog/api/generate-audio.tsx"),
+    ]),
   ]),
 
   // ========================================
@@ -91,10 +95,17 @@ export default [
         route("/view/:id", "features/warranty/screens/public/view.tsx"),
       ]),
       
-      // 수면 분석기
+      // 수면 분석 허브
       ...prefix("/sleep", [
-        index("features/sleep-analysis/screens/analyze-public.tsx"),
+        index("features/customer/screens/sleep-hub.tsx"),
+        route("/analyze", "features/sleep-analysis/screens/analyze-public.tsx"),
         route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "customer-sleep-result" }),
+      ]),
+      
+      // 블로그
+      ...prefix("/blog", [
+        index("features/customer/screens/blog/index.tsx"),
+        route("/:postId", "features/customer/screens/blog/post.tsx"),
       ]),
       
       // 통합 로그인/회원가입 (Supabase Auth)
@@ -210,6 +221,13 @@ export default [
           index("features/sleep-analysis/screens/analyze.tsx"),
           route("/history", "features/sleep-analysis/screens/history.tsx"),
           route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "dashboard-sleep-result" }),
+        ]),
+        
+        // 블로그 관리 (관리자용)
+        ...prefix("/blog", [
+          index("features/blog/screens/admin/posts-list.tsx"),
+          route("/:postId/edit", "features/blog/screens/admin/post-edit.tsx", { id: "blog-post-edit" }),
+          route("/new", "features/blog/screens/admin/post-edit.tsx", { id: "blog-post-new" }),
         ]),
       ]),
       
