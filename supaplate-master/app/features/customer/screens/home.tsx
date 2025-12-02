@@ -11,11 +11,9 @@ import { Link, useLoaderData, data } from "react-router";
 import { 
   ShieldCheck, 
   Moon, 
-  BookOpen,
   MessageCircleQuestion,
   ChevronRight,
-  Sparkles,
-  MessageCircle
+  Sparkles
 } from "lucide-react";
 
 import { Button } from "~/core/components/ui/button";
@@ -140,14 +138,14 @@ export default function CustomerHomeScreen() {
           </div>
         )}
 
-        {/* Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-5">
-          {/* 정품 인증 - Large Card */}
+        {/* Bento Grid - 2개 카드만 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+          {/* 정품 인증 - Large Orange Card */}
           <Link 
             to="/customer/warranty"
-            className="md:col-span-2 md:row-span-2 group"
+            className="group"
           >
-            <div className="h-full min-h-[280px] md:min-h-[400px] bg-[#FF6B35] rounded-3xl p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.02]">
+            <div className="h-full min-h-[280px] md:min-h-[350px] bg-[#FF6B35] rounded-3xl p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.02]">
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-white/80 text-sm font-medium tracking-wider uppercase">
@@ -175,84 +173,42 @@ export default function CustomerHomeScreen() {
             </div>
           </Link>
 
-          {/* 수면 분석 - Medium Dark Card */}
+          {/* 수면 분석 - Large Dark Card */}
           <Link 
             to="/customer/sleep"
-            className="md:col-span-1 md:row-span-2 group"
+            className="group"
           >
-            <div className="h-full min-h-[180px] md:min-h-[400px] bg-[#1A1A1A] rounded-3xl p-6 md:p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.02]">
+            <div className="h-full min-h-[280px] md:min-h-[350px] bg-[#1A1A1A] rounded-3xl p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.02]">
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-gray-400 text-sm font-medium tracking-wider uppercase">
                     AI Sleep Tech
                   </p>
-                  <h2 className="text-white text-2xl md:text-3xl font-bold mt-2">
+                  <h2 className="text-white text-3xl md:text-4xl font-bold mt-2">
                     수면 분석
                   </h2>
                 </div>
-                <div className="w-10 h-10 md:w-12 md:h-12 bg-white/10 rounded-full flex items-center justify-center">
-                  <Moon className="w-5 h-5 md:w-6 md:h-6 text-white" />
+                <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center">
+                  <Moon className="w-6 h-6 text-white" />
                 </div>
               </div>
               
               <div>
-                <p className="text-gray-400 text-sm md:text-base">
-                  AI가 우리 아이 수면 환경을<br />
-                  분석해 드려요
+                <p className="text-gray-400 text-base md:text-lg">
+                  AI가 우리 아이 수면 환경을 분석하고<br />
+                  맞춤 솔루션을 제공해 드려요.
                 </p>
-                <div className="mt-3 flex items-center text-gray-500 group-hover:text-white transition-colors">
+                <div className="mt-4 flex items-center text-gray-500 group-hover:text-white transition-colors">
                   <span className="text-sm font-medium">분석하기</span>
                   <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>
             </div>
           </Link>
-
-          {/* AI 상담 - Gradient Card */}
-          <Link 
-            to="/customer/chat"
-            className="group"
-          >
-            <div className="h-full min-h-[140px] md:min-h-[190px] bg-gradient-to-br from-[#FF6B35] to-orange-500 rounded-3xl p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02]">
-              <div className="flex justify-between items-start">
-                <p className="text-white/80 text-xs font-medium tracking-wider uppercase">
-                  AI Chat
-                </p>
-                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                  <MessageCircle className="w-5 h-5 text-white" />
-                </div>
-              </div>
-              
-              <h3 className="text-white text-xl md:text-2xl font-bold">
-                AI 육아 상담
-              </h3>
-            </div>
-          </Link>
-
-          {/* 블로그 - Small White Card */}
-          <Link 
-            to="/customer/blog"
-            className="group"
-          >
-            <div className="h-full min-h-[140px] md:min-h-[190px] bg-white rounded-3xl p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
-              <div className="flex justify-between items-start">
-                <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
-                  Blog
-                </p>
-                <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                  <BookOpen className="w-5 h-5 text-gray-600" />
-                </div>
-              </div>
-              
-              <h3 className="text-gray-900 text-xl md:text-2xl font-bold">
-                블로그
-              </h3>
-            </div>
-          </Link>
         </div>
 
-        {/* Quick Links */}
-        <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Quick Links - 2개만 */}
+        <div className="mt-8 grid grid-cols-2 gap-4">
           <a 
             href="https://www.sundayhug.kr/sleepport.html"
             target="_blank"
@@ -276,26 +232,6 @@ export default function CustomerHomeScreen() {
             <h4 className="font-semibold text-gray-900">고객센터</h4>
             <p className="text-sm text-gray-500 mt-1">카카오톡 상담</p>
           </a>
-
-          <Link 
-            to="/customer/mypage/as"
-            className="bg-white/60 backdrop-blur rounded-2xl p-5 hover:bg-white transition-colors border border-gray-200/50 group"
-          >
-            <svg className="w-6 h-6 text-gray-400 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-            </svg>
-            <h4 className="font-semibold text-gray-900">A/S 신청</h4>
-            <ChevronRight className="w-4 h-4 text-gray-400 mt-2 group-hover:translate-x-1 transition-transform" />
-          </Link>
-
-          <Link 
-            to="/customer/about"
-            className="bg-white/60 backdrop-blur rounded-2xl p-5 hover:bg-white transition-colors border border-gray-200/50 group"
-          >
-            <Sparkles className="w-6 h-6 text-gray-400 mb-3" />
-            <h4 className="font-semibold text-gray-900">서비스 소개</h4>
-            <ChevronRight className="w-4 h-4 text-gray-400 mt-2 group-hover:translate-x-1 transition-transform" />
-          </Link>
         </div>
       </div>
     </div>
