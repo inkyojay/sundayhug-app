@@ -108,6 +108,13 @@ export default [
         route("/:postId", "features/customer/screens/blog/post.tsx"),
       ]),
       
+      // AI 육아 상담
+      ...prefix("/chat", [
+        index("features/chat/screens/chat-list.tsx"),
+        route("/baby-profile", "features/chat/screens/baby-profile.tsx"),
+        route("/:sessionId", "features/chat/screens/chat-room.tsx"),
+      ]),
+      
       // 통합 로그인/회원가입 (Supabase Auth)
       route("/login", "features/customer/screens/login.tsx"),
       route("/register", "features/customer/screens/register.tsx"),

@@ -14,7 +14,8 @@ import {
   BookOpen,
   MessageCircleQuestion,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  MessageCircle
 } from "lucide-react";
 
 import { Button } from "~/core/components/ui/button";
@@ -168,6 +169,27 @@ export default function CustomerHomeScreen() {
               
               <h3 className="text-gray-900 text-xl md:text-2xl font-bold">
                 {isLoggedIn ? "마이페이지" : "로그인"}
+              </h3>
+            </div>
+          </Link>
+
+          {/* AI 상담 - Gradient Card */}
+          <Link 
+            to="/customer/chat"
+            className="group"
+          >
+            <div className="h-full min-h-[140px] md:min-h-[190px] bg-gradient-to-br from-[#FF6B35] to-orange-500 rounded-3xl p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02]">
+              <div className="flex justify-between items-start">
+                <p className="text-white/80 text-xs font-medium tracking-wider uppercase">
+                  AI Chat
+                </p>
+                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                  <MessageCircle className="w-5 h-5 text-white" />
+                </div>
+              </div>
+              
+              <h3 className="text-white text-xl md:text-2xl font-bold">
+                AI 육아 상담
               </h3>
             </div>
           </Link>
