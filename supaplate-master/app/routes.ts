@@ -73,6 +73,7 @@ export default [
       route("/analyze", "features/sleep-analysis/api/analyze.tsx"),
       route("/analyze-from-url", "features/sleep-analysis/api/analyze-from-url.tsx"),
       route("/:id/slides", "features/sleep-analysis/api/slides.tsx"),
+      route("/:id/share-card", "features/sleep-analysis/api/share-card.route.ts"),
       route("/seed-references", "features/sleep-analysis/api/seed-references.tsx"),
     ]),
     // 블로그 API

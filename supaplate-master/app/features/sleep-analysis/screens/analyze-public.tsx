@@ -4,7 +4,7 @@
 import type { Route } from "./+types/analyze-public";
 
 import { useState, useEffect } from "react";
-import { Link, useFetcher, data } from "react-router";
+import { Link, useFetcher, useLoaderData, data } from "react-router";
 import { Loader2, Moon, Baby, Shield, Clock, Thermometer, Music, ArrowLeft } from "lucide-react";
 
 import { Button } from "~/core/components/ui/button";
@@ -23,6 +23,40 @@ export const meta: Route.MetaFunction = () => {
   ];
 };
 
+export async function loader({ request }: Route.LoaderArgs) {
+  const [supabase] = makeServerClient(request);
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  let defaultPhoneNumber = "";
+  let babies: { id: string; name: string; birth_date: string; gender: string | null }[] = [];
+  
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("phone")
+      .eq("id", user.id)
+      .single();
+    
+    defaultPhoneNumber = profile?.phone || "";
+    
+    // 등록된 아이 정보 가져오기
+    const { data: babyProfiles } = await supabase
+      .from("baby_profiles")
+      .select("id, name, birth_date, gender")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true });
+    
+    babies = babyProfiles || [];
+  }
+  
+  return data({ 
+    isLoggedIn: !!user,
+    userId: user?.id || null,
+    defaultPhoneNumber,
+    babies,
+  });
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const imageBase64 = formData.get("imageBase64") as string;
@@ -30,6 +64,10 @@ export async function action({ request }: Route.ActionArgs) {
   const birthDate = formData.get("birthDate") as string;
   const phoneNumber = formData.get("phoneNumber") as string | null;
   const instagramId = formData.get("instagramId") as string | null;
+  
+  // 새 아이 정보 (프로필에 저장할 때 사용)
+  const newBabyName = formData.get("newBabyName") as string | null;
+  const newBabyGender = formData.get("newBabyGender") as string | null;
 
   if (!imageBase64 || !birthDate) {
     return data({ error: "이미지와 생년월일은 필수입니다." }, { status: 400 });
@@ -38,6 +76,37 @@ export async function action({ request }: Route.ActionArgs) {
   const [client] = makeServerClient(request);
   const { data: { user } } = await client.auth.getUser();
   const userId = user?.id ?? null;
+
+  // 로그인한 사용자의 경우 전화번호를 프로필에 저장
+  if (userId && phoneNumber) {
+    try {
+      await client
+        .from("profiles")
+        .update({ 
+          phone: phoneNumber.replace(/-/g, ""),
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", userId);
+    } catch (profileError) {
+      console.warn("Failed to update phone number in profile:", profileError);
+    }
+  }
+  
+  // 새 아이 정보가 있으면 baby_profiles에 저장
+  if (userId && newBabyName && birthDate) {
+    try {
+      await client
+        .from("baby_profiles")
+        .insert({
+          user_id: userId,
+          name: newBabyName,
+          birth_date: birthDate,
+          gender: newBabyGender || null,
+        });
+    } catch (babyError) {
+      console.warn("Failed to save baby profile:", babyError);
+    }
+  }
 
   try {
     const report = await analyzeSleepEnvironment(imageBase64, imageMimeType, birthDate);
@@ -193,9 +262,14 @@ function LoadingWithTips() {
 }
 
 export default function AnalyzePublicPage() {
+  const loaderData = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [formData, setFormData] = useState<UploadFormData | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  
+  const defaultPhoneNumber = loaderData?.defaultPhoneNumber || "";
+  const babies = loaderData?.babies || [];
+  const isLoggedIn = loaderData?.isLoggedIn || false;
 
   const isLoading = fetcher.state === "submitting";
   const result = fetcher.data;
@@ -212,6 +286,8 @@ export default function AnalyzePublicPage() {
     form.append("birthDate", data.birthDate);
     if (data.phoneNumber) form.append("phoneNumber", data.phoneNumber);
     if (data.instagramId) form.append("instagramId", data.instagramId);
+    if (data.newBabyName) form.append("newBabyName", data.newBabyName);
+    if (data.newBabyGender) form.append("newBabyGender", data.newBabyGender);
     
     fetcher.submit(form, { method: "post" });
   };
@@ -316,7 +392,13 @@ export default function AnalyzePublicPage() {
               />
             ) : (
               <div className="bg-white rounded-2xl p-6 border border-gray-100">
-                <UploadForm onSubmit={handleSubmit} isLoading={isLoading} />
+                <UploadForm 
+                  onSubmit={handleSubmit} 
+                  isLoading={isLoading} 
+                  defaultPhoneNumber={defaultPhoneNumber}
+                  babies={babies}
+                  isLoggedIn={isLoggedIn}
+                />
               </div>
             )
           )}

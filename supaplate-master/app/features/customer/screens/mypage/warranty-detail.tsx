@@ -217,16 +217,13 @@ export default function MypageWarrantyDetailScreen({ loaderData }: Route.Compone
 
         {/* A/S 신청 버튼 */}
         {warranty.status === "approved" && (
-          <Link to={`/customer/as/${warranty.id}`} className="block mb-4">
+          <Link to="/customer/mypage/as" className="block mb-4">
             <div className="bg-[#FF6B35] rounded-2xl p-5 flex items-center justify-between hover:bg-[#FF6B35]/90 transition-colors group">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
                   <Wrench className="w-6 h-6 text-white" />
                 </div>
-                <div>
-                  <p className="text-white font-semibold text-lg">A/S 신청하기</p>
-                  <p className="text-white/80 text-sm">수리, 교환, 환불 신청</p>
-                </div>
+                <p className="text-white font-semibold text-lg">A/S 신청하기</p>
               </div>
               <ChevronRight className="w-5 h-5 text-white/80 group-hover:translate-x-1 transition-transform" />
             </div>

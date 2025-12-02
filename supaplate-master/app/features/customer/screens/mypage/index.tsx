@@ -2,7 +2,7 @@
  * 고객 마이페이지 메인 (Bento Grid 스타일)
  * 
  * - Hello, 이름 인사말
- * - Bento 카드 레이아웃 (정품인증, 수면분석, A/S, FAQ)
+ * - Bento 카드 레이아웃 (수면분석, A/S, 보증서, 분석이력, 내정보)
  */
 import type { Route } from "./+types/index";
 
@@ -10,7 +10,9 @@ import { Link, redirect, useLoaderData, data } from "react-router";
 import { 
   Moon, 
   Headphones,
-  MessageCircleQuestion,
+  Shield,
+  FileText,
+  User,
   ChevronRight
 } from "lucide-react";
 
@@ -50,7 +52,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       firstName: firstName,
       phone: profile?.phone,
       avatarUrl: user.user_metadata?.avatar_url || profile?.kakao_profile_image,
-      isVip: true, // TODO: 실제 VIP 로직 추가
+      isVip: true,
     },
   });
 }
@@ -65,7 +67,7 @@ export default function CustomerMypageIndexScreen() {
         <div className="mb-10">
           <h1 className="text-4xl md:text-5xl font-light tracking-tight">
             <span className="font-bold text-gray-900">Hello,</span>{" "}
-            <span className="text-gray-400">{user.firstName}.</span>
+            <span className="text-gray-400">{user.firstName}님.</span>
           </h1>
           <p className="mt-3 text-gray-500 text-lg">
             오늘도 썬데이허그와 함께 편안한 하루 보내세요.
@@ -73,13 +75,13 @@ export default function CustomerMypageIndexScreen() {
         </div>
 
         {/* Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
           {/* 수면 분석 - Large Dark Card */}
           <Link 
             to="/customer/sleep"
-            className="md:col-span-2 md:row-span-2 group"
+            className="col-span-2 row-span-2 group"
           >
-            <div className="h-full min-h-[280px] md:min-h-[400px] bg-[#1A1A1A] rounded-3xl p-6 md:p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.02]">
+            <div className="h-full min-h-[280px] md:min-h-[360px] bg-[#1A1A1A] rounded-3xl p-6 md:p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.01]">
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-gray-400 text-sm font-medium tracking-wider uppercase">
@@ -107,90 +109,89 @@ export default function CustomerMypageIndexScreen() {
             </div>
           </Link>
 
+          {/* 내 보증서 - Medium White Card */}
+          <Link 
+            to="/customer/mypage/warranties"
+            className="group"
+          >
+            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
+              <div className="flex justify-between items-start">
+                <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
+                  Warranty
+                </p>
+                <div className="w-10 h-10 bg-emerald-50 rounded-full flex items-center justify-center">
+                  <Shield className="w-5 h-5 text-emerald-600" />
+                </div>
+              </div>
+              
+              <h3 className="text-gray-900 text-lg md:text-xl font-bold">
+                내 보증서
+              </h3>
+            </div>
+          </Link>
+
+          {/* 분석 이력 - Medium White Card */}
+          <Link 
+            to="/customer/mypage/analyses"
+            className="group"
+          >
+            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
+              <div className="flex justify-between items-start">
+                <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
+                  History
+                </p>
+                <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                </div>
+              </div>
+              
+              <h3 className="text-gray-900 text-lg md:text-xl font-bold">
+                분석 이력
+              </h3>
+            </div>
+          </Link>
+
           {/* A/S 접수 - Small White Card */}
           <Link 
             to="/customer/mypage/as"
             className="group"
           >
-            <div className="h-full min-h-[140px] md:min-h-[190px] bg-white rounded-3xl p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
+            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
               <div className="flex justify-between items-start">
                 <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
                   Support
                 </p>
-                <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                  <Headphones className="w-5 h-5 text-gray-600" />
+                <div className="w-10 h-10 bg-orange-50 rounded-full flex items-center justify-center">
+                  <Headphones className="w-5 h-5 text-orange-600" />
                 </div>
               </div>
               
-              <h3 className="text-gray-900 text-xl md:text-2xl font-bold">
+              <h3 className="text-gray-900 text-lg md:text-xl font-bold">
                 A/S 접수
               </h3>
             </div>
           </Link>
 
-          {/* ABC 사용 설명서 - Small White Card */}
-          <a 
-            href="https://www.sundayhug.kr/sleepport.html"
-            target="_blank"
-            rel="noopener noreferrer"
+          {/* 내 정보 - Small White Card */}
+          <Link 
+            to="/customer/mypage/profile"
             className="group"
           >
-            <div className="h-full min-h-[140px] md:min-h-[190px] bg-white rounded-3xl p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
+            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
               <div className="flex justify-between items-start">
                 <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
-                  Manual
+                  Profile
                 </p>
-                <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                  <MessageCircleQuestion className="w-5 h-5 text-gray-600" />
+                <div className="w-10 h-10 bg-purple-50 rounded-full flex items-center justify-center">
+                  <User className="w-5 h-5 text-purple-600" />
                 </div>
               </div>
               
-              <h3 className="text-gray-900 text-xl md:text-2xl font-bold">
-                ABC 사용 설명서
+              <h3 className="text-gray-900 text-lg md:text-xl font-bold">
+                내 정보
               </h3>
             </div>
-          </a>
-        </div>
-
-        {/* Additional Quick Links */}
-        <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Link 
-            to="/customer/mypage/warranties"
-            className="bg-white/60 backdrop-blur rounded-2xl p-5 hover:bg-white transition-colors border border-gray-200/50 group"
-          >
-            <h4 className="font-semibold text-gray-900">내 보증서</h4>
-            <p className="text-sm text-gray-500 mt-1">등록한 제품 확인</p>
-            <ChevronRight className="w-4 h-4 text-gray-400 mt-2 group-hover:translate-x-1 transition-transform" />
           </Link>
-
-          <Link 
-            to="/customer/mypage/analyses"
-            className="bg-white/60 backdrop-blur rounded-2xl p-5 hover:bg-white transition-colors border border-gray-200/50 group"
-          >
-            <h4 className="font-semibold text-gray-900">분석 이력</h4>
-            <p className="text-sm text-gray-500 mt-1">수면 분석 결과</p>
-            <ChevronRight className="w-4 h-4 text-gray-400 mt-2 group-hover:translate-x-1 transition-transform" />
-          </Link>
-
-          <Link 
-            to="/customer/mypage/profile"
-            className="bg-white/60 backdrop-blur rounded-2xl p-5 hover:bg-white transition-colors border border-gray-200/50 group"
-          >
-            <h4 className="font-semibold text-gray-900">내 정보</h4>
-            <p className="text-sm text-gray-500 mt-1">프로필 수정</p>
-            <ChevronRight className="w-4 h-4 text-gray-400 mt-2 group-hover:translate-x-1 transition-transform" />
-          </Link>
-
-          <a 
-            href="https://pf.kakao.com/_crxgDxj/chat"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="bg-white/60 backdrop-blur rounded-2xl p-5 hover:bg-white transition-colors border border-gray-200/50 group"
-          >
-            <h4 className="font-semibold text-gray-900">고객센터</h4>
-            <p className="text-sm text-gray-500 mt-1">카카오톡 상담</p>
-            <ChevronRight className="w-4 h-4 text-gray-400 mt-2 group-hover:translate-x-1 transition-transform" />
-          </a>
         </div>
       </div>
     </div>

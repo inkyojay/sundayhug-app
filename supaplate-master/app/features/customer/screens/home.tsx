@@ -66,7 +66,7 @@ export default function CustomerHomeScreen() {
             {isLoggedIn ? (
               <>
                 <span className="font-bold text-gray-900">Hello,</span>{" "}
-                <span className="text-gray-400">{firstName}.</span>
+                <span className="text-gray-400">{firstName}님.</span>
               </>
             ) : (
               <>
@@ -80,6 +80,65 @@ export default function CustomerHomeScreen() {
             썬데이허그가 함께합니다.
           </p>
         </div>
+
+        {/* 처음이신가요? / 마이페이지 카드 - 맨 위 */}
+        {isLoggedIn ? (
+          <Link 
+            to="/customer/mypage"
+            className="block mb-4 md:mb-5 group"
+          >
+            <div className="p-6 md:p-8 bg-gradient-to-r from-gray-900 to-gray-800 rounded-3xl transition-all duration-300 hover:shadow-xl hover:scale-[1.01]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center">
+                    <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-xs font-medium tracking-wider uppercase mb-1">
+                      My Page
+                    </p>
+                    <h3 className="text-white text-2xl font-bold">
+                      마이페이지
+                    </h3>
+                  </div>
+                </div>
+                <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-white group-hover:translate-x-1 transition-all" />
+              </div>
+            </div>
+          </Link>
+        ) : (
+          <div className="mb-4 md:mb-5 p-6 md:p-8 bg-gradient-to-r from-gray-900 to-gray-800 rounded-3xl">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div>
+                <h3 className="text-white text-2xl font-bold mb-2">
+                  처음이신가요?
+                </h3>
+                <p className="text-gray-400">
+                  회원가입 후 보증서 등록, 수면 분석 결과 저장 등<br className="hidden md:block" />
+                  더 많은 서비스를 이용하세요.
+                </p>
+              </div>
+              <div className="flex gap-3 w-full md:w-auto">
+                <Button 
+                  asChild
+                  className="flex-1 md:flex-none bg-white text-gray-900 hover:bg-gray-100 px-6"
+                >
+                  <Link to="/customer/login">로그인</Link>
+                </Button>
+                <Button 
+                  asChild
+                  variant="outline"
+                  className="flex-1 md:flex-none border-gray-600 text-white hover:bg-white/10 px-6"
+                >
+                  <Link to="/customer/register">회원가입</Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Bento Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-5">
@@ -149,30 +208,6 @@ export default function CustomerHomeScreen() {
             </div>
           </Link>
 
-          {/* 마이페이지 - Small White Card */}
-          <Link 
-            to={isLoggedIn ? "/customer/mypage" : "/customer/login"}
-            className="group"
-          >
-            <div className="h-full min-h-[140px] md:min-h-[190px] bg-white rounded-3xl p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
-              <div className="flex justify-between items-start">
-                <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
-                  My Page
-                </p>
-                <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                  <svg className="w-5 h-5 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                </div>
-              </div>
-              
-              <h3 className="text-gray-900 text-xl md:text-2xl font-bold">
-                {isLoggedIn ? "마이페이지" : "로그인"}
-              </h3>
-            </div>
-          </Link>
-
           {/* AI 상담 - Gradient Card */}
           <Link 
             to="/customer/chat"
@@ -216,38 +251,6 @@ export default function CustomerHomeScreen() {
           </Link>
         </div>
 
-        {/* CTA for non-logged in users */}
-        {!isLoggedIn && (
-          <div className="mt-10 p-8 bg-gradient-to-r from-gray-900 to-gray-800 rounded-3xl">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-              <div>
-                <h3 className="text-white text-2xl font-bold mb-2">
-                  처음이신가요?
-                </h3>
-                <p className="text-gray-400">
-                  회원가입 후 보증서 등록, 수면 분석 결과 저장 등<br className="hidden md:block" />
-                  더 많은 서비스를 이용하세요.
-                </p>
-              </div>
-              <div className="flex gap-3 w-full md:w-auto">
-                <Button 
-                  asChild
-                  className="flex-1 md:flex-none bg-white text-gray-900 hover:bg-gray-100 px-6"
-                >
-                  <Link to="/customer/login">로그인</Link>
-                </Button>
-                <Button 
-                  asChild
-                  variant="outline"
-                  className="flex-1 md:flex-none border-gray-600 text-white hover:bg-white/10 px-6"
-                >
-                  <Link to="/customer/register">회원가입</Link>
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Quick Links */}
         <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-4">
           <a 
@@ -257,7 +260,7 @@ export default function CustomerHomeScreen() {
             className="bg-white/60 backdrop-blur rounded-2xl p-5 hover:bg-white transition-colors border border-gray-200/50 group"
           >
             <MessageCircleQuestion className="w-6 h-6 text-gray-400 mb-3" />
-            <h4 className="font-semibold text-gray-900">ABC 사용 설명서</h4>
+            <h4 className="font-semibold text-gray-900">ABC 아기침대 사용 설명서</h4>
             <ChevronRight className="w-4 h-4 text-gray-400 mt-2 group-hover:translate-x-1 transition-transform" />
           </a>
 

@@ -209,6 +209,27 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
               }}
             ></script>
           )}
+        {/* Kakao SDK */}
+        {import.meta.env.VITE_KAKAO_JAVASCRIPT_KEY &&
+          import.meta.env.VITE_KAKAO_JAVASCRIPT_KEY !== "" && (
+            <>
+              <script
+                src="https://t1.kakaocdn.net/kakao_js_sdk/2.6.0/kakao.min.js"
+                integrity="sha384-6MFdIr0zOira1CHQkedUqJVql0YtcZA1P0nbPrQYJXVJZUkTk/oX4U9GhLYlVSOM"
+                crossOrigin="anonymous"
+              />
+              <script
+                dangerouslySetInnerHTML={{
+                  __html: `
+                    window.Kakao = window.Kakao || {};
+                    if (!Kakao.isInitialized()) {
+                      Kakao.init('${import.meta.env.VITE_KAKAO_JAVASCRIPT_KEY}');
+                    }
+                  `,
+                }}
+              />
+            </>
+          )}
       </body>
     </html>
   );
