@@ -1,13 +1,19 @@
 /**
  * AI 육아 상담 - 메시지 전송 API
- * Gemini API + RAG 연동
+ * Gemini API + 벡터 RAG 연동 (OpenAI Embeddings)
  */
 import type { Route } from "./+types/send-message";
 
 import { data } from "react-router";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 import makeServerClient from "~/core/lib/supa-client.server";
 import adminClient from "~/core/lib/supa-admin-client.server";
+
+// OpenAI 초기화 (벡터 임베딩용)
+const openai = new OpenAI({ 
+  apiKey: process.env.OPENAI_API_KEY 
+});
 
 // Gemini 초기화
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
@@ -73,31 +79,84 @@ function getAgeRange(months: number): string {
   return "13-24m";
 }
 
-// RAG 검색 (텍스트 유사도 기반)
+// 벡터 임베딩 생성
+async function getEmbedding(text: string): Promise<number[]> {
+  try {
+    const response = await openai.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: text,
+    });
+    return response.data[0].embedding;
+  } catch (error) {
+    console.error("임베딩 생성 오류:", error);
+    throw error;
+  }
+}
+
+// RAG 검색 (벡터 유사도 기반) - OpenAI Embeddings 사용
 async function searchKnowledge(topic: string, ageRange: string, query: string) {
-  // 1차: 주제 + 월령 기반 검색
-  const { data: topicMatches } = await adminClient
+  try {
+    // 1. 쿼리 벡터 생성
+    const queryEmbedding = await getEmbedding(query);
+    
+    // 2. 벡터 유사도 검색 (Supabase RPC 함수 호출)
+    const { data: vectorMatches, error } = await adminClient.rpc('search_knowledge', {
+      query_embedding: queryEmbedding,
+      match_count: 5,
+      filter_topic: topic !== 'general' ? topic : null,
+      filter_age_range: ageRange !== 'all' ? ageRange : null,
+    });
+
+    if (error) {
+      console.error("벡터 검색 오류:", error);
+      // 폴백: 키워드 기반 검색
+      return fallbackKeywordSearch(topic, ageRange, query);
+    }
+
+    if (vectorMatches && vectorMatches.length > 0) {
+      console.log(`✅ 벡터 검색 성공: ${vectorMatches.length}개 결과 (유사도: ${vectorMatches[0]?.similarity?.toFixed(3)})`);
+      
+      // 사용량 카운트 업데이트
+      for (const match of vectorMatches.slice(0, 3)) {
+        await adminClient.rpc('increment_knowledge_usage', { knowledge_id: match.id });
+      }
+      
+      return vectorMatches.slice(0, 3).map((k: any) => ({
+        question: k.question,
+        answer: k.answer,
+        source_name: k.source_name,
+        source_url: k.source_url,
+        similarity: k.similarity,
+      }));
+    }
+
+    // 벡터 검색 결과 없으면 폴백
+    return fallbackKeywordSearch(topic, ageRange, query);
+    
+  } catch (error) {
+    console.error("RAG 검색 오류:", error);
+    return fallbackKeywordSearch(topic, ageRange, query);
+  }
+}
+
+// 폴백: 키워드 기반 검색 (벡터 검색 실패 시)
+async function fallbackKeywordSearch(topic: string, ageRange: string, query: string) {
+  console.log("⚠️ 폴백: 키워드 기반 검색");
+  
+  const { data: matches } = await adminClient
     .from("chat_knowledge")
     .select("id, question, answer, source_name, source_url, tags")
     .or(`age_range.eq.${ageRange},age_range.eq.all`)
-    .eq("topic", topic)
     .limit(10);
 
-  if (!topicMatches || topicMatches.length === 0) {
-    // 2차: 전체에서 검색
-    const { data: allMatches } = await adminClient
-      .from("chat_knowledge")
-      .select("id, question, answer, source_name, source_url, tags")
-      .or(`age_range.eq.${ageRange},age_range.eq.all`)
-      .limit(10);
-    
-    return rankByRelevance(allMatches || [], query);
+  if (!matches || matches.length === 0) {
+    return [];
   }
 
-  return rankByRelevance(topicMatches, query);
+  return rankByRelevance(matches, query);
 }
 
-// 관련도 점수 계산 및 정렬
+// 관련도 점수 계산 및 정렬 (폴백용)
 function rankByRelevance(
   knowledge: Array<{
     id: string;

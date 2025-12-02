@@ -4,7 +4,98 @@
 
 ---
 
-## 📅 2025년 12월 3일 (화)
+## 📅 2025년 12월 3일 (화) - 오후 추가 작업
+
+### 🎯 벡터 RAG 시스템 구축 (OpenAI Embeddings)
+
+#### 1. 고급 RAG 시스템 구현
+- **기존 키워드 검색 → 벡터 유사도 검색으로 업그레이드**
+- OpenAI `text-embedding-3-small` 모델 사용
+- pgvector 확장을 활용한 코사인 유사도 검색
+- 의미 기반 검색으로 정확도 대폭 향상
+
+#### 2. 지식 베이스 임베딩
+- **89개 육아 지식 데이터 벡터화 완료**
+- CSV 파일에서 데이터 로드
+- 질문+답변 결합 텍스트 임베딩
+- Supabase `chat_knowledge` 테이블에 저장
+
+#### 3. 벡터 검색 SQL 함수
+```sql
+-- search_knowledge(query_embedding, match_count, filter_topic, filter_age_range)
+-- increment_knowledge_usage(knowledge_id) - 사용량 추적
+```
+
+#### 4. AI 상담 API 업그레이드
+- 사용자 질문 → 벡터 변환 → 유사도 검색
+- 폴백: 벡터 검색 실패 시 키워드 검색
+- 검색 결과 로깅 (유사도 점수 포함)
+
+---
+
+### 🔧 수정/추가된 파일
+
+```
+scripts/embed-knowledge.ts           # 임베딩 생성 스크립트 (신규)
+app/features/chat/api/send-message.tsx  # 벡터 RAG 검색 연동
+```
+
+---
+
+### 📦 설치된 패키지
+
+```bash
+npm install openai
+```
+
+---
+
+### 🔑 환경변수 추가
+
+```bash
+OPENAI_API_KEY="sk-proj-..." # OpenAI API 키 (벡터 임베딩용)
+```
+
+---
+
+### 🗃️ DB 마이그레이션
+
+```sql
+-- pgvector 확장 활성화
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- 벡터 유사도 검색 함수
+CREATE OR REPLACE FUNCTION search_knowledge(
+  query_embedding vector(1536),
+  match_count int DEFAULT 5,
+  filter_topic text DEFAULT NULL,
+  filter_age_range text DEFAULT NULL
+) RETURNS TABLE (...);
+
+-- 사용량 카운트 업데이트 함수
+CREATE OR REPLACE FUNCTION increment_knowledge_usage(knowledge_id uuid);
+```
+
+---
+
+### ✅ 완료된 TODO
+
+- [x] OpenAI 임베딩 스크립트 작성
+- [x] 89개 육아 지식 데이터 벡터화
+- [x] 유사도 검색 SQL 함수 생성
+- [x] AI 상담 API에 벡터 검색 연동
+
+---
+
+### 🔜 향후 작업 예정
+
+- [ ] 매거진 발행 시 자동 임베딩 추가
+- [ ] 검색 정확도 모니터링 대시보드
+- [ ] 지식 데이터 추가 (age_range 제약 수정)
+
+---
+
+## 📅 2025년 12월 3일 (화) - 오전 작업
 
 ### 🎯 주요 작업 내용
 

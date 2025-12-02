@@ -1,0 +1,12 @@
+title,slug,excerpt,content,category,status,featured,read_time
+여기에 블로그 제목,"url-slug-영문으로",한줄 요약 설명,"## 소제목
+
+본문 내용을 여기에 작성합니다.
+
+### 하위 제목
+
+- 목록 1
+- 목록 2
+
+**굵은 글씨**도 가능해요!",sleep-guide,published,false,5
+
