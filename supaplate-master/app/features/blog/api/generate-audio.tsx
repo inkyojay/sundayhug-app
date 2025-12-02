@@ -6,7 +6,7 @@ import type { Route } from "./+types/generate-audio";
 
 import { data } from "react-router";
 import makeServerClient from "~/core/lib/supa-client.server";
-import { makeAdminClient } from "~/core/lib/supa-client.server";
+import adminClient from "~/core/lib/supa-admin-client.server";
 
 // Markdown을 Plain Text로 변환
 function stripMarkdown(markdown: string): string {
@@ -37,8 +37,23 @@ function stripMarkdown(markdown: string): string {
     .trim();
 }
 
+// 사용할 목소리 옵션들
+const VOICE_OPTIONS = [
+  { name: "ko-KR-Neural2-A", label: "여성 (Neural2)" },  // 가장 자연스러운 여성
+  { name: "ko-KR-Wavenet-B", label: "남성 (Wavenet)" },  // 차분한 남성
+];
+
+// 랜덤 목소리 선택
+function getRandomVoice() {
+  const randomIndex = Math.floor(Math.random() * VOICE_OPTIONS.length);
+  return VOICE_OPTIONS[randomIndex];
+}
+
 // Google Cloud TTS API 호출
-async function synthesizeSpeech(text: string, apiKey: string): Promise<ArrayBuffer> {
+async function synthesizeSpeech(text: string, apiKey: string): Promise<{ audio: ArrayBuffer; voice: string }> {
+  const selectedVoice = getRandomVoice();
+  console.log(`[TTS] 선택된 목소리: ${selectedVoice.label} (${selectedVoice.name})`);
+  
   const response = await fetch(
     `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
     {
@@ -50,8 +65,7 @@ async function synthesizeSpeech(text: string, apiKey: string): Promise<ArrayBuff
         input: { text },
         voice: {
           languageCode: "ko-KR",
-          name: "ko-KR-Wavenet-A", // 여성 목소리 (자연스러움)
-          // 다른 옵션: ko-KR-Wavenet-B (남성), ko-KR-Wavenet-C (남성), ko-KR-Wavenet-D (여성)
+          name: selectedVoice.name,
         },
         audioConfig: {
           audioEncoding: "MP3",
@@ -76,12 +90,11 @@ async function synthesizeSpeech(text: string, apiKey: string): Promise<ArrayBuff
     bytes[i] = binaryString.charCodeAt(i);
   }
   
-  return bytes.buffer;
+  return { audio: bytes.buffer, voice: selectedVoice.label };
 }
 
 export async function action({ request }: Route.ActionArgs) {
   const [supabase] = makeServerClient(request);
-  const adminClient = makeAdminClient();
   
   const formData = await request.formData();
   const postId = formData.get("postId") as string;
@@ -130,7 +143,8 @@ export async function action({ request }: Route.ActionArgs) {
 
     // 4. Google TTS API 호출
     console.log(`[TTS] 오디오 생성 시작: ${post.title}`);
-    const audioBuffer = await synthesizeSpeech(plainText, googleTtsApiKey);
+    const { audio: audioBuffer, voice: selectedVoice } = await synthesizeSpeech(plainText, googleTtsApiKey);
+    console.log(`[TTS] 사용된 목소리: ${selectedVoice}`);
 
     // 5. Supabase Storage에 업로드
     const fileName = `${postId}.mp3`;
