@@ -5,12 +5,12 @@
 import type { Route } from "./+types/send-message";
 
 import { data } from "react-router";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import makeServerClient from "~/core/lib/supa-client.server";
 import adminClient from "~/core/lib/supa-admin-client.server";
 
-// Gemini 초기화
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+// Gemini 초기화 (새로운 @google/genai 패키지)
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 // 시스템 프롬프트
 const SYSTEM_PROMPT = `당신은 "썬데이허그 AI 육아 상담사"입니다. 0~24개월 영아를 키우는 부모님을 돕습니다.
@@ -243,9 +243,7 @@ export async function action({ request }: Route.ActionArgs) {
 `;
     }
 
-    // Gemini API 호출
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    
+    // Gemini API 호출 (새로운 @google/genai 패키지)
     const prompt = `${SYSTEM_PROMPT}${babyContext}${contextText}
 
 [사용자 질문]
@@ -253,8 +251,11 @@ ${message}
 
 [답변]`;
 
-    const result = await model.generateContent(prompt);
-    const aiResponse = result.response.text();
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: prompt,
+    });
+    const aiResponse = response.text ?? "";
 
     // AI 응답 저장
     const { data: aiMessage, error: aiMsgError } = await supabase

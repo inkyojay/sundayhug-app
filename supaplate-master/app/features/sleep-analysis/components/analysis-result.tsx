@@ -266,7 +266,8 @@ export function AnalysisResult({
           새로 분석
         </Button>
 
-        <Button 
+        {/* 이미지 저장 - 임시 비활성화 */}
+        {/* <Button 
           onClick={handleSaveAsImage}
           variant="outline"
           disabled={isSavingImage}
@@ -283,7 +284,7 @@ export function AnalysisResult({
               이미지 저장
             </>
           )}
-        </Button>
+        </Button> */}
 
         {/* 카카오톡 공유 - 임시 비활성화 */}
         {/* <Button 
@@ -294,7 +295,8 @@ export function AnalysisResult({
           카카오톡 공유
         </Button> */}
 
-        {onDownloadSlides && (
+        {/* 인스타 슬라이드 - 임시 비활성화 */}
+        {/* {onDownloadSlides && (
           <Button 
             onClick={onDownloadSlides} 
             disabled={isDownloading}
@@ -303,7 +305,7 @@ export function AnalysisResult({
             <Download className="mr-2 h-4 w-4" />
             {isDownloading ? "생성 중..." : "인스타 슬라이드"}
           </Button>
-        )}
+        )} */}
       </div>
 
       {analysisId && (
