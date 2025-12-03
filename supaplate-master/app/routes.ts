@@ -136,6 +136,7 @@ export default [
         route("/warranty/:id", "features/customer/screens/mypage/warranty-detail.tsx"),
         route("/analyses", "features/customer/screens/mypage/analyses.tsx"),
         route("/as", "features/customer/screens/mypage/as-list.tsx"),
+        route("/review", "features/customer/screens/mypage/review-submit.tsx"),
       ]),
       
       // A/S 신청
@@ -245,6 +246,11 @@ export default [
         // AI 상담 지식 관리 (관리자용)
         ...prefix("/chat", [
           route("/knowledge", "features/chat/screens/admin/knowledge-list.tsx"),
+        ]),
+        
+        // 후기 인증 관리 (관리자용)
+        ...prefix("/review", [
+          index("features/review/screens/admin/review-list.tsx"),
         ]),
       ]),
       
