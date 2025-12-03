@@ -67,7 +67,7 @@ export default function CustomerHomeScreen() {
   return (
     <div className="min-h-screen bg-[#F5F5F0]">
       <div className="mx-auto max-w-6xl px-6 py-10 md:py-16">
-        {/* Hero Section */}
+      {/* Hero Section */}
         <div className="mb-10 md:mb-14">
           <div className="inline-flex items-center gap-2 mb-6 px-4 py-2 rounded-full bg-white border border-gray-200">
             <Sparkles className="w-4 h-4 text-[#FF6B35]" />
@@ -93,7 +93,28 @@ export default function CustomerHomeScreen() {
           </p>
         </div>
 
-        {/* 처음이신가요? / 마이페이지 카드 - 맨 위 */}
+        {/* 후기 이벤트 버튼 - 맨 위 */}
+        <div className="mb-4 md:mb-5">
+          <button
+            onClick={() => setShowEventModal(true)}
+            className="w-full bg-white border border-gray-200 rounded-2xl p-5 hover:bg-gray-50 hover:border-gray-300 transition-all duration-300 hover:shadow-md group"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-[#FF6B35]/10 rounded-full flex items-center justify-center">
+                  <Gift className="w-6 h-6 text-[#FF6B35]" />
+                </div>
+                <div className="text-left">
+                  <h4 className="font-bold text-gray-900 text-lg">썬데이허그 구매 후기 이벤트 참여</h4>
+                  <p className="text-gray-500 text-sm mt-1">맘카페 후기 작성하고 사은품 받으세요!</p>
+                </div>
+              </div>
+              <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
+            </div>
+          </button>
+        </div>
+
+        {/* 처음이신가요? / 마이페이지 카드 */}
         {isLoggedIn ? (
           <Link 
             to="/customer/mypage"
@@ -120,7 +141,7 @@ export default function CustomerHomeScreen() {
                 <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-white group-hover:translate-x-1 transition-all" />
               </div>
             </div>
-          </Link>
+            </Link>
         ) : (
           <div className="mb-4 md:mb-5 p-6 md:p-8 bg-gradient-to-r from-gray-900 to-gray-800 rounded-3xl">
             <div className="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -132,7 +153,7 @@ export default function CustomerHomeScreen() {
                   회원가입 후 보증서 등록, 수면 분석 결과 저장 등<br className="hidden md:block" />
                   더 많은 서비스를 이용하세요.
                 </p>
-              </div>
+        </div>
               <div className="flex gap-3 w-full md:w-auto">
                 <Button 
                   asChild
@@ -248,26 +269,6 @@ export default function CustomerHomeScreen() {
           </a>
         </div>
 
-        {/* 후기 이벤트 버튼 */}
-        <div className="mt-6">
-          <button
-            onClick={() => setShowEventModal(true)}
-            className="w-full bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl p-5 hover:from-pink-600 hover:to-rose-600 transition-all duration-300 hover:shadow-lg group"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                  <Gift className="w-6 h-6 text-white" />
-                </div>
-                <div className="text-left">
-                  <h4 className="font-bold text-white text-lg">썬데이허그 구매 후기 이벤트 참여</h4>
-                  <p className="text-pink-100 text-sm mt-1">맘카페 후기 작성하고 사은품 받으세요!</p>
-                </div>
-              </div>
-              <ChevronRight className="w-6 h-6 text-white/80 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </button>
-        </div>
       </div>
 
       {/* 제품 선택 모달 */}
@@ -291,8 +292,8 @@ export default function CustomerHomeScreen() {
 
             {/* 헤더 */}
             <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-gradient-to-br from-pink-500 to-rose-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Gift className="w-8 h-8 text-white" />
+              <div className="w-16 h-16 bg-[#FF6B35]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Gift className="w-8 h-8 text-[#FF6B35]" />
               </div>
               <h3 className="text-2xl font-bold text-gray-900">후기 이벤트 참여</h3>
               <p className="text-gray-500 mt-2">참여하실 제품을 선택해주세요</p>
@@ -302,33 +303,33 @@ export default function CustomerHomeScreen() {
             <div className="space-y-3">
               <button
                 onClick={() => handleEventSelect('abc')}
-                className="w-full p-5 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 rounded-2xl border-2 border-blue-200 hover:border-blue-300 transition-all duration-200 group"
+                className="w-full p-5 bg-gray-50 hover:bg-gray-100 rounded-2xl border border-gray-200 hover:border-gray-300 transition-all duration-200 group"
               >
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center">
+                  <div className="w-12 h-12 bg-[#1A1A1A] rounded-xl flex items-center justify-center">
                     <Baby className="w-6 h-6 text-white" />
                   </div>
                   <div className="text-left flex-1">
                     <h4 className="font-bold text-gray-900 text-lg">ABC 아기침대</h4>
                     <p className="text-gray-500 text-sm">ABC 아기침대 후기 이벤트</p>
                   </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:translate-x-1 transition-transform" />
+                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
                 </div>
               </button>
 
               <button
                 onClick={() => handleEventSelect('other')}
-                className="w-full p-5 bg-gradient-to-r from-orange-50 to-amber-50 hover:from-orange-100 hover:to-amber-100 rounded-2xl border-2 border-orange-200 hover:border-orange-300 transition-all duration-200 group"
+                className="w-full p-5 bg-gray-50 hover:bg-gray-100 rounded-2xl border border-gray-200 hover:border-gray-300 transition-all duration-200 group"
               >
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center">
+                  <div className="w-12 h-12 bg-[#FF6B35] rounded-xl flex items-center justify-center">
                     <Package className="w-6 h-6 text-white" />
                   </div>
                   <div className="text-left flex-1">
                     <h4 className="font-bold text-gray-900 text-lg">기타 다른 제품</h4>
                     <p className="text-gray-500 text-sm">슬리핑백, 속싸개, 백색소음기 등</p>
                   </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:translate-x-1 transition-transform" />
+                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
                 </div>
               </button>
             </div>
