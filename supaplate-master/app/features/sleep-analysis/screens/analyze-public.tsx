@@ -347,7 +347,7 @@ export default function AnalyzePublicPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F5F0]">
-      <div className="mx-auto max-w-2xl px-6 py-10">
+      <div className="mx-auto max-w-2xl px-4 md:px-6 py-8 md:py-10">
         {/* Header */}
         <div className="text-center mb-10">
           <Link 
@@ -391,7 +391,7 @@ export default function AnalyzePublicPage() {
                 isDownloading={isDownloading}
               />
             ) : (
-              <div className="bg-white rounded-2xl p-6 border border-gray-100">
+              <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-100">
                 <UploadForm 
                   onSubmit={handleSubmit} 
                   isLoading={isLoading} 

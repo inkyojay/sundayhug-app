@@ -332,7 +332,9 @@ export default function CustomerHomeScreen() {
             className="bg-white/60 backdrop-blur rounded-2xl p-5 hover:bg-white transition-colors border border-gray-200/50 group"
           >
             <MessageCircleQuestion className="w-6 h-6 text-gray-400 mb-3" />
-            <h4 className="font-semibold text-gray-900">ABC 아기침대 사용 설명서</h4>
+            <h4 className="font-semibold text-gray-900">
+              ABC 아기침대<br className="md:hidden" /> 사용 설명서
+            </h4>
             <ChevronRight className="w-4 h-4 text-gray-400 mt-2 group-hover:translate-x-1 transition-transform" />
           </a>
 

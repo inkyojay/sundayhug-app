@@ -246,20 +246,20 @@ export function UploadForm({
     <div className="space-y-6">
       {/* 사진 가이드 */}
       {showGuide && !imagePreview && (
-        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 mb-4">
-          <div className="flex items-center gap-2 mb-4">
+        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-4">
+          <div className="flex items-center gap-2 mb-3">
             <Camera className="w-5 h-5 text-blue-600" />
-            <h3 className="font-semibold text-blue-900">어떤 사진을 올려야 하나요?</h3>
+            <h3 className="font-semibold text-blue-900 text-sm">어떤 사진을 올려야 하나요?</h3>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="flex gap-4">
             {photoGuides.map((guide) => (
-              <div key={guide.title} className="space-y-2">
-                <p className={`font-medium text-sm ${guide.emoji === "✅" ? "text-green-700" : "text-red-700"}`}>
+              <div key={guide.title} className="flex-1 space-y-1.5">
+                <p className={`font-medium text-xs ${guide.emoji === "✅" ? "text-green-700" : "text-red-700"}`}>
                   {guide.emoji} {guide.title}
                 </p>
-                <ul className="text-xs text-gray-700 space-y-1">
+                <ul className="text-xs text-gray-600 space-y-0.5">
                   {guide.items.map((item, i) => (
-                    <li key={i}>• {item}</li>
+                    <li key={i} className="leading-tight">• {item}</li>
                   ))}
                 </ul>
               </div>
@@ -431,12 +431,12 @@ export function UploadForm({
                     className="flex gap-4"
                   >
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <RadioGroupItem value="male" />
-                      <span className="text-gray-700">남아</span>
+                      <RadioGroupItem value="male" className="border-gray-800 text-gray-900 data-[state=checked]:border-[#FF6B35] data-[state=checked]:text-[#FF6B35]" />
+                      <span className="text-gray-900">남아</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <RadioGroupItem value="female" />
-                      <span className="text-gray-700">여아</span>
+                      <RadioGroupItem value="female" className="border-gray-800 text-gray-900 data-[state=checked]:border-[#FF6B35] data-[state=checked]:text-[#FF6B35]" />
+                      <span className="text-gray-900">여아</span>
                     </label>
                   </RadioGroup>
                 </div>
@@ -488,12 +488,12 @@ export function UploadForm({
                 className="flex gap-4"
               >
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <RadioGroupItem value="male" />
-                  <span className="text-gray-700">남아</span>
+                  <RadioGroupItem value="male" className="border-gray-800 text-gray-900 data-[state=checked]:border-[#FF6B35] data-[state=checked]:text-[#FF6B35]" />
+                  <span className="text-gray-900">남아</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <RadioGroupItem value="female" />
-                  <span className="text-gray-700">여아</span>
+                  <RadioGroupItem value="female" className="border-gray-800 text-gray-900 data-[state=checked]:border-[#FF6B35] data-[state=checked]:text-[#FF6B35]" />
+                  <span className="text-gray-900">여아</span>
                 </label>
               </RadioGroup>
             </div>

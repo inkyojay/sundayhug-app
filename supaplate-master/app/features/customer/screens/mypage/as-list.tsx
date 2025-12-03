@@ -63,29 +63,21 @@ export async function loader({ request }: Route.LoaderArgs) {
     .eq("status", "approved")
     .order("created_at", { ascending: false });
 
-  // A/S 이력 조회
-  const { data: allWarranties } = await supabase
-    .from("warranties")
-    .select("id")
-    .eq("user_id", user.id);
-
-  let asRequests: any[] = [];
-  if (allWarranties && allWarranties.length > 0) {
-    const warrantyIds = allWarranties.map(w => w.id);
-    const { data: requests } = await supabase
-      .from("as_requests")
-      .select(`
-        *,
-        warranties (
-          product_name,
-          product_option,
-          warranty_number
-        )
-      `)
-      .in("warranty_id", warrantyIds)
-      .order("created_at", { ascending: false });
-    asRequests = requests || [];
-  }
+  // A/S 이력 조회 (user_id로 조회 - 보증서 유무 관계없이)
+  const { data: requests } = await supabase
+    .from("as_requests")
+    .select(`
+      *,
+      warranties (
+        product_name,
+        product_option,
+        warranty_number
+      )
+    `)
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+  
+  const asRequests = requests || [];
 
   return data({ 
     warranties: warranties || [], 
@@ -148,6 +140,7 @@ export async function action({ request }: Route.ActionArgs) {
       contact_phone: contactPhone.replace(/-/g, ""),
       status: "received",
       issue_photos: issuePhotos.length > 0 ? issuePhotos : null,
+      user_id: user.id, // 항상 user_id 저장
     };
 
     // ABC 아기침대인 경우 보증서 연결

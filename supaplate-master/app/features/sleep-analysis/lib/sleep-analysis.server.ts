@@ -54,11 +54,13 @@ export async function saveSleepAnalysis(
   }
 
   // Save analysis record
-  // summary에 전체 결과를 JSON으로 저장 (Gemini 반환 형식: summary, feedbackItems, references)
+  // summary에 전체 결과를 JSON으로 저장 (Gemini 반환 형식: summary, feedbackItems, references, safetyScore, scoreComment)
   const summaryJson = JSON.stringify({
     summary: report.summary,
     feedbackItems: report.feedbackItems,
     references: report.references,
+    safetyScore: report.safetyScore,
+    scoreComment: report.scoreComment,
   });
 
   console.log("📝 Saving analysis with summary length:", summaryJson.length);
@@ -117,6 +119,8 @@ export async function getSleepAnalysis(id: string): Promise<any> {
     // feedbackItems 형식으로 반환 (schema.ts 형식)
     feedbackItems: report?.feedbackItems || [],
     references: report?.references || [],
+    safetyScore: report?.safetyScore,
+    scoreComment: report?.scoreComment,
   };
 }
 
