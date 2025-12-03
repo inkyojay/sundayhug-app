@@ -155,6 +155,17 @@ const data = {
       ],
     },
     {
+      title: "후기 관리",
+      url: "/dashboard/review",
+      icon: MessageSquareIcon,
+      items: [
+        {
+          title: "후기 인증",
+          url: "/dashboard/review",
+        },
+      ],
+    },
+    {
       title: "광고 분석",
       url: "#",
       icon: MegaphoneIcon,
