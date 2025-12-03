@@ -428,3 +428,4 @@ CREATE INDEX idx_daily_check_ins_user_date ON daily_check_ins(user_id, check_in_
 
 > 📌 이 기획서는 초안입니다. 실제 구현 전 내부 검토 및 수정이 필요합니다.
 
+

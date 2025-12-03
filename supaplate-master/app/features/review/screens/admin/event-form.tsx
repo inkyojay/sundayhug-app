@@ -12,8 +12,6 @@ import {
   Save,
   Gift,
   Package,
-  ImagePlus,
-  GripVertical
 } from "lucide-react";
 
 import { Button } from "~/core/components/ui/button";
@@ -575,4 +573,5 @@ export default function AdminEventFormScreen() {
     </div>
   );
 }
+
 

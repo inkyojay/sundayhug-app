@@ -15,7 +15,6 @@
  * This module is critical for ensuring that the application can render content in
  * the user's preferred language on the server before sending it to the client.
  */
-import resourcesToBackend from "i18next-resources-to-backend";
 import { createCookie } from "react-router";
 import { RemixI18Next } from "remix-i18next/server";
 

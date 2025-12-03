@@ -14,7 +14,7 @@
  * contains the latest content without requiring a rebuild of the application.
  */
 import { readdir } from "node:fs/promises";
-import path from "node:path";
+import { join } from "node:path";
 
 /**
  * Sitemap generator loader function
@@ -39,14 +39,14 @@ export async function loader() {
 
   // Scan the blog directory for MDX files and convert to URLs
   const blogUrls = (
-    await readdir(path.join(process.cwd(), "app", "features", "blog", "docs"))
+    await readdir(join(process.cwd(), "app", "features", "blog", "docs"))
   )
     .filter((file) => file.endsWith(".mdx")) // Only include MDX files
     .map((file) => `/blog/${file.replace(".mdx", "")}`);
 
   // Scan the legal directory for MDX files and convert to URLs
   const legalUrls = (
-    await readdir(path.join(process.cwd(), "app", "features", "legal", "docs"))
+    await readdir(join(process.cwd(), "app", "features", "legal", "docs"))
   )
     .filter((file) => file.endsWith(".mdx")) // Only include MDX files
     .map((file) => `/legal/${file.replace(".mdx", "")}`);

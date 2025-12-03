@@ -1,12 +1,10 @@
 import {
-  BadgeCheck,
   Bell,
   ChevronsUpDown,
   CreditCard,
   LogOut,
   Sparkles,
   UserCircle2Icon,
-  UserIcon,
 } from "lucide-react";
 import { Link } from "react-router";
 

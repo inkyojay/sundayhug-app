@@ -11,7 +11,6 @@
  * - 쇼핑몰 연동: (추후 추가)
  */
 import {
-  BarChart3Icon,
   BookOpenIcon,
   BoxIcon,
   FolderTreeIcon,
@@ -25,9 +24,7 @@ import {
   ShoppingCartIcon,
   StarIcon,
   StoreIcon,
-  ToggleLeftIcon,
   TruckIcon,
-  WrenchIcon,
 } from "lucide-react";
 
 import {

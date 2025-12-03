@@ -213,8 +213,8 @@ export function AnalysisResult({
     setIsSavingImage(true);
     
     try {
-      // 동적 import
-      const html2canvasModule = await import("html2canvas");
+      // 동적 import - Vite 번들 분석 제외
+      const html2canvasModule = await import(/* @vite-ignore */ "html2canvas");
       const html2canvas = html2canvasModule.default;
       
       // 캡처 대상 요소
