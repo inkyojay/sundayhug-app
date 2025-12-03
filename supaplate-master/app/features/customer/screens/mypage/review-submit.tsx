@@ -1,5 +1,7 @@
 /**
- * 후기 인증 신청 페이지
+ * 일반 후기 인증 페이지 (포인트 적립용)
+ * - 이벤트 없이 단순 후기 인증
+ * - 승인 시 포인트 적립
  */
 import type { Route } from "./+types/review-submit";
 
@@ -7,7 +9,6 @@ import { useState, useRef } from "react";
 import { Link, redirect, useLoaderData, useFetcher, data } from "react-router";
 import { 
   ArrowLeft, 
-  Camera,
   X,
   Send,
   CheckCircle,
@@ -17,9 +18,9 @@ import {
   Instagram,
   FileText,
   Gift,
-  ChevronRight,
   ImagePlus,
-  ExternalLink
+  ExternalLink,
+  Coins
 } from "lucide-react";
 
 import { Button } from "~/core/components/ui/button";
@@ -42,15 +43,36 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw redirect("/customer/login?redirect=/customer/mypage/review-submit");
   }
 
+  // 프로필 정보 조회
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("name, phone, points")
+    .eq("id", user.id)
+    .single();
+
+  // 제품 목록 조회 (자동완성용)
+  const { data: products } = await supabase
+    .from("parent_products")
+    .select("parent_sku, product_name")
+    .eq("is_active", true)
+    .order("product_name");
+
   // 후기 인증 이력 조회
   const { data: submissions } = await supabase
     .from("review_submissions")
     .select("*")
     .eq("user_id", user.id)
+    .is("event_id", null) // 이벤트 없는 일반 후기만
     .order("created_at", { ascending: false });
+
+  const productList = (products || [])
+    .filter((p: any) => p.product_name && p.product_name.trim() !== "")
+    .map((p: any) => p.product_name);
 
   return data({ 
     submissions: submissions || [],
+    profile: profile || null,
+    productList,
   });
 }
 
@@ -67,9 +89,16 @@ export async function action({ request }: Route.ActionArgs) {
   const reviewUrl = formData.get("reviewUrl") as string;
   const productName = formData.get("productName") as string;
   const screenshotUrls = formData.get("screenshotUrls") as string;
+  const buyerName = formData.get("buyerName") as string;
+  const buyerPhone = formData.get("buyerPhone") as string;
+  const purchaseChannel = formData.get("purchaseChannel") as string;
 
   if (!reviewType || !reviewUrl) {
     return { success: false, error: "필수 정보를 입력해주세요." };
+  }
+
+  if (!buyerName || !buyerPhone) {
+    return { success: false, error: "구매자명과 연락처는 필수입니다." };
   }
 
   // URL 유효성 검사
@@ -79,7 +108,7 @@ export async function action({ request }: Route.ActionArgs) {
     return { success: false, error: "올바른 URL을 입력해주세요." };
   }
 
-  // 중복 신청 체크 (같은 URL)
+  // 중복 신청 체크
   const { data: existing } = await supabase
     .from("review_submissions")
     .select("id")
@@ -94,11 +123,7 @@ export async function action({ request }: Route.ActionArgs) {
   // 스크린샷 URL 파싱
   let screenshots: string[] = [];
   if (screenshotUrls) {
-    try {
-      screenshots = JSON.parse(screenshotUrls);
-    } catch {
-      // 파싱 실패 시 빈 배열
-    }
+    try { screenshots = JSON.parse(screenshotUrls); } catch {}
   }
 
   const { error } = await supabase
@@ -109,6 +134,13 @@ export async function action({ request }: Route.ActionArgs) {
       review_url: reviewUrl,
       product_name: productName || null,
       screenshot_urls: screenshots.length > 0 ? screenshots : null,
+      buyer_name: buyerName,
+      buyer_phone: buyerPhone.replace(/-/g, ""),
+      purchase_channel: purchaseChannel || null,
+      // 이벤트 관련 필드는 NULL
+      event_id: null,
+      event_product_id: null,
+      selected_gift_id: null,
     });
 
   if (error) {
@@ -116,7 +148,7 @@ export async function action({ request }: Route.ActionArgs) {
     return { success: false, error: "신청 중 오류가 발생했습니다." };
   }
 
-  return { success: true, message: "후기 인증 신청이 완료되었습니다." };
+  return { success: true, message: "후기 인증 신청이 완료되었습니다!" };
 }
 
 const reviewTypes = [
@@ -128,12 +160,8 @@ const reviewTypes = [
     bgColor: "bg-pink-50",
     borderColor: "border-pink-200",
     textColor: "text-pink-700",
-    description: "네이버 카페, 맘스홀릭 등",
-    requirements: [
-      "사진 3장 이상",
-      "텍스트 200자 이상",
-      "공개 게시물",
-    ],
+    description: "맘스홀릭, 맘이베베 등",
+    points: 500,
   },
   {
     id: "instagram",
@@ -144,11 +172,7 @@ const reviewTypes = [
     borderColor: "border-purple-200",
     textColor: "text-purple-700",
     description: "@sundayhug_official 태그",
-    requirements: [
-      "#썬데이허그 해시태그",
-      "제품 사진 포함",
-      "공개 계정",
-    ],
+    points: 300,
   },
   {
     id: "blog",
@@ -159,66 +183,59 @@ const reviewTypes = [
     borderColor: "border-green-200",
     textColor: "text-green-700",
     description: "네이버, 티스토리 등",
-    requirements: [
-      "사진 5장 이상",
-      "텍스트 500자 이상",
-      "공개 설정",
-    ],
+    points: 500,
   },
 ];
 
 const statusConfig = {
-  pending: { 
-    label: "검토 중", 
-    color: "bg-yellow-100 text-yellow-700", 
-    icon: Clock,
-    description: "관리자 검토 중입니다 (1~2 영업일)"
-  },
-  approved: { 
-    label: "승인됨", 
-    color: "bg-green-100 text-green-700", 
-    icon: CheckCircle,
-    description: "승인 완료! 혜택이 지급되었습니다"
-  },
-  rejected: { 
-    label: "반려됨", 
-    color: "bg-red-100 text-red-700", 
-    icon: XCircle,
-    description: "조건을 확인해주세요"
-  },
+  pending: { label: "검토 중", color: "bg-yellow-100 text-yellow-700", icon: Clock },
+  approved: { label: "승인됨", color: "bg-green-100 text-green-700", icon: CheckCircle },
+  rejected: { label: "반려됨", color: "bg-red-100 text-red-700", icon: XCircle },
 };
 
+const purchaseChannels = [
+  "쿠팡", "네이버 스마트스토어", "자사몰 (sundayhug.kr)",
+  "11번가", "G마켓/옥션", "위메프", "티몬", "카카오선물하기", "기타",
+];
+
 export default function ReviewSubmitScreen() {
-  const { submissions } = useLoaderData<typeof loader>();
+  const { submissions, profile, productList } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [reviewUrl, setReviewUrl] = useState("");
   const [productName, setProductName] = useState("");
+  const [productSearch, setProductSearch] = useState("");
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [photos, setPhotos] = useState<{ file: File; preview: string }[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  
+  const [buyerName, setBuyerName] = useState(profile?.name || "");
+  const [buyerPhone, setBuyerPhone] = useState(profile?.phone || "");
+  const [purchaseChannel, setPurchaseChannel] = useState("");
 
   const fetcherData = fetcher.data as any;
   const isSubmitting = fetcher.state === "submitting";
 
   const selectedTypeInfo = reviewTypes.find(t => t.id === selectedType);
 
+  const filteredProducts = productSearch.length > 0
+    ? productList.filter((p: string) => p.toLowerCase().includes(productSearch.toLowerCase()))
+    : productList;
+
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const remainingSlots = 3 - photos.length;
-    if (remainingSlots <= 0) {
+    if (photos.length >= 3) {
       alert("스크린샷은 최대 3장까지 첨부할 수 있습니다.");
       return;
     }
 
     const file = files[0];
-    
     if (file.size > 5 * 1024 * 1024) {
       alert("파일 크기는 5MB 이하여야 합니다.");
-      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
@@ -228,9 +245,7 @@ export default function ReviewSubmitScreen() {
     };
     reader.readAsDataURL(file);
 
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const removePhoto = (index: number) => {
@@ -239,10 +254,7 @@ export default function ReviewSubmitScreen() {
 
   const uploadPhotos = async (): Promise<string[]> => {
     if (photos.length === 0) return [];
-
-    setIsUploading(true);
     const urls: string[] = [];
-
     try {
       for (const photo of photos) {
         const timestamp = Date.now();
@@ -266,10 +278,7 @@ export default function ReviewSubmitScreen() {
       }
     } catch (error) {
       console.error("스크린샷 업로드 오류:", error);
-    } finally {
-      setIsUploading(false);
     }
-
     return urls;
   };
 
@@ -281,31 +290,43 @@ export default function ReviewSubmitScreen() {
       return;
     }
 
-    const screenshotUrls = await uploadPhotos();
+    if (!buyerName || !buyerPhone) {
+      alert("구매자명과 연락처는 필수입니다.");
+      return;
+    }
+
+    setIsUploading(true);
     
-    fetcher.submit(
-      {
-        reviewType: selectedType,
-        reviewUrl,
-        productName,
-        screenshotUrls: JSON.stringify(screenshotUrls),
-      },
-      { method: "POST" }
-    );
+    try {
+      const screenshotUrls = await uploadPhotos();
+      
+      fetcher.submit(
+        {
+          reviewType: selectedType,
+          reviewUrl,
+          productName,
+          screenshotUrls: JSON.stringify(screenshotUrls),
+          buyerName,
+          buyerPhone,
+          purchaseChannel,
+        },
+        { method: "POST" }
+      );
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const resetForm = () => {
     setSelectedType(null);
     setReviewUrl("");
     setProductName("");
+    setProductSearch("");
     setPhotos([]);
   };
 
-  // 신청 성공 시 폼 리셋
   if (fetcherData?.success && !isSubmitting) {
-    setTimeout(() => {
-      resetForm();
-    }, 100);
+    setTimeout(() => resetForm(), 100);
   }
 
   return (
@@ -321,7 +342,11 @@ export default function ReviewSubmitScreen() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">후기 인증</h1>
-            <p className="text-sm text-gray-500">후기 작성하고 혜택 받으세요!</p>
+            <p className="text-sm text-gray-500">
+              {profile?.points !== undefined && (
+                <span className="text-orange-600 font-medium">보유 포인트: {profile.points?.toLocaleString()}P</span>
+              )}
+            </p>
           </div>
         </div>
 
@@ -332,7 +357,7 @@ export default function ReviewSubmitScreen() {
               <CheckCircle className="w-5 h-5 text-green-600" />
               <p className="text-green-700 font-medium">{fetcherData.message}</p>
             </div>
-            <p className="text-green-600 text-sm">검토 후 1~2 영업일 내 결과를 알려드립니다.</p>
+            <p className="text-green-600 text-sm">검토 후 1~2 영업일 내 포인트가 적립됩니다.</p>
           </div>
         )}
 
@@ -342,21 +367,47 @@ export default function ReviewSubmitScreen() {
           </div>
         )}
 
-        {/* 안내 배너 */}
-        <div className="bg-gradient-to-r from-orange-500 to-pink-500 rounded-2xl p-5 mb-6 text-white">
-          <div className="flex items-center gap-3 mb-2">
-            <Gift className="w-6 h-6" />
-            <h2 className="font-bold text-lg">후기 작성 혜택</h2>
+        {/* 이벤트 참여 안내 */}
+        <Link 
+          to="/customer/event/review"
+          className="block bg-gradient-to-r from-orange-500 to-pink-500 rounded-2xl p-5 mb-6 text-white hover:opacity-95 transition-opacity"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Gift className="w-5 h-5" />
+                <span className="font-bold">🎁 후기 이벤트 진행 중!</span>
+              </div>
+              <p className="text-white/90 text-sm">
+                사은품 받고 싶으시면 이벤트에 참여해주세요
+              </p>
+            </div>
+            <span className="text-white/80">→</span>
           </div>
-          <p className="text-white/90 text-sm">
-            맘카페, 인스타그램, 블로그에 후기를 작성하고 인증하시면<br />
-            다양한 혜택을 드립니다!
+        </Link>
+
+        {/* 포인트 안내 */}
+        <div className="bg-white rounded-2xl p-5 mb-6 border border-gray-100">
+          <div className="flex items-center gap-2 mb-3">
+            <Coins className="w-5 h-5 text-amber-500" />
+            <h2 className="font-semibold text-gray-900">후기 작성 포인트</h2>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">
+            후기 유형에 따라 승인 시 포인트가 적립됩니다.
           </p>
+          <div className="grid grid-cols-3 gap-3">
+            {reviewTypes.map((type) => (
+              <div key={type.id} className={`p-3 rounded-xl text-center ${type.bgColor}`}>
+                <p className={`font-semibold ${type.textColor}`}>{type.name}</p>
+                <p className={`text-lg font-bold ${type.textColor}`}>+{type.points}P</p>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* 후기 유형 선택 */}
         <div className="bg-white rounded-2xl p-5 mb-6 border border-gray-100">
-          <h2 className="font-semibold text-gray-900 mb-4">후기 유형 선택</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">후기 유형 선택 *</h2>
           
           <div className="grid grid-cols-3 gap-3">
             {reviewTypes.map((type) => {
@@ -382,28 +433,14 @@ export default function ReviewSubmitScreen() {
                   <p className={`font-medium text-sm ${isSelected ? type.textColor : "text-gray-900"}`}>
                     {type.name}
                   </p>
+                  <p className={`text-xs mt-1 ${isSelected ? type.textColor : "text-gray-500"}`}>
+                    +{type.points}P
+                  </p>
                 </button>
               );
             })}
           </div>
         </div>
-
-        {/* 선택된 유형의 요구사항 */}
-        {selectedTypeInfo && (
-          <div className={`${selectedTypeInfo.bgColor} rounded-2xl p-5 mb-6 border ${selectedTypeInfo.borderColor}`}>
-            <h3 className={`font-semibold ${selectedTypeInfo.textColor} mb-3`}>
-              📋 {selectedTypeInfo.name} 후기 조건
-            </h3>
-            <ul className="space-y-2">
-              {selectedTypeInfo.requirements.map((req, idx) => (
-                <li key={idx} className="flex items-center gap-2 text-sm text-gray-700">
-                  <CheckCircle className={`w-4 h-4 ${selectedTypeInfo.textColor}`} />
-                  {req}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
 
         {/* 신청 폼 */}
         {selectedType && (
@@ -426,26 +463,93 @@ export default function ReviewSubmitScreen() {
               </p>
             </div>
 
-            {/* 제품명 (선택) */}
+            {/* 제품명 */}
             <div className="bg-white rounded-2xl p-5 border border-gray-100">
               <Label className="text-gray-700 font-medium mb-2 block">
-                제품명 (선택)
+                제품명
               </Label>
-              <Input
-                placeholder="예: ABC 아기침대, 꿀잠 속싸개"
-                value={productName}
-                onChange={(e) => setProductName(e.target.value)}
-                className="h-12 rounded-xl border-gray-200 bg-white text-gray-900 placeholder:text-gray-400"
-              />
+              <div className="relative">
+                <Input
+                  placeholder="제품명을 검색하세요 (선택)"
+                  value={productSearch || productName}
+                  onChange={(e) => {
+                    setProductSearch(e.target.value);
+                    setProductName(e.target.value);
+                    setShowProductDropdown(true);
+                  }}
+                  onFocus={() => setShowProductDropdown(true)}
+                  className="h-12 rounded-xl border-gray-200 bg-white text-gray-900 placeholder:text-gray-400"
+                />
+                
+                {showProductDropdown && filteredProducts.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                    {filteredProducts.slice(0, 10).map((product: string, idx: number) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setProductName(product);
+                          setProductSearch(product);
+                          setShowProductDropdown(false);
+                        }}
+                        className="w-full px-4 py-3 text-left text-gray-900 hover:bg-orange-50 transition-colors border-b border-gray-100 last:border-b-0"
+                      >
+                        {product}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* 스크린샷 첨부 */}
+            {/* 구매자 정보 */}
+            <div className="bg-white rounded-2xl p-5 border border-gray-100">
+              <h3 className="font-semibold text-gray-900 mb-4">구매자 정보 *</h3>
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-gray-700 text-sm mb-1.5 block">구매자명</Label>
+                  <Input
+                    placeholder="주문 시 입력한 이름"
+                    value={buyerName}
+                    onChange={(e) => setBuyerName(e.target.value)}
+                    className="h-12 rounded-xl border-gray-200 bg-white text-gray-900 placeholder:text-gray-400"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label className="text-gray-700 text-sm mb-1.5 block">연락처</Label>
+                  <Input
+                    type="tel"
+                    placeholder="010-0000-0000"
+                    value={buyerPhone}
+                    onChange={(e) => setBuyerPhone(e.target.value)}
+                    className="h-12 rounded-xl border-gray-200 bg-white text-gray-900 placeholder:text-gray-400"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label className="text-gray-700 text-sm mb-1.5 block">구매처 (선택)</Label>
+                  <select
+                    value={purchaseChannel}
+                    onChange={(e) => setPurchaseChannel(e.target.value)}
+                    className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-white text-gray-900"
+                  >
+                    <option value="">구매처를 선택하세요</option>
+                    {purchaseChannels.map((channel) => (
+                      <option key={channel} value={channel}>{channel}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* 스크린샷 */}
             <div className="bg-white rounded-2xl p-5 border border-gray-100">
               <Label className="text-gray-700 font-medium mb-2 block">
-                스크린샷 첨부 (선택)
+                스크린샷 (선택)
               </Label>
               <p className="text-sm text-gray-500 mb-4">
-                후기 게시물의 스크린샷을 첨부하시면 더 빠른 검토가 가능합니다.
+                후기 스크린샷을 첨부하면 더 빠른 검토가 가능합니다.
               </p>
               
               <input
@@ -530,10 +634,15 @@ export default function ReviewSubmitScreen() {
                           )}
                         </div>
                       </div>
-                      <Badge className={`${status?.color} px-3 py-1 rounded-full`}>
-                        <StatusIcon className="w-3.5 h-3.5 mr-1" />
-                        {status?.label}
-                      </Badge>
+                      <div className="text-right">
+                        <Badge className={`${status?.color} px-3 py-1 rounded-full`}>
+                          <StatusIcon className="w-3.5 h-3.5 mr-1" />
+                          {status?.label}
+                        </Badge>
+                        {sub.status === "approved" && sub.points_awarded > 0 && (
+                          <p className="text-xs text-green-600 font-medium mt-1">+{sub.points_awarded}P</p>
+                        )}
+                      </div>
                     </div>
                     
                     <a 
@@ -571,11 +680,10 @@ export default function ReviewSubmitScreen() {
             <li>• 후기 인증은 1~2 영업일 내 검토됩니다</li>
             <li>• 조건 미충족 시 반려될 수 있습니다</li>
             <li>• 동일한 후기는 중복 신청이 불가합니다</li>
-            <li>• 승인 결과는 카카오톡으로 안내드립니다</li>
+            <li>• 승인 시 포인트가 자동 적립됩니다</li>
           </ul>
         </div>
       </div>
     </div>
   );
 }
-

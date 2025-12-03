@@ -13,8 +13,6 @@ import {
   MessageSquare,
   Instagram,
   FileText,
-  User,
-  Calendar,
   Image as ImageIcon,
   Filter,
   RefreshCw
@@ -338,19 +336,38 @@ export default function AdminReviewListScreen() {
 
                 {/* 상세 정보 */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  {/* 신청자 정보 */}
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <User className="w-4 h-4 text-gray-400" />
-                    <span>{profile?.name || "이름 없음"}</span>
-                    {profile?.phone && (
-                      <span className="text-gray-400">({profile.phone})</span>
-                    )}
+                  {/* 구매자 정보 (인증용) */}
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <p className="text-xs text-blue-600 font-medium mb-2">📋 구매자 인증 정보</p>
+                    <div className="space-y-1 text-sm">
+                      <p className="text-gray-700">
+                        <span className="text-gray-500">구매자:</span> {sub.buyer_name || "-"}
+                      </p>
+                      <p className="text-gray-700">
+                        <span className="text-gray-500">연락처:</span> {sub.buyer_phone || "-"}
+                      </p>
+                      {sub.purchase_channel && (
+                        <p className="text-gray-700">
+                          <span className="text-gray-500">구매처:</span> {sub.purchase_channel}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   
-                  {/* 신청일 */}
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Calendar className="w-4 h-4 text-gray-400" />
-                    <span>{new Date(sub.created_at).toLocaleString("ko-KR")}</span>
+                  {/* 신청자 정보 (회원 정보) */}
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <p className="text-xs text-gray-500 font-medium mb-2">👤 신청 회원 정보</p>
+                    <div className="space-y-1 text-sm">
+                      <p className="text-gray-700">
+                        <span className="text-gray-500">회원명:</span> {profile?.name || "미등록"}
+                      </p>
+                      <p className="text-gray-700">
+                        <span className="text-gray-500">연락처:</span> {profile?.phone || "-"}
+                      </p>
+                      <p className="text-gray-700">
+                        <span className="text-gray-500">신청일:</span> {new Date(sub.created_at).toLocaleString("ko-KR")}
+                      </p>
+                    </div>
                   </div>
                 </div>
 

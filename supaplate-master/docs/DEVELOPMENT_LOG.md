@@ -4,6 +4,123 @@
 
 ---
 
+## 📅 2025년 12월 3일 (수) - 후기 이벤트 시스템 구축
+
+### 🎯 주요 작업 내용
+
+#### 1. 후기 이벤트 시스템 (이벤트 ↔ 일반 후기 분리)
+
+**이벤트 후기 시스템** (`/customer/event/review`)
+- 진행 중인 이벤트 자동 조회 (날짜 기반)
+- **제품별 사은품 1:1 매칭** UI
+  - 백색소음기 후기 → 속싸개 L 사이즈
+  - 슬리핑백 후기 → 아동용 후드티
+  - 꿀잠 속싸개 후기 → 슬리핑백 S 사이즈
+  - 신생아 스와들 후기 → 신생아 꼭지모자
+  - 데일리 의류 후기 → 무릎 보호대
+- 사은품 안내, 참여 방법, 유의사항 표시
+- **배송지 입력**: Daum 우편번호 API 연동
+- 프로필에 배송지 자동 저장
+
+**일반 후기 시스템** (`/customer/mypage/review-submit`)
+- 포인트만 지급 (이벤트/사은품 없음)
+- 맘카페/인스타/블로그 후기 제출
+- 제품 자동완성 검색
+- 구매자 정보 확인
+
+#### 2. Daum 우편번호 API 연동
+- 무료 API (Key 발급 불필요)
+- 스크립트 동적 로딩
+- 우편번호, 도로명 주소 자동 입력
+- 상세 주소 포커스 자동 이동
+
+#### 3. 관리자 대시보드 - 이벤트 관리
+- `/dashboard/events` - 이벤트 목록
+- `/dashboard/events/new` - 이벤트 생성
+- `/dashboard/events/:id` - 이벤트 수정
+- `/dashboard/events/:id/submissions` - 참여자 관리
+
+#### 4. 포인트 시스템 기반
+- 프로필에 `points` 필드 추가
+- 마이페이지에 "내 포인트" 카드 추가
+- 후기 승인 시 포인트 지급 예정
+
+---
+
+### 🔧 수정/추가된 파일
+
+```
+신규 파일:
+app/features/customer/screens/event-review.tsx       # 이벤트 후기 참여 페이지
+app/features/customer/screens/mypage/points.tsx     # 포인트 내역 페이지
+app/features/review/screens/admin/event-list.tsx    # 이벤트 관리 목록
+app/features/review/screens/admin/event-form.tsx    # 이벤트 생성/수정
+app/features/review/screens/admin/event-submissions.tsx  # 참여자 관리
+
+수정 파일:
+app/features/customer/screens/home.tsx              # 이벤트 버튼 링크 변경
+app/features/customer/screens/mypage/index.tsx      # 포인트 카드 추가
+app/features/customer/screens/mypage/review-submit.tsx  # 일반 후기 전용으로 단순화
+app/features/review/screens/admin/review-list.tsx   # 이벤트 정보 표시
+app/features/users/components/dashboard-sidebar.tsx # 이벤트 관리 메뉴
+app/routes.ts                                       # 신규 라우트 추가
+```
+
+---
+
+### 🗃️ DB 변경사항
+
+```sql
+-- 이벤트 관련 테이블
+CREATE TABLE review_events (...);
+CREATE TABLE review_event_products (...);
+CREATE TABLE review_event_gifts (...);
+
+-- 포인트 시스템
+CREATE TABLE point_transactions (...);
+ALTER TABLE profiles ADD COLUMN points INTEGER DEFAULT 0;
+ALTER TABLE profiles ADD COLUMN address TEXT;
+ALTER TABLE profiles ADD COLUMN address_detail TEXT;
+ALTER TABLE profiles ADD COLUMN zipcode TEXT;
+
+-- 후기 제출 확장
+ALTER TABLE review_submissions ADD COLUMN event_id UUID;
+ALTER TABLE review_submissions ADD COLUMN event_product_id UUID;
+ALTER TABLE review_submissions ADD COLUMN selected_gift_id UUID;
+ALTER TABLE review_submissions ADD COLUMN reward_points INTEGER;
+ALTER TABLE review_submissions ADD COLUMN gift_status TEXT;
+ALTER TABLE review_submissions ADD COLUMN tracking_number TEXT;
+ALTER TABLE review_submissions ADD COLUMN shipping_* (배송지 필드들);
+
+-- 테스트 이벤트 데이터
+INSERT INTO review_events (12월 ABC 아기침대 후기 이벤트, 12월 맘카페 후기 이벤트);
+INSERT INTO review_event_products (5개 제품);
+INSERT INTO review_event_gifts (7개 사은품, 제품별 1:1 매칭);
+```
+
+---
+
+### ✅ 완료된 TODO
+
+- [x] 이벤트 후기 / 일반 후기 분리
+- [x] 제품별 사은품 1:1 매칭 UI
+- [x] Daum 우편번호 API 연동
+- [x] 배송지 프로필 저장
+- [x] 포인트 시스템 기반 구축
+- [x] 관리자 이벤트 관리 대시보드
+- [x] 테스트 이벤트 데이터 생성
+
+---
+
+### 🔜 향후 작업 예정
+
+- [ ] 후기 승인 시 포인트 자동 지급
+- [ ] 사은품 배송 처리 (송장번호 업로드)
+- [ ] 포인트 적립/사용 내역 페이지
+- [ ] 회원 등급 시스템 구현
+
+---
+
 ## 📅 2025년 12월 3일 (화) - 야간 작업
 
 ### 🎯 블로그 대량 업로드 및 Feature Flags 시스템

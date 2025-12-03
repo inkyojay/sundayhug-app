@@ -14,8 +14,14 @@ import {
   FileText,
   User,
   ChevronRight,
-  Gift
+  Gift,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Coins
 } from "lucide-react";
+
+import { Badge } from "~/core/components/ui/badge";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
@@ -41,6 +47,27 @@ export async function loader({ request }: Route.LoaderArgs) {
     .eq("id", user.id)
     .single();
   
+  // 후기 인증 내역 가져오기 (최근 3개)
+  const { data: reviewSubmissions } = await supabase
+    .from("review_submissions")
+    .select("id, review_type, product_name, status, created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(3);
+  
+  // 후기 통계
+  const { data: reviewStats } = await supabase
+    .from("review_submissions")
+    .select("status")
+    .eq("user_id", user.id);
+  
+  const reviewCounts = {
+    total: reviewStats?.length || 0,
+    pending: reviewStats?.filter(r => r.status === "pending").length || 0,
+    approved: reviewStats?.filter(r => r.status === "approved").length || 0,
+    rejected: reviewStats?.filter(r => r.status === "rejected").length || 0,
+  };
+  
   // 이름에서 first name 추출 (한글이면 전체, 영문이면 첫 단어)
   const fullName = profile?.name || user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split("@")[0] || "회원";
   const firstName = fullName.includes(" ") ? fullName.split(" ")[0] : fullName;
@@ -54,12 +81,27 @@ export async function loader({ request }: Route.LoaderArgs) {
       phone: profile?.phone,
       avatarUrl: user.user_metadata?.avatar_url || profile?.kakao_profile_image,
       isVip: true,
+      points: profile?.points || 0,
     },
+    reviewSubmissions: reviewSubmissions || [],
+    reviewCounts,
   });
 }
 
+const reviewTypeLabels: Record<string, string> = {
+  momcafe: "맘카페",
+  instagram: "인스타",
+  blog: "블로그",
+};
+
+const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
+  pending: { label: "대기중", color: "bg-yellow-100 text-yellow-700", icon: Clock },
+  approved: { label: "승인", color: "bg-green-100 text-green-700", icon: CheckCircle },
+  rejected: { label: "반려", color: "bg-red-100 text-red-700", icon: XCircle },
+};
+
 export default function CustomerMypageIndexScreen() {
-  const { user } = useLoaderData<typeof loader>();
+  const { user, reviewSubmissions, reviewCounts } = useLoaderData<typeof loader>();
 
   return (
     <div className="min-h-screen bg-[#F5F5F0]">
@@ -196,7 +238,7 @@ export default function CustomerMypageIndexScreen() {
 
           {/* 후기 인증 - Small White Card with Gradient */}
           <Link 
-            to="/customer/mypage/review"
+            to="/customer/mypage/review-submit"
             className="group"
           >
             <div className="h-full min-h-[130px] md:min-h-[170px] bg-gradient-to-br from-pink-500 to-orange-400 rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02]">
@@ -209,12 +251,105 @@ export default function CustomerMypageIndexScreen() {
                 </div>
               </div>
               
-              <h3 className="text-white text-lg md:text-xl font-bold">
-                후기 인증
-              </h3>
+              <div>
+                <h3 className="text-white text-lg md:text-xl font-bold">
+                  후기 인증
+                </h3>
+                {reviewCounts.total > 0 && (
+                  <p className="text-white/80 text-xs mt-1">
+                    {reviewCounts.pending > 0 && `대기 ${reviewCounts.pending}건`}
+                    {reviewCounts.pending > 0 && reviewCounts.approved > 0 && " · "}
+                    {reviewCounts.approved > 0 && `승인 ${reviewCounts.approved}건`}
+                  </p>
+                )}
+              </div>
+            </div>
+          </Link>
+
+          {/* 포인트 - Small Card with Gold Gradient */}
+          <Link 
+            to="/customer/mypage/points"
+            className="group"
+          >
+            <div className="h-full min-h-[130px] md:min-h-[170px] bg-gradient-to-br from-amber-400 to-yellow-500 rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02]">
+              <div className="flex justify-between items-start">
+                <p className="text-white/90 text-xs font-medium tracking-wider uppercase">
+                  Points
+                </p>
+                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                  <Coins className="w-5 h-5 text-white" />
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="text-white text-2xl md:text-3xl font-bold">
+                  {user.points.toLocaleString()}
+                  <span className="text-lg ml-1">P</span>
+                </h3>
+                <p className="text-white/80 text-xs mt-1">
+                  포인트 내역 보기
+                </p>
+              </div>
             </div>
           </Link>
         </div>
+
+        {/* 후기 인증 내역 섹션 */}
+        {reviewSubmissions.length > 0 && (
+          <div className="mt-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">후기 인증 내역</h2>
+              <Link 
+                to="/customer/mypage/review-submit"
+                className="text-sm text-[#FF6B35] font-medium hover:underline flex items-center gap-1"
+              >
+                전체보기 <ChevronRight className="w-4 h-4" />
+              </Link>
+            </div>
+            
+            <div className="space-y-3">
+              {reviewSubmissions.map((submission: any) => {
+                const status = statusConfig[submission.status as keyof typeof statusConfig];
+                const StatusIcon = status?.icon || Clock;
+                
+                return (
+                  <Link
+                    key={submission.id}
+                    to="/customer/mypage/review-submit"
+                    className="block bg-white rounded-2xl p-4 border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-pink-50 rounded-full flex items-center justify-center">
+                          <Gift className="w-5 h-5 text-pink-500" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {reviewTypeLabels[submission.review_type] || submission.review_type}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {submission.product_name || "제품 미지정"}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <Badge className={`${status?.color} px-2.5 py-1 rounded-full text-xs font-medium`}>
+                          <StatusIcon className="w-3 h-3 mr-1" />
+                          {status?.label}
+                        </Badge>
+                      </div>
+                    </div>
+                    
+                    <p className="text-xs text-gray-400 mt-2">
+                      {new Date(submission.created_at).toLocaleDateString("ko-KR")} 신청
+                    </p>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

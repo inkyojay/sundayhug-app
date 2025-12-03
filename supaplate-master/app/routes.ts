@@ -100,6 +100,9 @@ export default [
         route("/view/:id", "features/warranty/screens/public/view.tsx"),
       ]),
       
+      // 이벤트 후기 (사은품)
+      route("/event/review", "features/customer/screens/event-review.tsx"),
+      
       // 수면 분석 허브
       ...prefix("/sleep", [
         index("features/customer/screens/sleep-hub.tsx"),
@@ -136,7 +139,8 @@ export default [
         route("/warranty/:id", "features/customer/screens/mypage/warranty-detail.tsx"),
         route("/analyses", "features/customer/screens/mypage/analyses.tsx"),
         route("/as", "features/customer/screens/mypage/as-list.tsx"),
-        route("/review", "features/customer/screens/mypage/review-submit.tsx"),
+        route("/review-submit", "features/customer/screens/mypage/review-submit.tsx"),
+        route("/points", "features/customer/screens/mypage/points.tsx"),
       ]),
       
       // A/S 신청
@@ -249,8 +253,16 @@ export default [
         ]),
         
         // 후기 인증 관리 (관리자용)
-        ...prefix("/review", [
+        ...prefix("/reviews", [
           index("features/review/screens/admin/review-list.tsx"),
+        ]),
+        
+        // 후기 이벤트 관리 (관리자용)
+        ...prefix("/events", [
+          index("features/review/screens/admin/event-list.tsx"),
+          route("/new", "features/review/screens/admin/event-form.tsx", { id: "event-new" }),
+          route("/:id", "features/review/screens/admin/event-form.tsx", { id: "event-edit" }),
+          route("/:id/submissions", "features/review/screens/admin/event-submissions.tsx"),
         ]),
       ]),
       

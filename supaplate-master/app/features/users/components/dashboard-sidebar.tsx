@@ -15,6 +15,7 @@ import {
   BookOpenIcon,
   BoxIcon,
   FolderTreeIcon,
+  GiftIcon,
   LayoutDashboardIcon,
   MegaphoneIcon,
   MessageSquareIcon,
@@ -22,6 +23,7 @@ import {
   Settings2Icon,
   ShieldCheckIcon,
   ShoppingCartIcon,
+  StarIcon,
   StoreIcon,
   ToggleLeftIcon,
   TruckIcon,
@@ -155,13 +157,28 @@ const data = {
       ],
     },
     {
-      title: "후기 관리",
-      url: "/dashboard/review",
-      icon: MessageSquareIcon,
+      title: "후기 이벤트",
+      url: "/dashboard/events",
+      icon: GiftIcon,
       items: [
         {
-          title: "후기 인증",
-          url: "/dashboard/review",
+          title: "이벤트 관리",
+          url: "/dashboard/events",
+        },
+        {
+          title: "새 이벤트",
+          url: "/dashboard/events/new",
+        },
+      ],
+    },
+    {
+      title: "후기 인증",
+      url: "/dashboard/reviews",
+      icon: StarIcon,
+      items: [
+        {
+          title: "인증 관리",
+          url: "/dashboard/reviews",
         },
       ],
     },

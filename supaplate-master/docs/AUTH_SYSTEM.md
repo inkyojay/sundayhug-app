@@ -251,3 +251,4 @@ SITE_URL=http://localhost:3000  # 로컬
 - [카카오 로그인 연동](https://supabase.com/docs/guides/auth/social-login/auth-kakao)
 
 
+

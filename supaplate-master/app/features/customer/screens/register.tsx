@@ -270,7 +270,7 @@ export default function CustomerRegisterScreen() {
                 placeholder="example@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-14 rounded-2xl border-gray-200 bg-white px-4 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
+                className="h-14 rounded-2xl border-gray-200 bg-white px-4 text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
               />
             </div>
             
@@ -284,7 +284,7 @@ export default function CustomerRegisterScreen() {
                 placeholder="6자 이상"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="h-14 rounded-2xl border-gray-200 bg-white px-4 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
+                className="h-14 rounded-2xl border-gray-200 bg-white px-4 text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
               />
             </div>
             
@@ -298,7 +298,7 @@ export default function CustomerRegisterScreen() {
                 placeholder="비밀번호 재입력"
                 value={passwordConfirm}
                 onChange={(e) => setPasswordConfirm(e.target.value)}
-                className="h-14 rounded-2xl border-gray-200 bg-white px-4 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
+                className="h-14 rounded-2xl border-gray-200 bg-white px-4 text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
               />
             </div>
             
@@ -312,7 +312,7 @@ export default function CustomerRegisterScreen() {
                 placeholder="이름"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="h-14 rounded-2xl border-gray-200 bg-white px-4 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
+                className="h-14 rounded-2xl border-gray-200 bg-white px-4 text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
               />
             </div>
 
@@ -340,7 +340,7 @@ export default function CustomerRegisterScreen() {
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(formatPhoneNumber(e.target.value))}
                 maxLength={13}
-                className="h-14 rounded-2xl border-gray-200 bg-white px-4 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
+                className="h-14 rounded-2xl border-gray-200 bg-white px-4 text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
               />
               <p className="text-xs text-gray-400 mt-2">
                 전화번호는 A/S 신청 등에 사용됩니다. 나중에 입력해도 됩니다.

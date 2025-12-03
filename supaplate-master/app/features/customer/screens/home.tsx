@@ -7,7 +7,6 @@
  */
 import type { Route } from "./+types/home";
 
-import { useState } from "react";
 import { Link, useLoaderData, data } from "react-router";
 import { 
   ShieldCheck, 
@@ -15,10 +14,7 @@ import {
   MessageCircleQuestion,
   ChevronRight,
   Sparkles,
-  Gift,
-  X,
-  Baby,
-  Package
+  Gift
 } from "lucide-react";
 
 import { Button } from "~/core/components/ui/button";
@@ -62,15 +58,6 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function CustomerHomeScreen() {
   const { isLoggedIn, firstName, features } = useLoaderData<typeof loader>();
-  const [showEventModal, setShowEventModal] = useState(false);
-
-  const handleEventSelect = (type: 'abc' | 'other') => {
-    const url = type === 'abc' 
-      ? 'https://www.sundayhug.kr/event/momcafe-abc.html'
-      : 'https://www.sundayhug.kr/event/momcafe.html';
-    window.open(url, '_blank');
-    setShowEventModal(false);
-  };
 
   return (
     <div className="min-h-screen bg-[#F5F5F0]">
@@ -101,12 +88,12 @@ export default function CustomerHomeScreen() {
           </p>
         </div>
 
-        {/* 후기 이벤트 버튼 - 맨 위 */}
-        <div className="mb-4 md:mb-5">
-          <button
-            onClick={() => setShowEventModal(true)}
-            className="w-full bg-white border border-gray-200 rounded-2xl p-5 hover:bg-gray-50 hover:border-gray-300 transition-all duration-300 hover:shadow-md group"
-          >
+        {/* 후기 이벤트 버튼 - 이벤트 전용 페이지로 연결 */}
+        <Link 
+          to={isLoggedIn ? "/customer/event/review" : "/customer/login?redirect=/customer/event/review"}
+          className="block mb-4 md:mb-5"
+        >
+          <div className="w-full bg-white border border-gray-200 rounded-2xl p-5 hover:bg-gray-50 hover:border-gray-300 transition-all duration-300 hover:shadow-md group">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-[#FF6B35]/10 rounded-full flex items-center justify-center">
@@ -119,8 +106,8 @@ export default function CustomerHomeScreen() {
               </div>
               <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
             </div>
-          </button>
-        </div>
+          </div>
+        </Link>
 
         {/* 처음이신가요? / 마이페이지 카드 */}
         {isLoggedIn ? (
@@ -353,77 +340,6 @@ export default function CustomerHomeScreen() {
         </div>
 
       </div>
-
-      {/* 제품 선택 모달 */}
-      {showEventModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* 백드롭 */}
-          <div 
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setShowEventModal(false)}
-          />
-          
-          {/* 모달 */}
-          <div className="relative bg-white rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
-            {/* 닫기 버튼 */}
-            <button
-              onClick={() => setShowEventModal(false)}
-              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-400" />
-            </button>
-
-            {/* 헤더 */}
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-[#FF6B35]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Gift className="w-8 h-8 text-[#FF6B35]" />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900">후기 이벤트 참여</h3>
-              <p className="text-gray-500 mt-2">참여하실 제품을 선택해주세요</p>
-            </div>
-
-            {/* 선택 버튼들 */}
-            <div className="space-y-3">
-              <button
-                onClick={() => handleEventSelect('abc')}
-                className="w-full p-5 bg-gray-50 hover:bg-gray-100 rounded-2xl border border-gray-200 hover:border-gray-300 transition-all duration-200 group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-[#1A1A1A] rounded-xl flex items-center justify-center">
-                    <Baby className="w-6 h-6 text-white" />
-                  </div>
-                  <div className="text-left flex-1">
-                    <h4 className="font-bold text-gray-900 text-lg">ABC 아기침대</h4>
-                    <p className="text-gray-500 text-sm">ABC 아기침대 후기 이벤트</p>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleEventSelect('other')}
-                className="w-full p-5 bg-gray-50 hover:bg-gray-100 rounded-2xl border border-gray-200 hover:border-gray-300 transition-all duration-200 group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-[#FF6B35] rounded-xl flex items-center justify-center">
-                    <Package className="w-6 h-6 text-white" />
-                  </div>
-                  <div className="text-left flex-1">
-                    <h4 className="font-bold text-gray-900 text-lg">기타 다른 제품</h4>
-                    <p className="text-gray-500 text-sm">슬리핑백, 속싸개, 백색소음기 등</p>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
-                </div>
-              </button>
-            </div>
-
-            {/* 안내 문구 */}
-            <p className="text-center text-xs text-gray-400 mt-6">
-              선택하시면 해당 이벤트 페이지가 새 창에서 열립니다
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
