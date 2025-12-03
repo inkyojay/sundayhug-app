@@ -285,13 +285,14 @@ export function AnalysisResult({
           )}
         </Button>
 
-        <Button 
+        {/* 카카오톡 공유 - 임시 비활성화 */}
+        {/* <Button 
           onClick={handleKakaoShare}
           className="rounded-xl bg-[#FEE500] text-[#3C1E1E] hover:bg-[#FDD835]"
         >
           <MessageCircle className="mr-2 h-4 w-4" />
           카카오톡 공유
-        </Button>
+        </Button> */}
 
         {onDownloadSlides && (
           <Button 
@@ -434,7 +435,7 @@ export function AnalysisResult({
               </span>
             </h3>
 
-            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+            <div className="space-y-3">
               {report.feedbackItems.map((item) => {
                 const risk = riskConfig[item.riskLevel as keyof typeof riskConfig] || riskConfig["낮음"];
                 const RiskIcon = risk.icon;
@@ -508,7 +509,7 @@ export function AnalysisResult({
       {/* 안내 메시지 */}
       <div className="bg-gray-100 rounded-2xl p-4 text-center">
         <p className="text-gray-600 text-sm">
-          ⚠️ AI 분석 결과는 참고용이며, 전문가 상담을 권장합니다.
+          ⚠️ AI 분석 결과는 참고용이며,<br className="md:hidden" /> 전문가 상담을 권장합니다.
         </p>
       </div>
     </div>

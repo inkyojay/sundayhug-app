@@ -533,8 +533,7 @@ export default function WarrantyRegister() {
             </div>
 
             <Button
-              variant="outline"
-              className="h-12 rounded-xl px-8"
+              className="h-12 rounded-xl px-8 bg-gray-900 text-white hover:bg-gray-800"
               onClick={() => navigate("/customer")}
             >
               홈으로 돌아가기
