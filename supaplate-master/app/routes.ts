@@ -246,9 +246,6 @@ export default [
         ...prefix("/chat", [
           route("/knowledge", "features/chat/screens/admin/knowledge-list.tsx"),
         ]),
-        
-        // Feature Flags 관리
-        route("/feature-flags", "features/settings/screens/feature-flags.tsx"),
       ]),
       
       // 계정 설정

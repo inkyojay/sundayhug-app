@@ -196,10 +196,6 @@ const data = {
       icon: Settings2Icon,
       items: [
         {
-          title: "Feature Flags",
-          url: "/dashboard/feature-flags",
-        },
-        {
           title: "계정 설정",
           url: "/account/edit",
         },
