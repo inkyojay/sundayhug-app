@@ -4,6 +4,127 @@
 
 ---
 
+## 📅 2025년 12월 4일 (목) - AI 상담 개선, 수면분석 결과 개선, 후기 이벤트 보증서 연동
+
+### 🎯 주요 작업 내용
+
+#### 1. AI 육아 상담 대폭 개선
+
+**자연스러운 대화체 프롬프트**
+- 마크다운 문법(###, **, -, 1. 2. 3.) 완전 제거
+- 선배 엄마가 카톡으로 조언하는 느낌의 말투
+- 짧은 문단 (2~3문장씩)으로 읽기 편하게
+- 이모지는 답변 끝에 하나만 자연스럽게
+
+**대화 맥락 유지 (세션 메모리)**
+- 세션별 메시지를 Supabase에 저장
+- AI에게 최근 10개 메시지를 컨텍스트로 전달
+- "아까 말한 거" 같은 맥락 참조 가능
+
+**채팅 UI 개선**
+- 데스크탑: max-w-2xl (672px) 중앙 정렬, 카드 형태
+- AI 메시지에 "AI 육아 상담사" 라벨 추가
+- 아기 정보 없으면 먼저 입력 유도 (프로필 저장)
+
+#### 2. 수면 분석 결과 개선
+
+**분석 결과 조회 페이지 개선**
+- 분석 페이지와 동일한 UI 사용 (AnalysisResult 컴포넌트 재사용)
+- 사진, 종합분석, 세부분석 모두 표시
+- 이미지로 저장하기 버튼 추가
+
+**이미지 저장 기능**
+- "이미지 저장" 버튼 제거
+- "인스타 슬라이드" → "이미지로 저장하기"로 이름 변경
+- 로딩 메시지: "이미지 생성 중... 잠시만 기다려주세요"
+- 모바일: Web Share API로 사진첩 저장 지원
+
+**기타 수정**
+- 사진 용도 안내 문구: "업로드된 사진은 분석 사용 용도로만 이용됩니다"
+- image_base64도 DB에 저장 (스토리지 실패 대비)
+- feedbackItems를 summary JSON에서 추출하도록 수정
+
+#### 3. 후기 이벤트 보증서 연동
+
+**보증서 연동 플로우**
+- ABC 아기침대 선택 시 보증서 연동 섹션 표시
+- 보증서 없으면: 인라인 보증서 등록 폼 (화면 전환 없음)
+- 보증서 있으면: 기존 보증서 선택 UI
+- 등록 완료 시 즉시 목록에 반영
+
+**제출 완료 화면**
+- 전체 화면 완료 페이지로 전환
+- 성공 아이콘 (bounce 애니메이션)
+- 진행 안내: 관리자 검토 → 승인 알림 → 사은품 발송
+- 마이페이지 확인 / 홈으로 돌아가기 버튼
+
+#### 4. 보증서 등록 개선
+
+**제품 선택 단계 추가**
+- 보증서 등록 전 제품 선택 (현재 ABC 아기침대만)
+- 선택한 제품에 맞는 안내 문구 표시
+
+#### 5. UI 수정
+
+**홈 화면**
+- "썬데이허그 구매 후기 이벤트 참여" → "구매 후기 이벤트 참여"
+- 회원가입 버튼 다크모드 가시성 수정
+
+---
+
+### 🔧 수정/추가된 파일
+
+```
+수정 파일:
+app/features/chat/api/send-message.tsx        # 자연스러운 프롬프트, 대화 맥락 유지
+app/features/chat/screens/chat-room.tsx       # 데스크탑 UI, 아기 정보 입력 플로우
+app/features/customer/screens/event-review.tsx # 보증서 연동, 제출 완료 화면
+app/features/customer/screens/home.tsx        # 버튼 텍스트 수정
+app/features/sleep-analysis/components/analysis-result.tsx  # 버튼 변경
+app/features/sleep-analysis/components/upload-form.tsx      # 사진 용도 문구
+app/features/sleep-analysis/lib/sleep-analysis.server.ts    # image_base64 저장
+app/features/sleep-analysis/screens/analyze.tsx             # 다운로드 함수
+app/features/sleep-analysis/screens/analyze-public.tsx      # 다운로드 함수
+app/features/sleep-analysis/screens/result.tsx              # 동일 UI 재사용
+app/features/warranty/screens/public/register.tsx           # 제품 선택 단계
+```
+
+---
+
+### 🗃️ DB 변경사항
+
+```sql
+-- review_submissions에 보증서 연동
+ALTER TABLE review_submissions ADD COLUMN warranty_id UUID REFERENCES warranties(id);
+CREATE INDEX idx_review_submissions_warranty_id ON review_submissions(warranty_id);
+```
+
+---
+
+### ✅ 완료된 TODO
+
+- [x] AI 상담 자연스러운 대화체 프롬프트
+- [x] AI 상담 대화 맥락 유지 (세션 메모리)
+- [x] 채팅 UI 데스크탑 개선
+- [x] 아기 정보 없으면 먼저 입력 유도
+- [x] 수면 분석 결과 조회 UI 개선
+- [x] 이미지로 저장하기 버튼 (인스타 슬라이드)
+- [x] 후기 이벤트 보증서 연동
+- [x] 보증서 인라인 등록
+- [x] 후기 제출 완료 전체 화면
+- [x] 보증서 등록 제품 선택 단계
+
+---
+
+### 🔜 향후 작업 예정
+
+- [ ] 모바일 이미지 다운로드 사진첩 저장 개선
+- [ ] AI 상담 음성 입력/출력
+- [ ] 후기 승인 시 포인트 자동 지급
+- [ ] 사은품 배송 처리
+
+---
+
 ## 📅 2025년 12월 3일 (수) - 후기 이벤트 시스템 구축
 
 ### 🎯 주요 작업 내용
@@ -448,5 +569,5 @@ CREATE TABLE referral_logs (...);
 
 ---
 
-*마지막 업데이트: 2025-12-03*
+*마지막 업데이트: 2025-12-04*
 
