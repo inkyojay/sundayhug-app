@@ -148,7 +148,7 @@ export default function CustomerHomeScreen() {
                   <Gift className="w-6 h-6 text-[#FF6B35]" />
                 </div>
                 <div className="text-left">
-                  <h4 className="font-bold text-gray-900 text-lg">썬데이허그 구매 후기 이벤트 참여</h4>
+                  <h4 className="font-bold text-gray-900 text-lg">구매 후기 이벤트 참여</h4>
                   <p className="text-gray-500 text-sm mt-1">맘카페 후기 작성하고 사은품 받으세요!</p>
                 </div>
               </div>
