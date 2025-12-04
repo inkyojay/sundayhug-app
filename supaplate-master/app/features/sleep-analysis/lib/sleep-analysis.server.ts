@@ -73,6 +73,7 @@ export async function saveSleepAnalysis(
       birth_date: metadata.birthDate,
       age_in_months: metadata.ageInMonths,
       image_url: imageUrl,
+      image_base64: metadata.imageBase64, // 이미지 base64도 저장 (storage 실패 대비)
       summary: summaryJson,
       user_id: metadata.userId,
     })

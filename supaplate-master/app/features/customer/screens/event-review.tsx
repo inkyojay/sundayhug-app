@@ -63,9 +63,18 @@ export async function loader({ request }: Route.LoaderArgs) {
     .or(`end_date.is.null,end_date.gte.${today}`)
     .order("created_at", { ascending: false });
 
+  // 사용자의 승인된 보증서 목록 조회
+  const { data: warranties } = await supabase
+    .from("warranties")
+    .select("id, warranty_number, product_name, buyer_name, status, created_at")
+    .eq("user_id", user.id)
+    .eq("status", "approved")
+    .order("created_at", { ascending: false });
+
   return data({ 
     events: events || [],
     profile: profile || null,
+    warranties: warranties || [],
   });
 }
 
@@ -78,6 +87,55 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
+  const actionType = formData.get("actionType") as string;
+
+  // 보증서 등록 처리
+  if (actionType === "registerWarranty") {
+    const customerName = formData.get("warrantyName") as string;
+    const phone = formData.get("warrantyPhone") as string;
+    const purchaseDate = formData.get("warrantyPurchaseDate") as string;
+    const photoUrl = formData.get("warrantyPhotoUrl") as string;
+    const productName = formData.get("warrantyProductName") as string;
+
+    if (!customerName || !phone) {
+      return { success: false, error: "이름과 연락처를 입력해주세요.", warrantyError: true };
+    }
+
+    const normalizedPhone = phone.replace(/-/g, "");
+
+    // 보증서 번호 생성
+    const { data: warrantyNumber } = await supabase.rpc("generate_warranty_number");
+
+    const { data: warranty, error } = await supabase
+      .from("warranties")
+      .insert({
+        warranty_number: warrantyNumber || `SH-W-${Date.now()}`,
+        user_id: user.id,
+        buyer_name: customerName,
+        customer_phone: normalizedPhone,
+        product_name: productName || "ABC 이동식 아기침대",
+        order_date: purchaseDate ? new Date(purchaseDate).toISOString().split("T")[0] : null,
+        status: "pending",
+        product_photo_url: photoUrl || null,
+        photo_uploaded_at: photoUrl ? new Date().toISOString() : null,
+      })
+      .select("id, warranty_number")
+      .single();
+
+    if (error) {
+      console.error("보증서 등록 오류:", error);
+      return { success: false, error: "보증서 등록 중 오류가 발생했습니다.", warrantyError: true };
+    }
+
+    return { 
+      success: true, 
+      warrantyRegistered: true,
+      newWarrantyId: warranty?.id,
+      newWarrantyNumber: warranty?.warranty_number,
+      message: "보증서 등록이 완료되었습니다! 이제 후기를 제출해주세요." 
+    };
+  }
+
   const reviewUrl = formData.get("reviewUrl") as string;
   const mallScreenshotUrls = formData.get("mallScreenshotUrls") as string;
   const screenshotUrls = formData.get("screenshotUrls") as string;
@@ -91,6 +149,7 @@ export async function action({ request }: Route.ActionArgs) {
   const eventProductId = formData.get("eventProductId") as string;
   const selectedGiftId = formData.get("selectedGiftId") as string;
   const productName = formData.get("productName") as string;
+  const warrantyId = formData.get("warrantyId") as string;
   
   // 배송지
   const shippingName = formData.get("shippingName") as string;
@@ -158,6 +217,7 @@ export async function action({ request }: Route.ActionArgs) {
       event_id: eventId,
       event_product_id: eventProductId || null,
       selected_gift_id: selectedGiftId || null,
+      warranty_id: warrantyId || null, // 보증서 연동
       // 배송지
       shipping_name: shippingName,
       shipping_phone: shippingPhone.replace(/-/g, ""),
@@ -206,10 +266,11 @@ declare global {
 }
 
 export default function EventReviewScreen() {
-  const { events, profile } = useLoaderData<typeof loader>();
+  const { events, profile, warranties } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mallFileInputRef = useRef<HTMLInputElement>(null);
+  const warrantyFileInputRef = useRef<HTMLInputElement>(null);
   
   // 이벤트/제품/사은품 선택
   const [selectedEventId, setSelectedEventId] = useState<string | null>(
@@ -217,6 +278,16 @@ export default function EventReviewScreen() {
   );
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedGiftId, setSelectedGiftId] = useState<string | null>(null);
+  
+  // 보증서 관련
+  const [selectedWarrantyId, setSelectedWarrantyId] = useState<string | null>(null);
+  const [warrantyMode, setWarrantyMode] = useState<"select" | "register" | null>(null);
+  const [warrantyName, setWarrantyName] = useState(profile?.name || "");
+  const [warrantyPhone, setWarrantyPhone] = useState(profile?.phone || "");
+  const [warrantyPurchaseDate, setWarrantyPurchaseDate] = useState("");
+  const [warrantyPhoto, setWarrantyPhoto] = useState<{ file: File; preview: string } | null>(null);
+  const [isWarrantyUploading, setIsWarrantyUploading] = useState(false);
+  const [localWarranties, setLocalWarranties] = useState(warranties);
   
   // 폼 입력
   const [reviewUrl, setReviewUrl] = useState("");
@@ -249,6 +320,110 @@ export default function EventReviewScreen() {
   const selectedEvent = events.find((e: any) => e.id === selectedEventId);
   const eventProducts = selectedEvent?.review_event_products || [];
   const eventGifts = selectedEvent?.review_event_gifts || [];
+
+  // 보증서 등록 완료 시 localWarranties 업데이트
+  useEffect(() => {
+    if (fetcherData?.warrantyRegistered && fetcherData?.newWarrantyId) {
+      const newWarranty = {
+        id: fetcherData.newWarrantyId,
+        warranty_number: fetcherData.newWarrantyNumber,
+        product_name: "ABC 이동식 아기침대",
+        buyer_name: warrantyName,
+        status: "pending",
+        created_at: new Date().toISOString(),
+      };
+      setLocalWarranties((prev: any) => [newWarranty, ...prev]);
+      setSelectedWarrantyId(fetcherData.newWarrantyId);
+      setWarrantyMode("select");
+      setWarrantyPhoto(null);
+    }
+  }, [fetcherData]);
+
+  // 제품 선택 시 보증서 모드 결정
+  useEffect(() => {
+    if (selectedProductId) {
+      // ABC 침대 관련 보증서가 있는지 확인
+      const hasWarranty = localWarranties.some((w: any) => 
+        w.product_name?.includes("ABC") || w.product_name?.includes("아기침대")
+      );
+      
+      if (hasWarranty) {
+        setWarrantyMode("select");
+      } else {
+        setWarrantyMode("register");
+      }
+    } else {
+      setWarrantyMode(null);
+      setSelectedWarrantyId(null);
+    }
+  }, [selectedProductId, localWarranties]);
+
+  // 보증서 사진 선택
+  const handleWarrantyPhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("파일 크기는 5MB 이하여야 합니다.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setWarrantyPhoto({ file, preview: reader.result as string });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // 보증서 등록 제출
+  const handleWarrantySubmit = async () => {
+    if (!warrantyName || !warrantyPhone) {
+      alert("이름과 연락처를 입력해주세요.");
+      return;
+    }
+
+    setIsWarrantyUploading(true);
+    let photoUrl = "";
+
+    try {
+      // 사진 업로드
+      if (warrantyPhoto) {
+        const timestamp = Date.now();
+        const fileExt = warrantyPhoto.file.name.split(".").pop();
+        const fileName = `warranty_${timestamp}.${fileExt}`;
+
+        const response = await fetch("/api/warranty/upload-photo", {
+          method: "POST",
+          body: (() => {
+            const fd = new FormData();
+            fd.append("file", warrantyPhoto.file);
+            fd.append("fileName", fileName);
+            return fd;
+          })(),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          photoUrl = result.url;
+        }
+      }
+
+      // 보증서 등록 요청
+      fetcher.submit(
+        {
+          actionType: "registerWarranty",
+          warrantyName,
+          warrantyPhone,
+          warrantyPurchaseDate,
+          warrantyPhotoUrl: photoUrl,
+          warrantyProductName: eventProducts.find((p: any) => p.id === selectedProductId)?.product_name || "ABC 이동식 아기침대",
+        },
+        { method: "POST" }
+      );
+    } finally {
+      setIsWarrantyUploading(false);
+    }
+  };
   
   // 선택한 제품의 사은품 또는 공통 사은품
   const availableGifts = eventGifts.filter(
@@ -404,6 +579,7 @@ export default function EventReviewScreen() {
 
       fetcher.submit(
         {
+          actionType: "submitReview",
           reviewUrl,
           screenshotUrls: JSON.stringify(screenshotUrls),
           mallScreenshotUrls: JSON.stringify(mallScreenshotUrls),
@@ -415,6 +591,7 @@ export default function EventReviewScreen() {
           eventProductId: selectedProductId || "",
           selectedGiftId: finalGiftId || "",
           productName,
+          warrantyId: selectedWarrantyId || "",
           shippingName,
           shippingPhone,
           shippingZipcode,
@@ -483,17 +660,75 @@ export default function EventReviewScreen() {
 
       <div className="bg-[#F5F5F0] rounded-t-3xl min-h-screen">
         <div className="mx-auto max-w-2xl px-4 md:px-6 py-8">
-          {/* 성공 메시지 */}
-          {fetcherData?.success && (
-            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-2xl">
-              <div className="flex items-center gap-2 mb-1">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-                <p className="text-green-700 font-medium">{fetcherData.message}</p>
+          {/* 제출 완료 화면 */}
+          {fetcherData?.success && !fetcherData?.warrantyRegistered && (
+            <div className="fixed inset-0 z-50 bg-[#F5F5F0] flex items-center justify-center">
+              <div className="max-w-md w-full mx-4 text-center">
+                {/* 성공 아이콘 */}
+                <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
+                  <CheckCircle className="w-12 h-12 text-green-600" />
+                </div>
+                
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  후기 이벤트 참여 완료! 🎉
+                </h2>
+                <p className="text-gray-600 mb-6">
+                  성공적으로 제출되었습니다.<br />
+                  검토 후 <strong>1~2 영업일 내</strong> 결과를 알려드립니다.
+                </p>
+
+                {/* 안내 카드 */}
+                <div className="bg-white rounded-2xl p-5 mb-6 border border-gray-100 text-left">
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span className="text-amber-600 font-bold text-sm">1</span>
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">관리자 검토</p>
+                        <p className="text-sm text-gray-500">제출하신 후기를 확인합니다</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span className="text-amber-600 font-bold text-sm">2</span>
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">승인 알림</p>
+                        <p className="text-sm text-gray-500">카카오톡으로 결과를 안내드립니다</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <Gift className="w-4 h-4 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">사은품 발송</p>
+                        <p className="text-sm text-gray-500">승인 후 차주 금요일에 일괄 발송</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 버튼들 */}
+                <div className="space-y-4">
+                  <Link to="/customer/mypage">
+                    <Button className="w-full h-14 rounded-xl bg-gray-900 hover:bg-gray-800 text-white font-medium">
+                      마이페이지에서 확인하기
+                    </Button>
+                  </Link>
+                  <Link to="/customer" className="block mt-2">
+                    <Button variant="outline" className="w-full h-12 rounded-xl border-gray-300">
+                      홈으로 돌아가기
+                    </Button>
+                  </Link>
+                </div>
+
+                {/* 푸터 */}
+                <p className="mt-8 text-sm text-gray-400">
+                  문의사항은 카카오톡 채널로 연락주세요
+                </p>
               </div>
-              <p className="text-green-600 text-sm">검토 후 1~2 영업일 내 결과를 알려드립니다.</p>
-              <Link to="/customer/mypage" className="inline-block mt-3 text-green-700 font-medium text-sm hover:underline">
-                마이페이지에서 확인하기 →
-              </Link>
             </div>
           )}
 
@@ -798,6 +1033,172 @@ export default function EventReviewScreen() {
                           );
                         })}
                       </div>
+                    </div>
+                  )}
+
+                  {/* 보증서 연동 섹션 */}
+                  {selectedProductId && warrantyMode && (
+                    <div className="bg-white rounded-2xl p-5 border border-gray-100">
+                      <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5 text-emerald-500" />
+                        보증서 연동
+                      </h3>
+
+                      {/* 보증서가 있는 경우: 선택 */}
+                      {warrantyMode === "select" && localWarranties.length > 0 && (
+                        <div className="space-y-3">
+                          <p className="text-sm text-gray-600 mb-3">
+                            등록된 보증서를 선택하거나 새로 등록해주세요.
+                          </p>
+                          
+                          {localWarranties.filter((w: any) => 
+                            w.product_name?.includes("ABC") || w.product_name?.includes("아기침대")
+                          ).map((warranty: any) => (
+                            <button
+                              key={warranty.id}
+                              type="button"
+                              onClick={() => setSelectedWarrantyId(warranty.id)}
+                              className={`w-full p-4 rounded-xl border transition-all text-left ${
+                                selectedWarrantyId === warranty.id
+                                  ? "border-emerald-400 bg-emerald-50"
+                                  : "border-gray-200 hover:border-gray-300"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                {selectedWarrantyId === warranty.id ? (
+                                  <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0" />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-gray-900">{warranty.product_name}</p>
+                                  <p className="text-sm text-gray-500">
+                                    {warranty.warranty_number} · {warranty.buyer_name}
+                                  </p>
+                                </div>
+                                <Badge className={warranty.status === "approved" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}>
+                                  {warranty.status === "approved" ? "승인됨" : "대기중"}
+                                </Badge>
+                              </div>
+                            </button>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={() => setWarrantyMode("register")}
+                            className="w-full p-4 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 hover:border-emerald-400 hover:text-emerald-600 transition-colors"
+                          >
+                            + 새 보증서 등록하기
+                          </button>
+                        </div>
+                      )}
+
+                      {/* 보증서가 없거나 새로 등록하는 경우 */}
+                      {warrantyMode === "register" && (
+                        <div className="space-y-4">
+                          {fetcherData?.warrantyError && (
+                            <div className="p-3 bg-red-50 text-red-700 rounded-xl text-sm">
+                              ❌ {fetcherData.error}
+                            </div>
+                          )}
+                          
+                          {fetcherData?.warrantyRegistered && (
+                            <div className="p-3 bg-green-50 text-green-700 rounded-xl text-sm">
+                              ✅ {fetcherData.message}
+                            </div>
+                          )}
+
+                          <p className="text-sm text-gray-600">
+                            이벤트 참여를 위해 보증서를 먼저 등록해주세요.
+                          </p>
+
+                          <div className="grid gap-3">
+                            <div>
+                              <Label className="text-gray-700 text-sm mb-1.5 block">구매자명 *</Label>
+                              <Input
+                                placeholder="구매자 이름"
+                                value={warrantyName}
+                                onChange={(e) => setWarrantyName(e.target.value)}
+                                className="h-12 rounded-xl border-gray-200 bg-white text-gray-900"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-gray-700 text-sm mb-1.5 block">연락처 *</Label>
+                              <Input
+                                type="tel"
+                                placeholder="010-0000-0000"
+                                value={warrantyPhone}
+                                onChange={(e) => setWarrantyPhone(e.target.value)}
+                                className="h-12 rounded-xl border-gray-200 bg-white text-gray-900"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-gray-700 text-sm mb-1.5 block">구매일 (선택)</Label>
+                              <Input
+                                type="date"
+                                value={warrantyPurchaseDate}
+                                onChange={(e) => setWarrantyPurchaseDate(e.target.value)}
+                                className="h-12 rounded-xl border-gray-200 bg-white text-gray-900"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-gray-700 text-sm mb-1.5 block">제품 사진 (선택)</Label>
+                              <input
+                                ref={warrantyFileInputRef}
+                                type="file"
+                                accept="image/*"
+                                onChange={handleWarrantyPhotoSelect}
+                                className="hidden"
+                              />
+                              {warrantyPhoto ? (
+                                <div className="relative w-24 h-24">
+                                  <img 
+                                    src={warrantyPhoto.preview} 
+                                    alt="제품 사진"
+                                    className="w-full h-full object-cover rounded-xl"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setWarrantyPhoto(null)}
+                                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-white"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => warrantyFileInputRef.current?.click()}
+                                  className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center text-gray-400 hover:border-emerald-400 hover:text-emerald-500"
+                                >
+                                  <ImagePlus className="w-6 h-6" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2">
+                            {localWarranties.length > 0 && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setWarrantyMode("select")}
+                                className="flex-1 h-12 rounded-xl"
+                              >
+                                기존 보증서 선택
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              onClick={handleWarrantySubmit}
+                              disabled={isWarrantyUploading || isSubmitting}
+                              className="flex-1 h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                              {isWarrantyUploading ? "등록 중..." : "보증서 등록"}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 

@@ -578,7 +578,7 @@ export function UploadForm({
             <span className="font-semibold text-gray-900">개인정보 수집 및 이용 동의</span>
             <span className="text-red-500 ml-1">*</span>
             <ul className="mt-2 space-y-1 text-xs text-gray-600">
-              <li>• 업로드된 사진은 <strong className="text-gray-800">1회 분석 후 저장되지 않습니다</strong></li>
+              <li>• 업로드된 사진은 <strong className="text-gray-800 dark:text-gray-200">분석 사용 용도로만 이용됩니다</strong></li>
               <li>• 수집된 전화번호로 분석 결과를 안내해드립니다</li>
               <li>• 아이 정보와 전화번호는 내 프로필에 저장됩니다</li>
             </ul>

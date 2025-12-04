@@ -206,16 +206,20 @@ export function AnalysisResult({
 
   // 이미지로 저장 (html2canvas)
   const [isSavingImage, setIsSavingImage] = useState(false);
+  const [saveProgress, setSaveProgress] = useState<string>("");
   
   const handleSaveAsImage = async () => {
     if (!resultRef.current || isSavingImage) return;
 
     setIsSavingImage(true);
+    setSaveProgress("이미지 생성 중...");
     
     try {
       // 동적 import - Vite 번들 분석 제외
       const html2canvasModule = await import(/* @vite-ignore */ "html2canvas");
       const html2canvas = html2canvasModule.default;
+      
+      setSaveProgress("화면 캡처 중...");
       
       // 캡처 대상 요소
       const element = resultRef.current;
@@ -236,20 +240,57 @@ export function AnalysisResult({
         }
       });
       
-      // 다운로드
-      const dataUrl = canvas.toDataURL("image/png", 1.0);
+      setSaveProgress("이미지 저장 중...");
+      
+      // Blob으로 변환하여 다운로드 (모바일 호환성 개선)
+      const blob = await new Promise<Blob>((resolve) => {
+        canvas.toBlob((b) => resolve(b!), "image/png", 1.0);
+      });
+      
+      const fileName = `수면분석결과-${new Date().toISOString().split("T")[0]}.png`;
+      
+      // 모바일 체크
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      // Web Share API 지원 확인 (모바일에서 사진첩 저장 가능)
+      if (isMobile && navigator.share && navigator.canShare) {
+        const file = new File([blob], fileName, { type: "image/png" });
+        const shareData = { files: [file] };
+        
+        if (navigator.canShare(shareData)) {
+          try {
+            await navigator.share(shareData);
+            setSaveProgress("");
+            setIsSavingImage(false);
+            return;
+          } catch (shareError) {
+            // 공유 취소 또는 실패 시 일반 다운로드로 폴백
+            console.log("공유 취소됨, 일반 다운로드 시도");
+          }
+        }
+      }
+      
+      // 일반 다운로드 (PC 또는 Web Share 미지원 시)
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.download = `수면분석결과-${new Date().toISOString().split("T")[0]}.png`;
-      link.href = dataUrl;
+      link.download = fileName;
+      link.href = url;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      // 모바일에서 다운로드 안내
+      if (isMobile) {
+        alert("이미지가 다운로드되었습니다.\n'파일' 또는 '다운로드' 폴더에서 확인하세요.");
+      }
       
     } catch (error) {
       console.error("이미지 저장 실패:", error);
       alert("이미지 저장에 실패했습니다. 다시 시도해주세요.");
     } finally {
       setIsSavingImage(false);
+      setSaveProgress("");
     }
   };
 
@@ -266,42 +307,24 @@ export function AnalysisResult({
           새로 분석
         </Button>
 
-        <Button 
-          onClick={handleSaveAsImage}
-          variant="outline"
-          disabled={isSavingImage}
-          className="rounded-xl border-gray-300 text-gray-700 hover:bg-gray-100"
-        >
-          {isSavingImage ? (
-            <>
-              <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-              저장 중...
-            </>
-          ) : (
-            <>
-              <ImageIcon className="mr-2 h-4 w-4" />
-              이미지 저장
-            </>
-          )}
-        </Button>
-
-        {/* 카카오톡 공유 - 임시 비활성화 */}
-        {/* <Button 
-          onClick={handleKakaoShare}
-          className="rounded-xl bg-[#FEE500] text-[#3C1E1E] hover:bg-[#FDD835]"
-        >
-          <MessageCircle className="mr-2 h-4 w-4" />
-          카카오톡 공유
-        </Button> */}
-
+        {/* 이미지로 저장하기 버튼 (인스타 슬라이드 다운로드) */}
         {onDownloadSlides && (
           <Button 
-            onClick={onDownloadSlides} 
+            onClick={onDownloadSlides}
             disabled={isDownloading}
             className="rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
           >
-            <Download className="mr-2 h-4 w-4" />
-            {isDownloading ? "생성 중..." : "인스타 슬라이드"}
+            {isDownloading ? (
+              <>
+                <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                이미지 생성 중... 잠시만 기다려주세요
+              </>
+            ) : (
+              <>
+                <Download className="mr-2 h-4 w-4" />
+                이미지로 저장하기
+              </>
+            )}
           </Button>
         )}
       </div>

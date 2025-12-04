@@ -1,15 +1,17 @@
 /**
  * Sleep Analysis Result Page (Customer)
  *
- * 점수 + 종합 분석 + 상세 내용 표시
+ * 분석 페이지와 동일한 UI (사진, 종합분석, 세부분석, 다운로드)
  */
 import type { Route } from "./+types/result";
 
-import { ArrowLeft, AlertTriangle, CheckCircle, AlertCircle, Moon } from "lucide-react";
-import { data, Link, useLoaderData, redirect } from "react-router";
+import { ArrowLeft } from "lucide-react";
+import { useState } from "react";
+import { data, Link, useLoaderData } from "react-router";
 
-import { Badge } from "~/core/components/ui/badge";
 import makeServerClient from "~/core/lib/supa-client.server";
+import { AnalysisResult } from "../components/analysis-result";
+import type { AnalysisReport, FeedbackItem, RiskLevel } from "../schema";
 
 export const meta: Route.MetaFunction = () => {
   return [
@@ -44,130 +46,138 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response("Unauthorized", { status: 403 });
   }
 
-  // 피드백 항목 조회
-  const { data: feedbackItems } = await supabase
-    .from("sleep_analysis_feedback_items")
-    .select("*")
-    .eq("analysis_id", id)
-    .order("item_number", { ascending: true });
+  // feedbackItems를 summary JSON에서 추출 (테이블이 아닌 JSON에 저장됨)
+  let feedbackItems: any[] = [];
+  if (analysis.summary) {
+    try {
+      const parsed = JSON.parse(analysis.summary);
+      feedbackItems = parsed.feedbackItems || [];
+    } catch {
+      // 파싱 실패 시 빈 배열
+    }
+  }
 
   return data({
+    analysisId: id,
     analysis,
-    feedbackItems: feedbackItems || [],
+    feedbackItems,
   });
 }
 
-// 영문 키 사용 (Gemini API 응답 형식)
-const riskConfig = {
-  High: { color: "bg-red-100 text-red-700 border-red-200", icon: AlertTriangle, iconColor: "text-red-500", label: "위험" },
-  Medium: { color: "bg-amber-100 text-amber-700 border-amber-200", icon: AlertCircle, iconColor: "text-amber-500", label: "주의" },
-  Low: { color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: CheckCircle, iconColor: "text-emerald-500", label: "양호" },
-  Info: { color: "bg-blue-100 text-blue-700 border-blue-200", icon: AlertCircle, iconColor: "text-blue-500", label: "정보" },
-};
-
-// summary JSON에서 점수 추출 또는 feedbackItems 기반 계산
-function parseAnalysisData(
-  summary: string | null,
-  feedbackItems: { risk_level: string }[]
-): { 
-  score: number; 
-  scoreComment: string;
-  summaryText: string;
-} {
-  let score: number | null = null;
+// DB 데이터를 AnalysisReport 형태로 변환
+function convertToReport(
+  analysis: any, 
+  feedbackItems: any[]
+): AnalysisReport {
+  let safetyScore = 70;
+  let summary = "";
   let scoreComment = "";
-  let summaryText = summary || "";
   
-  // JSON에서 점수 추출 시도
-  if (summary) {
+  // summary JSON 파싱
+  if (analysis.summary) {
     try {
-      const parsed = JSON.parse(summary);
-      score = parsed.safetyScore || null;
+      const parsed = JSON.parse(analysis.summary);
+      safetyScore = parsed.safetyScore || 70;
+      summary = parsed.summary || "";
       scoreComment = parsed.scoreComment || "";
-      summaryText = parsed.summary || summary;
     } catch {
-      // JSON이 아니면 그대로
+      summary = analysis.summary;
     }
   }
   
-  // 점수가 없으면 feedbackItems 기반으로 계산
-  if (!score && feedbackItems.length > 0) {
-    const highCount = feedbackItems.filter(i => i.risk_level === "High").length;
-    const mediumCount = feedbackItems.filter(i => i.risk_level === "Medium").length;
-    const lowCount = feedbackItems.filter(i => ["Low", "Info"].includes(i.risk_level)).length;
-    
-    // 100점에서 감점: High -20, Medium -10
-    score = Math.max(0, Math.min(100, 
-      100 - (highCount * 20) - (mediumCount * 10)
-    ));
-    
-    // 기본 코멘트 생성
-    if (score >= 90) scoreComment = "매우 안전한 수면 환경입니다!";
-    else if (score >= 75) scoreComment = "전반적으로 안전합니다.";
-    else if (score >= 60) scoreComment = "몇 가지 개선이 필요합니다.";
-    else if (score >= 40) scoreComment = "개선이 필요한 부분이 있습니다.";
-    else scoreComment = "즉시 개선이 필요합니다.";
-  }
+  // feedbackItems 변환 (riskLevel 또는 risk_level 모두 지원)
+  const convertedFeedback: FeedbackItem[] = feedbackItems.map((item: any) => ({
+    title: item.title || "",
+    feedback: item.feedback || "",
+    riskLevel: (item.riskLevel || item.risk_level || "Low") as RiskLevel,
+  }));
   
-  return { 
-    score: score || 70, // 기본값 70점
-    scoreComment, 
-    summaryText 
+  return {
+    safetyScore,
+    summary,
+    scoreComment,
+    feedbackItems: convertedFeedback,
   };
 }
 
-// 점수에 따른 색상
-function getScoreColor(score: number): string {
-  if (score >= 90) return "#22c55e";
-  if (score >= 75) return "#84cc16";
-  if (score >= 60) return "#eab308";
-  if (score >= 40) return "#f97316";
-  return "#ef4444";
-}
-
-// 점수 등급
-function getScoreGrade(score: number): string {
-  if (score >= 90) return "매우 안전한 환경이에요! 🎉";
-  if (score >= 75) return "안전한 환경이에요! 👍";
-  if (score >= 60) return "괜찮지만 개선이 필요해요";
-  if (score >= 40) return "주의가 필요한 환경이에요 ⚠️";
-  return "즉시 개선이 필요해요! 🚨";
-}
-
-// 별점 렌더링
-function renderStars(score: number) {
-  const starCount = score >= 90 ? 5 : score >= 75 ? 4 : score >= 60 ? 3 : score >= 40 ? 2 : 1;
-  return (
-    <div className="flex gap-0.5">
-      {[...Array(5)].map((_, i) => (
-        <span key={i} className={`text-lg ${i < starCount ? "text-yellow-400" : "text-gray-200"}`}>
-          ⭐
-        </span>
-      ))}
-    </div>
-  );
-}
-
 export default function ResultPage() {
-  const { analysis, feedbackItems } = useLoaderData<typeof loader>();
-  const { score, scoreComment, summaryText } = parseAnalysisData(analysis.summary, feedbackItems);
+  const { analysisId, analysis, feedbackItems } = useLoaderData<typeof loader>();
+  const [isDownloading, setIsDownloading] = useState(false);
 
-  // 이미지 URL 결정
+  // 이미지 URL 결정 (image_url > image_base64 > 없음)
   const imageUrl = analysis.image_url || 
     (analysis.image_base64?.startsWith("data:") 
       ? analysis.image_base64 
       : analysis.image_base64 
         ? `data:image/jpeg;base64,${analysis.image_base64}` 
-        : null);
+        : ""); // 이미지 없으면 빈 문자열
 
-  // 위험도별 개수
-  const highCount = feedbackItems.filter((i: any) => i.risk_level === "High").length;
-  const mediumCount = feedbackItems.filter((i: any) => i.risk_level === "Medium").length;
-  const lowCount = feedbackItems.filter((i: any) => ["Low", "Info"].includes(i.risk_level)).length;
+  // DB 데이터를 AnalysisReport로 변환
+  const report = convertToReport(analysis, feedbackItems);
+
+  // 이미지 다운로드 (모바일 사진첩 저장 지원)
+  const handleDownloadSlides = async () => {
+    if (!analysisId) return;
+    
+    setIsDownloading(true);
+    try {
+      const response = await fetch(`/api/sleep/${analysisId}/slides`, {
+        method: "POST",
+      });
+      
+      const responseData = await response.json();
+      
+      if (!responseData.success || !responseData.data?.slideUrls) {
+        throw new Error(responseData.error || "이미지 생성에 실패했습니다.");
+      }
+      
+      const slideUrls = responseData.data.slideUrls as string[];
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      for (let i = 0; i < slideUrls.length; i++) {
+        const slideUrl = slideUrls[i];
+        const imgResponse = await fetch(slideUrl);
+        const blob = await imgResponse.blob();
+        const fileName = `수면분석-${i + 1}.png`;
+        
+        // 모바일: Web Share API 시도
+        if (isMobile && navigator.share && navigator.canShare) {
+          const file = new File([blob], fileName, { type: "image/png" });
+          if (navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({ files: [file] });
+              continue;
+            } catch { /* 공유 취소 시 일반 다운로드 */ }
+          }
+        }
+        
+        // 일반 다운로드
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+        
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      if (!isMobile) {
+        alert(`${slideUrls.length}장의 이미지가 저장되었습니다!`);
+      }
+    } catch (err) {
+      console.error("Download error:", err);
+      alert(err instanceof Error ? err.message : "다운로드 중 오류가 발생했습니다.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F5F5F0]">
-      <div className="mx-auto max-w-2xl px-6 py-10">
+      <div className="mx-auto max-w-2xl px-4 md:px-6 py-8 md:py-10">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <Link 
@@ -190,140 +200,15 @@ export default function ResultPage() {
           </div>
         </div>
 
-        {/* 점수 카드 */}
-        <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-6 mb-6 text-white">
-          <div className="flex items-center gap-6">
-            {/* 점수 원형 */}
-            <div className="relative w-24 h-24 flex-shrink-0">
-              <svg className="w-full h-full transform -rotate-90">
-                <circle
-                  cx="48"
-                  cy="48"
-                  r="40"
-                  stroke="rgba(255,255,255,0.1)"
-                  strokeWidth="8"
-                  fill="none"
-                />
-                <circle
-                  cx="48"
-                  cy="48"
-                  r="40"
-                  stroke={getScoreColor(score)}
-                  strokeWidth="8"
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeDasharray={`${(score / 100) * 251} 251`}
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-3xl font-bold">{score}</span>
-                <span className="text-white/50 text-xs">/ 100</span>
-              </div>
-            </div>
-            
-            {/* 점수 정보 */}
-            <div className="flex-1">
-              {renderStars(score)}
-              <h2 className="text-lg font-bold mt-2 mb-1">
-                {getScoreGrade(score)}
-              </h2>
-              {scoreComment && (
-                <p className="text-white/70 text-sm">{scoreComment}</p>
-              )}
-            </div>
-          </div>
-
-          {/* 위험도 요약 */}
-          <div className="flex gap-3 mt-5 pt-5 border-t border-white/10">
-            {highCount > 0 && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/20 text-red-300 text-sm">
-                <AlertTriangle className="w-4 h-4" />
-                위험 {highCount}
-              </span>
-            )}
-            {mediumCount > 0 && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/20 text-amber-300 text-sm">
-                <AlertCircle className="w-4 h-4" />
-                주의 {mediumCount}
-              </span>
-            )}
-            {lowCount > 0 && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 text-emerald-300 text-sm">
-                <CheckCircle className="w-4 h-4" />
-                양호 {lowCount}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* 분석 이미지 */}
-        {imageUrl && (
-          <div className="bg-white rounded-2xl overflow-hidden mb-6 border border-gray-100">
-            <img 
-              src={imageUrl} 
-              alt="수면 환경 사진"
-              className="w-full object-cover max-h-80"
-            />
-          </div>
-        )}
-
-        {/* 종합 분석 */}
-        <div className="bg-white rounded-2xl p-6 mb-6 border border-gray-100">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-[#1A1A1A] rounded-full flex items-center justify-center">
-              <Moon className="w-5 h-5 text-white" />
-            </div>
-            <h2 className="font-bold text-gray-900 text-lg">종합 분석</h2>
-          </div>
-          <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-            {summaryText}
-          </p>
-        </div>
-
-        {/* 상세 분석 항목 */}
-        {feedbackItems.length > 0 && (
-          <div className="bg-white rounded-2xl p-6 border border-gray-100">
-            <h2 className="font-bold text-gray-900 text-lg mb-4">📋 상세 분석</h2>
-            
-            <div className="space-y-4">
-              {feedbackItems.map((item: any, index: number) => {
-                const risk = riskConfig[item.risk_level as keyof typeof riskConfig] || riskConfig["Low"];
-                const RiskIcon = risk.icon;
-                
-                return (
-                  <div 
-                    key={item.id || index} 
-                    className={`rounded-xl p-4 border ${risk.color}`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <RiskIcon className={`w-5 h-5 ${risk.iconColor} flex-shrink-0 mt-0.5`} />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-semibold text-gray-900">{item.title}</h3>
-                          <Badge variant="outline" className={`text-xs ${risk.color}`}>
-                            {risk.label}
-                          </Badge>
-                        </div>
-                        <p className="text-gray-700 text-sm leading-relaxed">
-                          {item.feedback}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* 새 분석 버튼 */}
-        <div className="mt-8">
-          <Link to="/customer/sleep/analyze" className="block">
-            <div className="bg-[#1A1A1A] rounded-2xl p-5 flex items-center justify-center hover:bg-[#2A2A2A] transition-colors">
-              <span className="text-white font-medium">새로운 분석 시작하기</span>
-            </div>
-          </Link>
-        </div>
+        {/* 분석 결과 - 동일한 컴포넌트 재사용 */}
+        <AnalysisResult 
+          report={report}
+          imagePreview={imageUrl}
+          analysisId={analysisId}
+          onReset={() => window.location.href = "/customer/sleep/analyze"}
+          onDownloadSlides={handleDownloadSlides}
+          isDownloading={isDownloading}
+        />
 
         {/* 하단 안내 */}
         <div className="mt-6 text-center text-sm text-gray-400">

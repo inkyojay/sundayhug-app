@@ -105,12 +105,12 @@ export default function AnalyzePage() {
     setFormData(null);
   };
 
+  // 이미지 다운로드 (모바일 사진첩 저장 지원)
   const handleDownloadSlides = async () => {
     if (!analysisId) return;
     
     setIsDownloading(true);
     try {
-      // Generate slides via API
       const response = await fetch(`/api/sleep/${analysisId}/slides`, {
         method: "POST",
       });
@@ -118,37 +118,45 @@ export default function AnalyzePage() {
       const responseData = await response.json();
       
       if (!responseData.success || !responseData.data?.slideUrls) {
-        throw new Error(responseData.error || "슬라이드 생성에 실패했습니다.");
+        throw new Error(responseData.error || "이미지 생성에 실패했습니다.");
       }
       
-      // Download each slide as blob (직접 다운로드)
       const slideUrls = responseData.data.slideUrls as string[];
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       
       for (let i = 0; i < slideUrls.length; i++) {
         const slideUrl = slideUrls[i];
-        
-        // Fetch the image as blob
         const imgResponse = await fetch(slideUrl);
         const blob = await imgResponse.blob();
+        const fileName = `수면분석-${i + 1}.png`;
         
-        // Create blob URL and download
+        // 모바일: Web Share API 시도
+        if (isMobile && navigator.share && navigator.canShare) {
+          const file = new File([blob], fileName, { type: "image/png" });
+          if (navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({ files: [file] });
+              continue;
+            } catch { /* 공유 취소 시 일반 다운로드 */ }
+          }
+        }
+        
+        // 일반 다운로드
         const blobUrl = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = blobUrl;
-        link.download = `수면분석-슬라이드-${i + 1}.png`;
-        link.style.display = "none";
+        link.download = fileName;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        
-        // Release blob URL
         URL.revokeObjectURL(blobUrl);
         
-        // Small delay between downloads
         await new Promise(resolve => setTimeout(resolve, 500));
       }
       
-      alert(`${slideUrls.length}장의 슬라이드가 사진 폴더에 저장되었습니다!`);
+      if (!isMobile) {
+        alert(`${slideUrls.length}장의 이미지가 저장되었습니다!`);
+      }
     } catch (err) {
       console.error("Download error:", err);
       alert(err instanceof Error ? err.message : "다운로드 중 오류가 발생했습니다.");
