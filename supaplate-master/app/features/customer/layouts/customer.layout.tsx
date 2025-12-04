@@ -128,11 +128,11 @@ export default function CustomerLayout() {
                   to="/customer/mypage"
                   className="hidden sm:flex flex-col items-end"
                 >
-                  <span className="text-sm font-semibold text-gray-900">
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">
                     {userName} 님
                   </span>
                   {isVip && (
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
                       VIP Member
                     </span>
                   )}
@@ -141,7 +141,7 @@ export default function CustomerLayout() {
                   variant="ghost" 
                   size="icon"
                   onClick={handleLogout}
-                  className="text-gray-500 hover:text-gray-900 hover:bg-gray-200/50"
+                  className="text-gray-500 hover:text-gray-900 hover:bg-gray-200/50 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700/50"
                 >
                   <LogOutIcon className="h-5 w-5" />
                 </Button>

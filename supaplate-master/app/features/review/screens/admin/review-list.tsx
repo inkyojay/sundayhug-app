@@ -33,16 +33,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const statusFilter = url.searchParams.get("status") || "pending";
 
+  // 1. review_submissions 조회
   let query = adminClient
     .from("review_submissions")
-    .select(`
-      *,
-      profiles:user_id (
-        name,
-        email,
-        phone
-      )
-    `)
+    .select("*")
     .order("created_at", { ascending: false });
 
   if (statusFilter !== "all") {
@@ -54,6 +48,28 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (error) {
     console.error("후기 목록 조회 오류:", error);
   }
+
+  // 2. profiles 조회 (user_id로 매핑)
+  const userIds = [...new Set((submissions || []).map(s => s.user_id).filter(Boolean))];
+  let profilesMap: Record<string, any> = {};
+  
+  if (userIds.length > 0) {
+    const { data: profiles } = await adminClient
+      .from("profiles")
+      .select("id, name, email, phone")
+      .in("id", userIds);
+    
+    profilesMap = (profiles || []).reduce((acc, p) => {
+      acc[p.id] = p;
+      return acc;
+    }, {} as Record<string, any>);
+  }
+
+  // 3. submissions에 profiles 병합
+  const submissionsWithProfiles = (submissions || []).map(sub => ({
+    ...sub,
+    profiles: profilesMap[sub.user_id] || null,
+  }));
 
   // 통계
   const { data: stats } = await adminClient
@@ -68,7 +84,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 
   return data({ 
-    submissions: submissions || [],
+    submissions: submissionsWithProfiles,
     statusFilter,
     counts,
   });

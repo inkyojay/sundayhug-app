@@ -141,18 +141,18 @@ export default function CustomerHomeScreen() {
           to={isLoggedIn ? "/customer/event/review" : "/customer/login?redirect=/customer/event/review"}
           className="block mb-4 md:mb-5"
         >
-          <div className="w-full bg-white border border-gray-200 rounded-2xl p-5 hover:bg-gray-50 hover:border-gray-300 transition-all duration-300 hover:shadow-md group">
+          <div className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-300 hover:shadow-md group">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-[#FF6B35]/10 rounded-full flex items-center justify-center">
+                <div className="w-12 h-12 bg-[#FF6B35]/10 dark:bg-[#FF6B35]/20 rounded-full flex items-center justify-center">
                   <Gift className="w-6 h-6 text-[#FF6B35]" />
                 </div>
                 <div className="text-left">
-                  <h4 className="font-bold text-gray-900 text-lg">구매 후기 이벤트 참여</h4>
-                  <p className="text-gray-500 text-sm mt-1">맘카페 후기 작성하고 사은품 받으세요!</p>
+                  <h4 className="font-bold text-gray-900 dark:text-white text-lg">구매 후기 이벤트 참여</h4>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">맘카페 후기 작성하고 사은품 받으세요!</p>
                 </div>
               </div>
-              <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
+              <ChevronRight className="w-6 h-6 text-gray-400 dark:text-gray-500 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
             </div>
           </div>
         </Link>
@@ -363,26 +363,26 @@ export default function CustomerHomeScreen() {
             href="https://www.sundayhug.kr/sleepport.html"
             target="_blank"
             rel="noopener noreferrer"
-            className="bg-white/60 backdrop-blur rounded-2xl p-5 hover:bg-white transition-colors border border-gray-200/50 group"
+            className="bg-white/60 dark:bg-gray-800/60 backdrop-blur rounded-2xl p-5 hover:bg-white dark:hover:bg-gray-800 transition-colors border border-gray-200/50 dark:border-gray-700/50 group"
           >
-            <MessageCircleQuestion className="w-6 h-6 text-gray-400 mb-3" />
-            <h4 className="font-semibold text-gray-900">
+            <MessageCircleQuestion className="w-6 h-6 text-gray-400 dark:text-gray-500 mb-3" />
+            <h4 className="font-semibold text-gray-900 dark:text-white">
               ABC 아기침대<br className="md:hidden" /> 사용 설명서
             </h4>
-            <ChevronRight className="w-4 h-4 text-gray-400 mt-2 group-hover:translate-x-1 transition-transform" />
+            <ChevronRight className="w-4 h-4 text-gray-400 dark:text-gray-500 mt-2 group-hover:translate-x-1 transition-transform" />
           </a>
 
           <a 
             href="https://pf.kakao.com/_crxgDxj/chat"
             target="_blank"
             rel="noopener noreferrer"
-            className="bg-white/60 backdrop-blur rounded-2xl p-5 hover:bg-white transition-colors border border-gray-200/50 group"
+            className="bg-white/60 dark:bg-gray-800/60 backdrop-blur rounded-2xl p-5 hover:bg-white dark:hover:bg-gray-800 transition-colors border border-gray-200/50 dark:border-gray-700/50 group"
           >
             <svg className="w-6 h-6 text-[#FAE100] mb-3" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 3c5.799 0 10.5 3.664 10.5 8.185 0 4.52-4.701 8.184-10.5 8.184a13.5 13.5 0 01-1.727-.11l-4.408 2.883c-.501.265-.678.236-.472-.413l.892-3.678c-2.88-1.46-4.785-3.99-4.785-6.866C1.5 6.665 6.201 3 12 3z" />
             </svg>
-            <h4 className="font-semibold text-gray-900">고객센터</h4>
-            <p className="text-sm text-gray-500 mt-1">카카오톡 상담</p>
+            <h4 className="font-semibold text-gray-900 dark:text-white">고객센터</h4>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">카카오톡 상담</p>
           </a>
         </div>
 
