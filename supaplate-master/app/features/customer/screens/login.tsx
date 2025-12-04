@@ -80,8 +80,29 @@ export default function CustomerLoginScreen() {
   }, [actionData, navigate]);
 
   const handleKakaoLogin = async () => {
-    const redirectUrl = `${window.location.origin}/customer/auth/callback`;
-    window.location.href = `/auth/social/start/kakao?redirectTo=${encodeURIComponent(redirectUrl)}`;
+    // 카카오 REST API 키 (카카오 개발자 콘솔에서 확인)
+    const KAKAO_CLIENT_ID = "2737860d151daba73e31d3df6213a012";
+    const REDIRECT_URI = `${window.location.origin}/customer/kakao/callback`;
+    
+    // 카카오 동의 항목 (scope)
+    const scopes = [
+      "profile_nickname",
+      "profile_image", 
+      "account_email",
+      "phone_number",
+      "name",
+      "gender",
+      "age_range"
+    ].join(",");
+    
+    // CSRF 방지를 위한 state 생성
+    const state = Math.random().toString(36).substring(7);
+    sessionStorage.setItem("kakao_oauth_state", state);
+    
+    // 카카오 인가 URL로 직접 리다이렉트
+    const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${KAKAO_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${scopes}&state=${state}`;
+    
+    window.location.href = kakaoAuthUrl;
   };
 
   return (
