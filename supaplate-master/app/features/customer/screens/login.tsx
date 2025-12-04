@@ -85,12 +85,12 @@ export default function CustomerLoginScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0]">
+    <div className="min-h-screen bg-[#F5F5F0] dark:bg-[#121212] transition-colors duration-300">
       <div className="mx-auto max-w-md px-6 py-10">
         {/* Back Button */}
         <button
           onClick={() => showEmailForm ? setShowEmailForm(false) : navigate("/customer")}
-          className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors mb-8"
+          className="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-8"
         >
           <ArrowLeft className="w-5 h-5" />
           <span className="text-sm font-medium">
@@ -100,10 +100,10 @@ export default function CustomerLoginScreen() {
 
         {/* Header */}
         <div className="mb-10">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             로그인
           </h1>
-          <p className="text-gray-500">
+          <p className="text-gray-500 dark:text-gray-400">
             {showEmailForm ? "이메일로 로그인합니다" : "로그인 방법을 선택해주세요"}
           </p>
         </div>
@@ -131,10 +131,10 @@ export default function CustomerLoginScreen() {
             {/* Divider */}
             <div className="relative my-8">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200"></div>
+                <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
               </div>
               <div className="relative flex justify-center">
-                <span className="bg-[#F5F5F0] px-4 text-sm text-gray-400">
+                <span className="bg-[#F5F5F0] dark:bg-[#121212] px-4 text-sm text-gray-400">
                   또는
                 </span>
               </div>
@@ -144,7 +144,7 @@ export default function CustomerLoginScreen() {
             <button
               type="button"
               onClick={() => setShowEmailForm(true)}
-              className="w-full flex items-center justify-center gap-3 bg-white text-gray-700 font-medium h-14 rounded-2xl border border-gray-200 hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center justify-center gap-3 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-medium h-14 rounded-2xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               <Mail className="h-5 w-5" />
               이메일로 로그인
@@ -153,7 +153,7 @@ export default function CustomerLoginScreen() {
         ) : (
           <Form method="post" className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+              <Label htmlFor="email" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 이메일
               </Label>
               <Input
@@ -162,12 +162,12 @@ export default function CustomerLoginScreen() {
                 type="email"
                 placeholder="example@email.com"
                 required
-                className="h-14 rounded-2xl border-gray-200 bg-white px-4 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
+                className="h-14 rounded-2xl border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white px-4 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
               />
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+              <Label htmlFor="password" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 비밀번호
               </Label>
               <Input
@@ -176,7 +176,7 @@ export default function CustomerLoginScreen() {
                 type="password"
                 placeholder="비밀번호"
                 required
-                className="h-14 rounded-2xl border-gray-200 bg-white px-4 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
+                className="h-14 rounded-2xl border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white px-4 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
               />
             </div>
 
@@ -190,14 +190,14 @@ export default function CustomerLoginScreen() {
         )}
 
         {/* 회원가입 링크 */}
-        <div className="mt-10 pt-8 border-t border-gray-200">
+        <div className="mt-10 pt-8 border-t border-gray-200 dark:border-gray-700">
           <Link 
             to="/customer/register"
-            className="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-200 hover:bg-gray-50 transition-colors group"
+            className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors group"
           >
             <div>
-              <p className="font-medium text-gray-900">아직 회원이 아니신가요?</p>
-              <p className="text-sm text-gray-500 mt-1">회원가입하고 다양한 혜택을 받으세요</p>
+              <p className="font-medium text-gray-900 dark:text-white">아직 회원이 아니신가요?</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">회원가입하고 다양한 혜택을 받으세요</p>
             </div>
             <ChevronRight className="w-5 h-5 text-gray-400 group-hover:translate-x-1 transition-transform" />
           </Link>

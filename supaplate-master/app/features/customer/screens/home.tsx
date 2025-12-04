@@ -12,6 +12,8 @@ import { Link, useLoaderData, data } from "react-router";
 import { 
   ShieldCheck, 
   Moon, 
+  Sun,
+  Monitor,
   MessageCircleQuestion,
   ChevronRight,
   Sparkles,
@@ -20,6 +22,7 @@ import {
   Baby,
   Package
 } from "lucide-react";
+import { Theme, useTheme } from "remix-themes";
 
 import { Button } from "~/core/components/ui/button";
 import makeServerClient from "~/core/lib/supa-client.server";
@@ -55,6 +58,37 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function CustomerHomeScreen() {
   const { isLoggedIn, firstName } = useLoaderData<typeof loader>();
   const [showEventModal, setShowEventModal] = useState(false);
+  const [theme, setTheme, metadata] = useTheme();
+
+  // 현재 테마 상태 확인
+  const isSystemTheme = metadata.definedBy === "SYSTEM";
+  const isDark = theme === Theme.DARK;
+  const isLight = theme === Theme.LIGHT;
+
+  // 테마 순환: System → Light → Dark → System
+  const cycleTheme = () => {
+    if (isSystemTheme) {
+      setTheme(Theme.LIGHT);
+    } else if (isLight) {
+      setTheme(Theme.DARK);
+    } else {
+      setTheme(null); // System
+    }
+  };
+
+  // 현재 테마 아이콘과 라벨
+  const getThemeInfo = () => {
+    if (isSystemTheme) {
+      return { icon: Monitor, label: "시스템" };
+    } else if (isLight) {
+      return { icon: Sun, label: "라이트" };
+    } else {
+      return { icon: Moon, label: "다크" };
+    }
+  };
+
+  const themeInfo = getThemeInfo();
+  const ThemeIcon = themeInfo.icon;
 
   const handleEventSelect = (type: 'abc' | 'other') => {
     const url = type === 'abc' 
@@ -65,29 +99,44 @@ export default function CustomerHomeScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0]">
+    <div className="min-h-screen bg-[#F5F5F0] dark:bg-[#121212] transition-colors duration-300">
       <div className="mx-auto max-w-6xl px-6 py-10 md:py-16">
       {/* Hero Section */}
         <div className="mb-10 md:mb-14">
-          <div className="inline-flex items-center gap-2 mb-6 px-4 py-2 rounded-full bg-white border border-gray-200">
-            <Sparkles className="w-4 h-4 text-[#FF6B35]" />
-            <span className="text-sm font-medium text-gray-600">썬데이허그 고객 서비스</span>
+          {/* 상단 배지 + 테마 토글 */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+              <Sparkles className="w-4 h-4 text-[#FF6B35]" />
+              <span className="text-sm font-medium text-gray-600 dark:text-gray-300">썬데이허그 고객 서비스</span>
+            </div>
+            
+            {/* Theme Toggle Button */}
+            <button
+              onClick={cycleTheme}
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200"
+              title={`현재: ${themeInfo.label} 모드 (클릭하여 변경)`}
+            >
+              <ThemeIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+              <span className="text-sm font-medium text-gray-600 dark:text-gray-300 hidden sm:inline">
+                {themeInfo.label}
+              </span>
+            </button>
           </div>
           
           <h1 className="text-4xl md:text-6xl font-light tracking-tight leading-tight">
             {isLoggedIn ? (
               <>
-                <span className="font-bold text-gray-900">Hello,</span>{" "}
+                <span className="font-bold text-gray-900 dark:text-white">Hello,</span>{" "}
                 <span className="text-gray-400">{firstName}님.</span>
               </>
             ) : (
               <>
-                <span className="font-bold text-gray-900">Welcome to</span><br />
+                <span className="font-bold text-gray-900 dark:text-white">Welcome to</span><br />
                 <span className="text-gray-400">Sunday Hug.</span>
               </>
             )}
           </h1>
-          <p className="mt-4 text-gray-500 text-lg md:text-xl max-w-lg">
+          <p className="mt-4 text-gray-500 dark:text-gray-400 text-lg md:text-xl max-w-lg">
             제품 보증서 등록부터 AI 수면 환경 분석까지,<br className="hidden md:block" />
             썬데이허그가 함께합니다.
           </p>
@@ -97,16 +146,16 @@ export default function CustomerHomeScreen() {
         <div className="mb-4 md:mb-5">
           <button
             onClick={() => setShowEventModal(true)}
-            className="w-full bg-white border border-gray-200 rounded-2xl p-5 hover:bg-gray-50 hover:border-gray-300 transition-all duration-300 hover:shadow-md group"
+            className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-300 hover:shadow-md group"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-[#FF6B35]/10 rounded-full flex items-center justify-center">
+                <div className="w-12 h-12 bg-[#FF6B35]/10 dark:bg-[#FF6B35]/20 rounded-full flex items-center justify-center">
                   <Gift className="w-6 h-6 text-[#FF6B35]" />
                 </div>
                 <div className="text-left">
-                  <h4 className="font-bold text-gray-900 text-lg">썬데이허그 구매 후기 이벤트 참여</h4>
-                  <p className="text-gray-500 text-sm mt-1">맘카페 후기 작성하고 사은품 받으세요!</p>
+                  <h4 className="font-bold text-gray-900 dark:text-white text-lg">구매 후기 이벤트 참여</h4>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">맘카페 후기 작성하고 사은품 받으세요!</p>
                 </div>
               </div>
               <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
@@ -163,8 +212,7 @@ export default function CustomerHomeScreen() {
                 </Button>
                 <Button 
                   asChild
-                  variant="outline"
-                  className="flex-1 md:flex-none border-gray-600 text-white hover:bg-white/10 px-6"
+                  className="flex-1 md:flex-none bg-transparent border border-white/50 text-white hover:bg-white/10 hover:border-white px-6"
                 >
                   <Link to="/customer/register">회원가입</Link>
                 </Button>
@@ -248,10 +296,10 @@ export default function CustomerHomeScreen() {
             href="https://www.sundayhug.kr/sleepport.html"
             target="_blank"
             rel="noopener noreferrer"
-            className="bg-white/60 backdrop-blur rounded-2xl p-5 hover:bg-white transition-colors border border-gray-200/50 group"
+            className="bg-white/60 dark:bg-gray-800/60 backdrop-blur rounded-2xl p-5 hover:bg-white dark:hover:bg-gray-800 transition-colors border border-gray-200/50 dark:border-gray-700/50 group"
           >
             <MessageCircleQuestion className="w-6 h-6 text-gray-400 mb-3" />
-            <h4 className="font-semibold text-gray-900">
+            <h4 className="font-semibold text-gray-900 dark:text-white">
               ABC 아기침대<br className="md:hidden" /> 사용 설명서
             </h4>
             <ChevronRight className="w-4 h-4 text-gray-400 mt-2 group-hover:translate-x-1 transition-transform" />
@@ -261,13 +309,13 @@ export default function CustomerHomeScreen() {
             href="https://pf.kakao.com/_crxgDxj/chat"
             target="_blank"
             rel="noopener noreferrer"
-            className="bg-white/60 backdrop-blur rounded-2xl p-5 hover:bg-white transition-colors border border-gray-200/50 group"
+            className="bg-white/60 dark:bg-gray-800/60 backdrop-blur rounded-2xl p-5 hover:bg-white dark:hover:bg-gray-800 transition-colors border border-gray-200/50 dark:border-gray-700/50 group"
           >
             <svg className="w-6 h-6 text-[#FAE100] mb-3" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 3c5.799 0 10.5 3.664 10.5 8.185 0 4.52-4.701 8.184-10.5 8.184a13.5 13.5 0 01-1.727-.11l-4.408 2.883c-.501.265-.678.236-.472-.413l.892-3.678c-2.88-1.46-4.785-3.99-4.785-6.866C1.5 6.665 6.201 3 12 3z" />
             </svg>
-            <h4 className="font-semibold text-gray-900">고객센터</h4>
-            <p className="text-sm text-gray-500 mt-1">카카오톡 상담</p>
+            <h4 className="font-semibold text-gray-900 dark:text-white">고객센터</h4>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">카카오톡 상담</p>
           </a>
         </div>
 
@@ -283,37 +331,37 @@ export default function CustomerHomeScreen() {
           />
           
           {/* 모달 */}
-          <div className="relative bg-white rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
+          <div className="relative bg-white dark:bg-gray-900 rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
             {/* 닫기 버튼 */}
             <button
               onClick={() => setShowEventModal(false)}
-              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
               <X className="w-5 h-5 text-gray-400" />
             </button>
 
             {/* 헤더 */}
             <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-[#FF6B35]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="w-16 h-16 bg-[#FF6B35]/10 dark:bg-[#FF6B35]/20 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Gift className="w-8 h-8 text-[#FF6B35]" />
               </div>
-              <h3 className="text-2xl font-bold text-gray-900">후기 이벤트 참여</h3>
-              <p className="text-gray-500 mt-2">참여하실 제품을 선택해주세요</p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">후기 이벤트 참여</h3>
+              <p className="text-gray-500 dark:text-gray-400 mt-2">참여하실 제품을 선택해주세요</p>
             </div>
 
             {/* 선택 버튼들 */}
             <div className="space-y-3">
               <button
                 onClick={() => handleEventSelect('abc')}
-                className="w-full p-5 bg-gray-50 hover:bg-gray-100 rounded-2xl border border-gray-200 hover:border-gray-300 transition-all duration-200 group"
+                className="w-full p-5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-2xl border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 group"
               >
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-[#1A1A1A] rounded-xl flex items-center justify-center">
+                  <div className="w-12 h-12 bg-[#1A1A1A] dark:bg-gray-700 rounded-xl flex items-center justify-center">
                     <Baby className="w-6 h-6 text-white" />
                   </div>
                   <div className="text-left flex-1">
-                    <h4 className="font-bold text-gray-900 text-lg">ABC 아기침대</h4>
-                    <p className="text-gray-500 text-sm">ABC 아기침대 후기 이벤트</p>
+                    <h4 className="font-bold text-gray-900 dark:text-white text-lg">ABC 아기침대</h4>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">ABC 아기침대 후기 이벤트</p>
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
                 </div>
@@ -321,15 +369,15 @@ export default function CustomerHomeScreen() {
 
               <button
                 onClick={() => handleEventSelect('other')}
-                className="w-full p-5 bg-gray-50 hover:bg-gray-100 rounded-2xl border border-gray-200 hover:border-gray-300 transition-all duration-200 group"
+                className="w-full p-5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-2xl border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 group"
               >
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-[#FF6B35] rounded-xl flex items-center justify-center">
                     <Package className="w-6 h-6 text-white" />
                   </div>
                   <div className="text-left flex-1">
-                    <h4 className="font-bold text-gray-900 text-lg">기타 다른 제품</h4>
-                    <p className="text-gray-500 text-sm">슬리핑백, 속싸개, 백색소음기 등</p>
+                    <h4 className="font-bold text-gray-900 dark:text-white text-lg">기타 다른 제품</h4>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">슬리핑백, 속싸개, 백색소음기 등</p>
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
                 </div>

@@ -9,6 +9,8 @@ import type { Route } from "./+types/index";
 import { Link, redirect, useLoaderData, data } from "react-router";
 import { 
   Moon, 
+  Sun,
+  Monitor,
   Headphones,
   Shield,
   FileText,
@@ -16,6 +18,7 @@ import {
   ChevronRight,
   Gift
 } from "lucide-react";
+import { Theme, useTheme } from "remix-themes";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
@@ -60,19 +63,64 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function CustomerMypageIndexScreen() {
   const { user } = useLoaderData<typeof loader>();
+  const [theme, setTheme, metadata] = useTheme();
+
+  // 현재 테마 상태 확인
+  const isSystemTheme = metadata.definedBy === "SYSTEM";
+  const isDark = theme === Theme.DARK;
+  const isLight = theme === Theme.LIGHT;
+
+  // 테마 순환: System → Light → Dark → System
+  const cycleTheme = () => {
+    if (isSystemTheme) {
+      setTheme(Theme.LIGHT);
+    } else if (isLight) {
+      setTheme(Theme.DARK);
+    } else {
+      setTheme(null); // System
+    }
+  };
+
+  // 현재 테마 아이콘과 라벨
+  const getThemeInfo = () => {
+    if (isSystemTheme) {
+      return { icon: Monitor, label: "시스템" };
+    } else if (isLight) {
+      return { icon: Sun, label: "라이트" };
+    } else {
+      return { icon: Moon, label: "다크" };
+    }
+  };
+
+  const themeInfo = getThemeInfo();
+  const ThemeIcon = themeInfo.icon;
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0]">
+    <div className="min-h-screen bg-[#F5F5F0] dark:bg-[#1A1A1A] transition-colors duration-300">
       <div className="mx-auto max-w-6xl px-6 py-10 md:py-16">
         {/* Greeting Section */}
-        <div className="mb-10">
-          <h1 className="text-4xl md:text-5xl font-light tracking-tight">
-            <span className="font-bold text-gray-900">Hello,</span>{" "}
-            <span className="text-gray-400">{user.firstName}님.</span>
-          </h1>
-          <p className="mt-3 text-gray-500 text-lg">
-            오늘도 썬데이허그와 함께 편안한 하루 보내세요.
-          </p>
+        <div className="mb-10 flex justify-between items-start">
+          <div>
+            <h1 className="text-4xl md:text-5xl font-light tracking-tight">
+              <span className="font-bold text-gray-900 dark:text-white">Hello,</span>{" "}
+              <span className="text-gray-400">{user.firstName}님.</span>
+            </h1>
+            <p className="mt-3 text-gray-500 dark:text-gray-400 text-lg">
+              오늘도 썬데이허그와 함께 편안한 하루 보내세요.
+            </p>
+          </div>
+          
+          {/* Theme Toggle Button */}
+          <button
+            onClick={cycleTheme}
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200"
+            title={`현재: ${themeInfo.label} 모드 (클릭하여 변경)`}
+          >
+            <ThemeIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-300 hidden sm:inline">
+              {themeInfo.label}
+            </span>
+          </button>
         </div>
 
         {/* Bento Grid */}
@@ -115,17 +163,17 @@ export default function CustomerMypageIndexScreen() {
             to="/customer/mypage/warranties"
             className="group"
           >
-            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
+            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white dark:bg-gray-800 rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100 dark:border-gray-700">
               <div className="flex justify-between items-start">
                 <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
                   Warranty
                 </p>
-                <div className="w-10 h-10 bg-emerald-50 rounded-full flex items-center justify-center">
-                  <Shield className="w-5 h-5 text-emerald-600" />
+                <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-900/30 rounded-full flex items-center justify-center">
+                  <Shield className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                 </div>
               </div>
               
-              <h3 className="text-gray-900 text-lg md:text-xl font-bold">
+              <h3 className="text-gray-900 dark:text-white text-lg md:text-xl font-bold">
                 내 보증서
               </h3>
             </div>
@@ -136,17 +184,17 @@ export default function CustomerMypageIndexScreen() {
             to="/customer/mypage/analyses"
             className="group"
           >
-            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
+            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white dark:bg-gray-800 rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100 dark:border-gray-700">
               <div className="flex justify-between items-start">
                 <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
                   History
                 </p>
-                <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-blue-600" />
+                <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 </div>
               </div>
               
-              <h3 className="text-gray-900 text-lg md:text-xl font-bold">
+              <h3 className="text-gray-900 dark:text-white text-lg md:text-xl font-bold">
                 분석 이력
               </h3>
             </div>
@@ -157,17 +205,17 @@ export default function CustomerMypageIndexScreen() {
             to="/customer/mypage/as"
             className="group"
           >
-            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
+            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white dark:bg-gray-800 rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100 dark:border-gray-700">
               <div className="flex justify-between items-start">
                 <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
                   Support
                 </p>
-                <div className="w-10 h-10 bg-orange-50 rounded-full flex items-center justify-center">
-                  <Headphones className="w-5 h-5 text-orange-600" />
+                <div className="w-10 h-10 bg-orange-50 dark:bg-orange-900/30 rounded-full flex items-center justify-center">
+                  <Headphones className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                 </div>
               </div>
               
-              <h3 className="text-gray-900 text-lg md:text-xl font-bold">
+              <h3 className="text-gray-900 dark:text-white text-lg md:text-xl font-bold">
                 A/S 접수
               </h3>
             </div>
@@ -178,17 +226,17 @@ export default function CustomerMypageIndexScreen() {
             to="/customer/mypage/profile"
             className="group"
           >
-            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100">
+            <div className="h-full min-h-[130px] md:min-h-[170px] bg-white dark:bg-gray-800 rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-gray-100 dark:border-gray-700">
               <div className="flex justify-between items-start">
                 <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
                   Profile
                 </p>
-                <div className="w-10 h-10 bg-purple-50 rounded-full flex items-center justify-center">
-                  <User className="w-5 h-5 text-purple-600" />
+                <div className="w-10 h-10 bg-purple-50 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
+                  <User className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                 </div>
               </div>
               
-              <h3 className="text-gray-900 text-lg md:text-xl font-bold">
+              <h3 className="text-gray-900 dark:text-white text-lg md:text-xl font-bold">
                 내 정보
               </h3>
             </div>
