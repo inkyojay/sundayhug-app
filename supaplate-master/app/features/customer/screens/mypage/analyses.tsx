@@ -31,7 +31,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw redirect("/customer/login");
   }
   
-  // 분석 데이터 조회 (피드백 항목 개수 포함)
+  // 분석 데이터 조회 (피드백 항목 개수 포함, 이미지 포함)
   const { data: analyses, error } = await supabase
     .from("sleep_analyses")
     .select(`
@@ -39,7 +39,9 @@ export async function loader({ request }: Route.LoaderArgs) {
       age_in_months, 
       summary, 
       created_at,
-      birth_date
+      birth_date,
+      image_url,
+      image_base64
     `)
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
@@ -224,11 +226,21 @@ export default function MypageAnalysesScreen() {
                 <Link key={analysis.id} to={`/customer/sleep/result/${analysis.id}`} className="block">
                   <div className="bg-white rounded-2xl p-5 hover:shadow-lg transition-all group border border-gray-100">
                     <div className="flex gap-4">
-                      {/* 점수 원형 */}
-                      <div className={`w-16 h-16 rounded-2xl ${getScoreBgColor(score)} flex flex-col items-center justify-center flex-shrink-0`}>
-                        <span className={`text-2xl font-bold ${getScoreColor(score)}`}>{score}</span>
-                        <span className="text-[10px] text-gray-400">점</span>
-                      </div>
+                      {/* 이미지 썸네일 또는 점수 원형 */}
+                      {(analysis.image_url || analysis.image_base64) ? (
+                        <div className="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0 bg-gray-100">
+                          <img 
+                            src={analysis.image_url || (analysis.image_base64?.startsWith("data:") ? analysis.image_base64 : `data:image/jpeg;base64,${analysis.image_base64}`)} 
+                            alt="수면 환경"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className={`w-16 h-16 rounded-2xl ${getScoreBgColor(score)} flex flex-col items-center justify-center flex-shrink-0`}>
+                          <span className={`text-2xl font-bold ${getScoreColor(score)}`}>{score}</span>
+                          <span className="text-[10px] text-gray-400">점</span>
+                        </div>
+                      )}
                       
                       {/* 정보 */}
                       <div className="flex-1 min-w-0">

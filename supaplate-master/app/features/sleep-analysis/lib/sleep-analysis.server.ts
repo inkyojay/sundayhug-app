@@ -39,7 +39,7 @@ export async function saveSleepAnalysis(
     const buffer = Buffer.from(base64Data, "base64");
 
     const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("sleep-analysis-images")
+      .from("sleep-analysis")
       .upload(fileName, buffer, {
         contentType: "image/jpeg",
         upsert: false,
@@ -47,9 +47,11 @@ export async function saveSleepAnalysis(
 
     if (!uploadError && uploadData) {
       const { data: publicUrl } = supabase.storage
-        .from("sleep-analysis-images")
+        .from("sleep-analysis")
         .getPublicUrl(fileName);
       imageUrl = publicUrl.publicUrl;
+    } else if (uploadError) {
+      console.warn("이미지 업로드 실패:", uploadError.message);
     }
   }
 
