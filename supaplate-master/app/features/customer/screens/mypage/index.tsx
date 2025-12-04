@@ -15,8 +15,7 @@ import {
   Shield,
   FileText,
   User,
-  ChevronRight,
-  Gift
+  ChevronRight
 } from "lucide-react";
 import { Theme, useTheme } from "remix-themes";
 
@@ -242,26 +241,6 @@ export default function CustomerMypageIndexScreen() {
             </div>
           </Link>
 
-          {/* 후기 인증 - Small White Card with Gradient */}
-          <Link 
-            to="/customer/mypage/review"
-            className="group"
-          >
-            <div className="h-full min-h-[130px] md:min-h-[170px] bg-gradient-to-br from-pink-500 to-orange-400 rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02]">
-              <div className="flex justify-between items-start">
-                <p className="text-white/80 text-xs font-medium tracking-wider uppercase">
-                  Review
-                </p>
-                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                  <Gift className="w-5 h-5 text-white" />
-                </div>
-              </div>
-              
-              <h3 className="text-white text-lg md:text-xl font-bold">
-                후기 인증
-              </h3>
-            </div>
-          </Link>
         </div>
       </div>
     </div>

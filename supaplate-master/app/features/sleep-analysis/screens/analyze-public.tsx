@@ -206,10 +206,10 @@ function LoadingWithTips() {
       {/* 로딩 스피너와 메시지 */}
       <div className="flex items-center gap-3 mb-10">
         <div className="relative">
-          <div className="w-12 h-12 border-4 border-gray-200 rounded-full"></div>
+          <div className="w-12 h-12 border-4 border-gray-200 dark:border-gray-700 rounded-full"></div>
           <div className="absolute top-0 left-0 w-12 h-12 border-4 border-[#FF6B35] border-t-transparent rounded-full animate-spin"></div>
         </div>
-        <p className="text-xl font-semibold text-gray-900">AI가 분석 중입니다...</p>
+        <p className="text-xl font-semibold text-gray-900 dark:text-white">AI가 분석 중입니다...</p>
       </div>
 
       {/* 수면 팁 카드 */}
@@ -253,7 +253,7 @@ function LoadingWithTips() {
         </div>
 
         {/* 안내 메시지 */}
-        <p className="text-center text-gray-500 text-sm mt-8">
+        <p className="text-center text-gray-500 dark:text-gray-400 text-sm mt-8">
           💡 분석에는 약 10~20초가 소요됩니다
         </p>
       </div>
@@ -346,23 +346,23 @@ export default function AnalyzePublicPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0]">
+    <div className="min-h-screen bg-[#F5F5F0] dark:bg-[#121212] transition-colors duration-300">
       <div className="mx-auto max-w-2xl px-4 md:px-6 py-8 md:py-10">
         {/* Header */}
         <div className="text-center mb-10">
           <Link 
             to="/customer/sleep"
-            className="inline-flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors mb-6"
+            className="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-6"
           >
             <ArrowLeft className="w-5 h-5" />
             <span className="text-sm font-medium">수면 분석</span>
           </Link>
           
-          <div className="w-16 h-16 bg-[#1A1A1A] rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 bg-[#1A1A1A] dark:bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <Moon className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">AI 수면 환경 분석</h1>
-          <p className="text-gray-500 mt-2">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">AI 수면 환경 분석</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-2">
             아기의 수면 공간 사진을 올려주세요
           </p>
         </div>
@@ -391,7 +391,7 @@ export default function AnalyzePublicPage() {
                 isDownloading={isDownloading}
               />
             ) : (
-              <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-100">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 md:p-6 border border-gray-100 dark:border-gray-700">
                 <UploadForm 
                   onSubmit={handleSubmit} 
                   isLoading={isLoading} 

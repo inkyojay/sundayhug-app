@@ -7,7 +7,6 @@
  */
 import type { Route } from "./+types/home";
 
-import { useState } from "react";
 import { Link, useLoaderData, data } from "react-router";
 import { 
   ShieldCheck, 
@@ -17,10 +16,7 @@ import {
   MessageCircleQuestion,
   ChevronRight,
   Sparkles,
-  Gift,
-  X,
-  Baby,
-  Package
+  Gift
 } from "lucide-react";
 import { Theme, useTheme } from "remix-themes";
 
@@ -38,6 +34,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
   const { data: { user } } = await supabase.auth.getUser();
   
+  // Feature Flags (환경변수 기반 - Vercel Production에서만 false 설정)
+  const features = {
+    chatEnabled: process.env.FEATURE_CHAT_ENABLED !== 'false',
+    blogEnabled: process.env.FEATURE_BLOG_ENABLED !== 'false',
+  };
+  
   if (user) {
     const name = user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split("@")[0];
     const firstName = name?.includes(" ") ? name.split(" ")[0] : name;
@@ -45,6 +47,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       isLoggedIn: true,
       userName: name || "회원",
       firstName: firstName || "회원",
+      features,
     });
   }
   
@@ -52,17 +55,16 @@ export async function loader({ request }: Route.LoaderArgs) {
     isLoggedIn: false,
     userName: null,
     firstName: null,
+    features,
   });
 }
 
 export default function CustomerHomeScreen() {
-  const { isLoggedIn, firstName } = useLoaderData<typeof loader>();
-  const [showEventModal, setShowEventModal] = useState(false);
+  const { isLoggedIn, firstName, features } = useLoaderData<typeof loader>();
   const [theme, setTheme, metadata] = useTheme();
 
   // 현재 테마 상태 확인
   const isSystemTheme = metadata.definedBy === "SYSTEM";
-  const isDark = theme === Theme.DARK;
   const isLight = theme === Theme.LIGHT;
 
   // 테마 순환: System → Light → Dark → System
@@ -90,18 +92,10 @@ export default function CustomerHomeScreen() {
   const themeInfo = getThemeInfo();
   const ThemeIcon = themeInfo.icon;
 
-  const handleEventSelect = (type: 'abc' | 'other') => {
-    const url = type === 'abc' 
-      ? 'https://www.sundayhug.kr/event/momcafe-abc.html'
-      : 'https://www.sundayhug.kr/event/momcafe.html';
-    window.open(url, '_blank');
-    setShowEventModal(false);
-  };
-
   return (
     <div className="min-h-screen bg-[#F5F5F0] dark:bg-[#121212] transition-colors duration-300">
       <div className="mx-auto max-w-6xl px-6 py-10 md:py-16">
-      {/* Hero Section */}
+        {/* Hero Section */}
         <div className="mb-10 md:mb-14">
           {/* 상단 배지 + 테마 토글 */}
           <div className="flex items-center justify-between mb-6">
@@ -142,12 +136,12 @@ export default function CustomerHomeScreen() {
           </p>
         </div>
 
-        {/* 후기 이벤트 버튼 - 맨 위 */}
-        <div className="mb-4 md:mb-5">
-          <button
-            onClick={() => setShowEventModal(true)}
-            className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-300 hover:shadow-md group"
-          >
+        {/* 후기 이벤트 버튼 - 이벤트 전용 페이지로 연결 */}
+        <Link 
+          to={isLoggedIn ? "/customer/event/review" : "/customer/login?redirect=/customer/event/review"}
+          className="block mb-4 md:mb-5"
+        >
+          <div className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-300 hover:shadow-md group">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-[#FF6B35]/10 dark:bg-[#FF6B35]/20 rounded-full flex items-center justify-center">
@@ -158,10 +152,10 @@ export default function CustomerHomeScreen() {
                   <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">맘카페 후기 작성하고 사은품 받으세요!</p>
                 </div>
               </div>
-              <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
+              <ChevronRight className="w-6 h-6 text-gray-400 dark:text-gray-500 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
             </div>
-          </button>
-        </div>
+          </div>
+        </Link>
 
         {/* 처음이신가요? / 마이페이지 카드 */}
         {isLoggedIn ? (
@@ -190,7 +184,7 @@ export default function CustomerHomeScreen() {
                 <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-white group-hover:translate-x-1 transition-all" />
               </div>
             </div>
-            </Link>
+          </Link>
         ) : (
           <div className="mb-4 md:mb-5 p-6 md:p-8 bg-gradient-to-r from-gray-900 to-gray-800 rounded-3xl">
             <div className="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -202,7 +196,7 @@ export default function CustomerHomeScreen() {
                   회원가입 후 보증서 등록, 수면 분석 결과 저장 등<br className="hidden md:block" />
                   더 많은 서비스를 이용하세요.
                 </p>
-        </div>
+              </div>
               <div className="flex gap-3 w-full md:w-auto">
                 <Button 
                   asChild
@@ -212,7 +206,7 @@ export default function CustomerHomeScreen() {
                 </Button>
                 <Button 
                   asChild
-                  className="flex-1 md:flex-none bg-transparent border border-white/50 text-white hover:bg-white/10 hover:border-white px-6"
+                  className="flex-1 md:flex-none bg-white/10 text-white border border-white/30 hover:bg-white/20 px-6"
                 >
                   <Link to="/customer/register">회원가입</Link>
                 </Button>
@@ -290,7 +284,43 @@ export default function CustomerHomeScreen() {
           </Link>
         </div>
 
-        {/* Quick Links - 2개만 */}
+        {/* AI 육아 상담 - 준비중 (비활성화) */}
+        <div className="mt-8">
+          <div className="relative cursor-not-allowed">
+            <div className="h-full min-h-[180px] bg-gradient-to-br from-gray-400 to-gray-500 rounded-3xl p-6 flex flex-col justify-between opacity-70">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-gray-200 text-sm font-medium tracking-wider uppercase">
+                    AI Parenting
+                  </p>
+                  <h2 className="text-white text-2xl md:text-3xl font-bold mt-1">
+                    AI 육아 상담
+                  </h2>
+                </div>
+                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                  <MessageCircleQuestion className="w-5 h-5 text-white" />
+                </div>
+              </div>
+              
+              <div>
+                <p className="text-gray-200 text-sm md:text-base">
+                  수면, 수유, 발달 고민을 AI가 답변해 드려요
+                </p>
+                <div className="mt-3 flex items-center text-white/60">
+                  <span className="text-sm font-medium">준비중</span>
+                </div>
+              </div>
+            </div>
+            {/* 준비중 오버레이 */}
+            <div className="absolute inset-0 bg-black/20 rounded-3xl flex items-center justify-center">
+              <span className="bg-white/90 text-gray-700 px-4 py-2 rounded-full text-sm font-semibold shadow-lg">
+                🚀 서비스 준비중
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Links */}
         <div className="mt-8 grid grid-cols-2 gap-4">
           <a 
             href="https://www.sundayhug.kr/sleepport.html"
@@ -298,11 +328,11 @@ export default function CustomerHomeScreen() {
             rel="noopener noreferrer"
             className="bg-white/60 dark:bg-gray-800/60 backdrop-blur rounded-2xl p-5 hover:bg-white dark:hover:bg-gray-800 transition-colors border border-gray-200/50 dark:border-gray-700/50 group"
           >
-            <MessageCircleQuestion className="w-6 h-6 text-gray-400 mb-3" />
+            <MessageCircleQuestion className="w-6 h-6 text-gray-400 dark:text-gray-500 mb-3" />
             <h4 className="font-semibold text-gray-900 dark:text-white">
               ABC 아기침대<br className="md:hidden" /> 사용 설명서
             </h4>
-            <ChevronRight className="w-4 h-4 text-gray-400 mt-2 group-hover:translate-x-1 transition-transform" />
+            <ChevronRight className="w-4 h-4 text-gray-400 dark:text-gray-500 mt-2 group-hover:translate-x-1 transition-transform" />
           </a>
 
           <a 
@@ -320,77 +350,6 @@ export default function CustomerHomeScreen() {
         </div>
 
       </div>
-
-      {/* 제품 선택 모달 */}
-      {showEventModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* 백드롭 */}
-          <div 
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setShowEventModal(false)}
-          />
-          
-          {/* 모달 */}
-          <div className="relative bg-white dark:bg-gray-900 rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
-            {/* 닫기 버튼 */}
-            <button
-              onClick={() => setShowEventModal(false)}
-              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-400" />
-            </button>
-
-            {/* 헤더 */}
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-[#FF6B35]/10 dark:bg-[#FF6B35]/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Gift className="w-8 h-8 text-[#FF6B35]" />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">후기 이벤트 참여</h3>
-              <p className="text-gray-500 dark:text-gray-400 mt-2">참여하실 제품을 선택해주세요</p>
-            </div>
-
-            {/* 선택 버튼들 */}
-            <div className="space-y-3">
-              <button
-                onClick={() => handleEventSelect('abc')}
-                className="w-full p-5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-2xl border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-[#1A1A1A] dark:bg-gray-700 rounded-xl flex items-center justify-center">
-                    <Baby className="w-6 h-6 text-white" />
-                  </div>
-                  <div className="text-left flex-1">
-                    <h4 className="font-bold text-gray-900 dark:text-white text-lg">ABC 아기침대</h4>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">ABC 아기침대 후기 이벤트</p>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleEventSelect('other')}
-                className="w-full p-5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-2xl border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-[#FF6B35] rounded-xl flex items-center justify-center">
-                    <Package className="w-6 h-6 text-white" />
-                  </div>
-                  <div className="text-left flex-1">
-                    <h4 className="font-bold text-gray-900 dark:text-white text-lg">기타 다른 제품</h4>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">슬리핑백, 속싸개, 백색소음기 등</p>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
-                </div>
-              </button>
-            </div>
-
-            {/* 안내 문구 */}
-            <p className="text-center text-xs text-gray-400 mt-6">
-              선택하시면 해당 이벤트 페이지가 새 창에서 열립니다
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

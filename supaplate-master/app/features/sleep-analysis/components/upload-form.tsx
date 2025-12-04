@@ -159,12 +159,12 @@ export function UploadForm({
     [handleImageUpload]
   );
 
-  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+  const handleDragOver = (event: React.DragEvent<HTMLLabelElement>) => {
     event.preventDefault();
   };
 
   const handleDrop = useCallback(
-    (event: React.DragEvent<HTMLDivElement>) => {
+    (event: React.DragEvent<HTMLLabelElement>) => {
       event.preventDefault();
       const file = event.dataTransfer.files?.[0];
       if (file) {
@@ -566,19 +566,19 @@ export function UploadForm({
       </Button>
 
       {/* Privacy Agreement */}
-      <div className="bg-gray-100 rounded-xl p-4 border border-gray-300">
+      <div className="bg-gray-100 dark:bg-gray-700/50 rounded-xl p-4 border border-gray-300 dark:border-gray-600">
         <div className="flex items-start gap-3">
           <Checkbox 
             id="privacy-agree" 
             checked={privacyAgreed}
             onCheckedChange={(checked) => setPrivacyAgreed(checked === true)}
-            className="mt-0.5 border-gray-400 data-[state=checked]:bg-[#FF6B35] data-[state=checked]:border-[#FF6B35]"
+            className="mt-0.5 border-gray-400 dark:border-gray-500 data-[state=checked]:bg-[#FF6B35] data-[state=checked]:border-[#FF6B35]"
           />
-          <label htmlFor="privacy-agree" className="text-sm text-gray-700 cursor-pointer leading-relaxed">
-            <span className="font-semibold text-gray-900">개인정보 수집 및 이용 동의</span>
+          <label htmlFor="privacy-agree" className="text-sm text-gray-700 dark:text-gray-300 cursor-pointer leading-relaxed">
+            <span className="font-semibold text-gray-900 dark:text-white">개인정보 수집 및 이용 동의</span>
             <span className="text-red-500 ml-1">*</span>
-            <ul className="mt-2 space-y-1 text-xs text-gray-600">
-              <li>• 업로드된 사진은 <strong className="text-gray-800">1회 분석 후 저장되지 않습니다</strong></li>
+            <ul className="mt-2 space-y-1 text-xs text-gray-600 dark:text-gray-400">
+              <li>• 업로드된 사진은 <strong className="text-[#FF6B35] font-semibold">분석 사용 용도로만 이용됩니다</strong></li>
               <li>• 수집된 전화번호로 분석 결과를 안내해드립니다</li>
               <li>• 아이 정보와 전화번호는 내 프로필에 저장됩니다</li>
             </ul>
