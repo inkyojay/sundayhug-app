@@ -206,8 +206,7 @@ export default function CustomerHomeScreen() {
                 </Button>
                 <Button 
                   asChild
-                  variant="outline"
-                  className="flex-1 md:flex-none border-gray-600 text-white hover:bg-white/10 px-6"
+                  className="flex-1 md:flex-none bg-white/10 text-white border border-white/30 hover:bg-white/20 px-6"
                 >
                   <Link to="/customer/register">회원가입</Link>
                 </Button>
