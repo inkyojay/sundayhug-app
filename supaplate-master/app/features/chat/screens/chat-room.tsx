@@ -3,7 +3,7 @@
  */
 import type { Route } from "./+types/chat-room";
 
-import { Link, useLoaderData, useFetcher, data } from "react-router";
+import { Link, useLoaderData, useFetcher, data, useNavigate } from "react-router";
 import { 
   ArrowLeft, 
   Send,
@@ -147,6 +147,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 
 export default function ChatRoomScreen() {
   const { session, messages: initialMessages, babyProfile: initialBabyProfile, isNew } = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
   const fetcher = useFetcher();
   const chatFetcher = useFetcher();
   const profileFetcher = useFetcher();
@@ -187,12 +188,12 @@ export default function ChatRoomScreen() {
     if (chatFetcher.data?.success && chatFetcher.data?.message) {
       setLocalMessages(prev => [...prev, chatFetcher.data.message]);
       
-      // 새 세션이면 리다이렉트
+      // 새 세션이면 리다이렉트 (React Router 사용으로 부드러운 전환)
       if (isNew && chatFetcher.data?.sessionId) {
-        window.location.href = `/customer/chat/${chatFetcher.data.sessionId}`;
+        navigate(`/customer/chat/${chatFetcher.data.sessionId}`, { replace: true });
       }
     }
-  }, [chatFetcher.data, isNew]);
+  }, [chatFetcher.data, isNew, navigate]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -418,9 +419,9 @@ export default function ChatRoomScreen() {
               <div className={`rounded-2xl p-4 ${
                 msg.role === "user"
                   ? "bg-[#FF6B35] text-white rounded-tr-md"
-                  : "bg-white shadow-sm rounded-tl-md"
+                  : "bg-white shadow-sm rounded-tl-md text-gray-800"
               }`}>
-                <p className="whitespace-pre-wrap">{msg.content}</p>
+                <p className="whitespace-pre-wrap text-inherit">{msg.content}</p>
                 
                 {/* 출처 표시 */}
                 {msg.role === "assistant" && msg.sources && (
