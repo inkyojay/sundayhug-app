@@ -11,11 +11,14 @@ import { Link, useLoaderData, data } from "react-router";
 import { 
   ShieldCheck, 
   Moon, 
+  Sun,
+  Monitor,
   MessageCircleQuestion,
   ChevronRight,
   Sparkles,
   Gift
 } from "lucide-react";
+import { Theme, useTheme } from "remix-themes";
 
 import { Button } from "~/core/components/ui/button";
 import makeServerClient from "~/core/lib/supa-client.server";
@@ -58,31 +61,76 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function CustomerHomeScreen() {
   const { isLoggedIn, firstName, features } = useLoaderData<typeof loader>();
+  const [theme, setTheme, metadata] = useTheme();
+
+  // 현재 테마 상태 확인
+  const isSystemTheme = metadata.definedBy === "SYSTEM";
+  const isLight = theme === Theme.LIGHT;
+
+  // 테마 순환: System → Light → Dark → System
+  const cycleTheme = () => {
+    if (isSystemTheme) {
+      setTheme(Theme.LIGHT);
+    } else if (isLight) {
+      setTheme(Theme.DARK);
+    } else {
+      setTheme(null); // System
+    }
+  };
+
+  // 현재 테마 아이콘과 라벨
+  const getThemeInfo = () => {
+    if (isSystemTheme) {
+      return { icon: Monitor, label: "시스템" };
+    } else if (isLight) {
+      return { icon: Sun, label: "라이트" };
+    } else {
+      return { icon: Moon, label: "다크" };
+    }
+  };
+
+  const themeInfo = getThemeInfo();
+  const ThemeIcon = themeInfo.icon;
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0]">
+    <div className="min-h-screen bg-[#F5F5F0] dark:bg-[#121212] transition-colors duration-300">
       <div className="mx-auto max-w-6xl px-6 py-10 md:py-16">
         {/* Hero Section */}
         <div className="mb-10 md:mb-14">
-          <div className="inline-flex items-center gap-2 mb-6 px-4 py-2 rounded-full bg-white border border-gray-200">
-            <Sparkles className="w-4 h-4 text-[#FF6B35]" />
-            <span className="text-sm font-medium text-gray-600">썬데이허그 고객 서비스</span>
+          {/* 상단 배지 + 테마 토글 */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+              <Sparkles className="w-4 h-4 text-[#FF6B35]" />
+              <span className="text-sm font-medium text-gray-600 dark:text-gray-300">썬데이허그 고객 서비스</span>
+            </div>
+            
+            {/* Theme Toggle Button */}
+            <button
+              onClick={cycleTheme}
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200"
+              title={`현재: ${themeInfo.label} 모드 (클릭하여 변경)`}
+            >
+              <ThemeIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+              <span className="text-sm font-medium text-gray-600 dark:text-gray-300 hidden sm:inline">
+                {themeInfo.label}
+              </span>
+            </button>
           </div>
           
           <h1 className="text-4xl md:text-6xl font-light tracking-tight leading-tight">
             {isLoggedIn ? (
               <>
-                <span className="font-bold text-gray-900">Hello,</span>{" "}
+                <span className="font-bold text-gray-900 dark:text-white">Hello,</span>{" "}
                 <span className="text-gray-400">{firstName}님.</span>
               </>
             ) : (
               <>
-                <span className="font-bold text-gray-900">Welcome to</span><br />
+                <span className="font-bold text-gray-900 dark:text-white">Welcome to</span><br />
                 <span className="text-gray-400">Sunday Hug.</span>
               </>
             )}
           </h1>
-          <p className="mt-4 text-gray-500 text-lg md:text-xl max-w-lg">
+          <p className="mt-4 text-gray-500 dark:text-gray-400 text-lg md:text-xl max-w-lg">
             제품 보증서 등록부터 AI 수면 환경 분석까지,<br className="hidden md:block" />
             썬데이허그가 함께합니다.
           </p>

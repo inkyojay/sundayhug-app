@@ -77,13 +77,13 @@ export default function CustomerLayout() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#F5F5F0]">
+    <div className="flex min-h-screen flex-col bg-[#F5F5F0] dark:bg-[#121212] transition-colors duration-300">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full bg-[#F5F5F0]/95 backdrop-blur supports-[backdrop-filter]:bg-[#F5F5F0]/80">
+      <header className="sticky top-0 z-50 w-full bg-[#F5F5F0]/95 dark:bg-[#121212]/95 backdrop-blur supports-[backdrop-filter]:bg-[#F5F5F0]/80 dark:supports-[backdrop-filter]:bg-[#121212]/80">
         <div className="mx-auto max-w-6xl flex h-16 md:h-20 items-center justify-between px-6">
           {/* Logo */}
           <Link to="/customer" className="flex items-center">
-            <span className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight">
+            <span className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
               Sunday Hug
             </span>
           </Link>
@@ -95,10 +95,10 @@ export default function CustomerLayout() {
                 key={item.href}
                 to={item.href}
                 className={cn(
-                  "text-sm font-medium transition-colors hover:text-gray-900",
+                  "text-sm font-medium transition-colors hover:text-gray-900 dark:hover:text-white",
                   isActive(item.href)
-                    ? "text-gray-900"
-                    : "text-gray-500"
+                    ? "text-gray-900 dark:text-white"
+                    : "text-gray-500 dark:text-gray-400"
                 )}
               >
                 {item.label}
@@ -150,7 +150,7 @@ export default function CustomerLayout() {
               <Button 
                 asChild 
                 variant="ghost" 
-                className="text-gray-700 hover:text-gray-900 hover:bg-gray-200/50"
+                className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/50 dark:hover:bg-gray-700/50"
               >
                 <Link to="/customer/login">로그인</Link>
               </Button>
@@ -266,7 +266,7 @@ export default function CustomerLayout() {
       </footer>
 
       {/* Bottom Navigation (Mobile) */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur border-t border-gray-200 md:hidden safe-area-bottom">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 dark:bg-gray-900/95 backdrop-blur border-t border-gray-200 dark:border-gray-800 md:hidden safe-area-bottom">
         <div className="flex items-center justify-around py-2 px-2">
           {mobileNavItems.map((item) => (
             <Link
@@ -275,8 +275,8 @@ export default function CustomerLayout() {
               className={cn(
                 "flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all",
                 isActive(item.href)
-                  ? "text-[#FF6B35] bg-orange-50"
-                  : "text-gray-500"
+                  ? "text-[#FF6B35] bg-orange-50 dark:bg-orange-900/30"
+                  : "text-gray-500 dark:text-gray-400"
               )}
             >
               <item.icon className={cn(

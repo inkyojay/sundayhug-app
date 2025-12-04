@@ -123,9 +123,17 @@ export const handle = {
  */
 export function Layout({ children }: { children: React.ReactNode }) {
   const data = useRouteLoaderData("root");
+  
+  // 시간대 기반 기본 테마 설정 (19시~7시: dark, 그 외: light)
+  const getDefaultTheme = () => {
+    const hour = new Date().getHours();
+    const isNightTime = hour >= 19 || hour < 7;
+    return isNightTime ? "dark" : "light";
+  };
+  
   return (
     <ThemeProvider
-      specifiedTheme={data?.theme ?? "dark"} // Default to dark theme if none is specified
+      specifiedTheme={data?.theme ?? getDefaultTheme()} // 사용자 설정 없으면 시간대 기반
       themeAction="/api/settings/theme" // API endpoint for changing theme
     >
       <InnerLayout>{children}</InnerLayout>
