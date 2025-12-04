@@ -4,6 +4,92 @@
 
 ---
 
+## 📅 2025년 12월 4일 (목) - 저녁 작업: main-ready 브랜치 배포, 수면 분석 개선
+
+### 🎯 주요 작업 내용
+
+#### 1. main-ready 브랜치 배포 설정
+
+**develop → main-ready 체리픽 후 비활성화 적용**
+- 🤖 **AI 육아 상담**: 기능 비활성화, 홈 카드는 "준비중" 표시
+- 📝 **육아 블로그**: 완전 비활성화 (카드, 헤더 링크 모두 숨김)
+- 👤 **마이페이지**: 포인트 카드, 후기 인증 핑크 카드 숨김
+- 🎁 **후기 이벤트**: `/customer/event/review` 정상 작동
+
+#### 2. 수면 분석 이력 UI 수정
+
+**분석 이력 리스트 (`/customer/mypage/analyses`)**
+- 이미지 썸네일 → **점수 원형**으로 변경
+- 점수별 배경색 적용 (90+ 초록, 75+ 파랑, 60+ 노랑, 40+ 주황, 빨강)
+- 위험도 요약 핀 표시
+
+**분석 결과 상세 (`/customer/sleep/result/:id`)**
+- feedbackItems 파싱 수정: `id`, `x`, `y` 좌표 올바르게 추출
+- 이미지 위 위험도 핀 위치 정확하게 표시
+- **이미지로 저장하기** 버튼 활성화
+
+#### 3. 이미지 저장 기능 개선 (모바일 최적화)
+
+**Web Share API 지원**
+- 모바일에서 Web Share API 사용 가능 시 → 공유 시트로 저장
+- 미지원 시 → 일반 다운로드 폴백
+
+**진행 상태 표시**
+- `saveProgress` 상태 추가
+- "이미지 생성 중..." → "화면 캡처 중..." → "이미지 저장 중..."
+
+**다운로드 방식 개선**
+- `dataURL` → `Blob` 방식으로 변경 (메모리 효율 개선)
+- 모바일 다운로드 완료 시 안내 alert 표시
+
+---
+
+### 🔧 수정/추가된 파일
+
+```
+수정 파일:
+app/features/sleep-analysis/components/analysis-result.tsx  # 이미지 저장 개선, 버튼 활성화
+app/features/sleep-analysis/screens/result.tsx               # feedbackItems 파싱 수정
+app/features/customer/screens/mypage/analyses.tsx            # 점수 원형 표시
+app/features/customer/screens/mypage/index.tsx               # 카드 숨김 (main-ready)
+app/features/customer/screens/home.tsx                       # AI 상담 준비중, 블로그 숨김 (main-ready)
+app/routes.ts                                                # 블로그/채팅 비활성화 (main-ready)
+```
+
+---
+
+### 🌿 브랜치별 기능 상태
+
+| 기능 | develop | main-ready |
+|------|---------|------------|
+| AI 육아 상담 | ✅ 활성화 | ⏸️ 준비중 (비활성화) |
+| 육아 블로그 | ✅ 활성화 | ❌ 숨김 |
+| 후기 이벤트 | ✅ 활성화 | ✅ 활성화 |
+| 마이페이지 포인트 | ✅ 표시 | ❌ 숨김 |
+| 마이페이지 후기 인증 | ✅ 표시 | ❌ 숨김 |
+
+---
+
+### ✅ 완료된 TODO
+
+- [x] main-ready 브랜치 기능별 비활성화
+- [x] 수면 분석 이력 점수 원형 표시
+- [x] 수면 분석 결과 feedbackItems 파싱 수정
+- [x] 이미지로 저장하기 버튼 활성화
+- [x] 모바일 Web Share API 지원
+- [x] 이미지 저장 진행 상태 표시
+
+---
+
+### 🔜 향후 작업 예정
+
+- [ ] 메인 브랜치 배포 준비
+- [ ] AI 썸네일 생성 (Vertex AI Imagen 연동)
+- [ ] 후기 승인 시 포인트 자동 지급
+- [ ] 사은품 배송 처리
+
+---
+
 ## 📅 2025년 12월 4일 (목) - 오후 작업: 다크모드 개선, 후기 관리 UI 대폭 개선, 카카오 로그인 개선
 
 ### 🎯 주요 작업 내용
