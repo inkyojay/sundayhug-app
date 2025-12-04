@@ -226,21 +226,11 @@ export default function MypageAnalysesScreen() {
                 <Link key={analysis.id} to={`/customer/sleep/result/${analysis.id}`} className="block">
                   <div className="bg-white rounded-2xl p-5 hover:shadow-lg transition-all group border border-gray-100">
                     <div className="flex gap-4">
-                      {/* 이미지 썸네일 또는 점수 원형 */}
-                      {(analysis.image_url || analysis.image_base64) ? (
-                        <div className="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0 bg-gray-100">
-                          <img 
-                            src={analysis.image_url || (analysis.image_base64?.startsWith("data:") ? analysis.image_base64 : `data:image/jpeg;base64,${analysis.image_base64}`)} 
-                            alt="수면 환경"
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ) : (
-                        <div className={`w-16 h-16 rounded-2xl ${getScoreBgColor(score)} flex flex-col items-center justify-center flex-shrink-0`}>
-                          <span className={`text-2xl font-bold ${getScoreColor(score)}`}>{score}</span>
-                          <span className="text-[10px] text-gray-400">점</span>
-                        </div>
-                      )}
+                      {/* 점수 원형 */}
+                      <div className={`w-16 h-16 rounded-2xl ${getScoreBgColor(score)} flex flex-col items-center justify-center flex-shrink-0`}>
+                        <span className={`text-2xl font-bold ${getScoreColor(score)}`}>{score}</span>
+                        <span className="text-[10px] text-gray-400">점</span>
+                      </div>
                       
                       {/* 정보 */}
                       <div className="flex-1 min-w-0">
