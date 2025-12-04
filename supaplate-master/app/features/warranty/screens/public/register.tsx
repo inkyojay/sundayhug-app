@@ -138,13 +138,24 @@ export async function action({ request }: Route.ActionArgs) {
   return { success: false, error: "알 수 없는 요청입니다." };
 }
 
+// 제품 목록 (향후 DB에서 가져올 수 있음)
+const products = [
+  { 
+    id: "abc-bed", 
+    name: "ABC 이동식 아기침대", 
+    description: "접이식 아기침대",
+    warrantyPeriod: "1년",
+  },
+];
+
 export default function WarrantyRegister() {
   const { user } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const [step, setStep] = useState<"info" | "photo" | "complete">("info");
+  const [step, setStep] = useState<"product" | "info" | "photo" | "complete">("product");
+  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     customerName: user.name,
     phone: user.phone ? formatPhoneNumber(user.phone) : "",
@@ -271,17 +282,25 @@ export default function WarrantyRegister() {
     }
   };
 
+  const getSelectedProductInfo = () => products.find(p => p.id === selectedProduct);
+
+  const handleBackClick = () => {
+    if (step === "photo") setStep("info");
+    else if (step === "info") setStep("product");
+    else navigate("/customer");
+  };
+
   return (
-    <div className="min-h-screen bg-[#F5F5F0]">
+    <div className="min-h-screen bg-[#F5F5F0] dark:bg-[#121212] transition-colors">
       <div className="mx-auto max-w-lg px-6 py-10">
         {/* Back Button */}
         <button
-          onClick={() => step === "photo" ? setStep("info") : navigate("/customer")}
-          className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors mb-8"
+          onClick={handleBackClick}
+          className="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-8"
         >
           <ArrowLeft className="w-5 h-5" />
           <span className="text-sm font-medium">
-            {step === "photo" ? "이전" : "홈으로"}
+            {step === "product" ? "홈으로" : "이전"}
           </span>
         </button>
 
@@ -290,43 +309,127 @@ export default function WarrantyRegister() {
           <div className="w-16 h-16 bg-[#FF6B35]/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <ShieldCheck className="w-8 h-8 text-[#FF6B35]" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">보증서 등록</h1>
-          <p className="text-gray-500 mt-2">ABC 이동식 아기침대</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">보증서 등록</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-2">
+            {selectedProduct ? getSelectedProductInfo()?.name : "등록할 제품을 선택해주세요"}
+          </p>
         </div>
 
         {/* Progress */}
-        <div className="flex items-center justify-center gap-3 mb-10">
-          {["정보입력", "사진등록", "완료"].map((label, idx) => (
-            <div key={label} className="flex items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-                idx === 0 && step === "info" ? "bg-[#FF6B35] text-white" :
-                idx === 1 && step === "photo" ? "bg-[#FF6B35] text-white" :
-                idx === 2 && step === "complete" ? "bg-green-500 text-white" :
-                idx < ["info", "photo", "complete"].indexOf(step) ? "bg-[#FF6B35] text-white" :
-                "bg-gray-200 text-gray-500"
-              }`}>
-                {idx + 1}
+        <div className="flex items-center justify-center gap-2 mb-10">
+          {["제품선택", "정보입력", "사진등록", "완료"].map((label, idx) => {
+            const steps = ["product", "info", "photo", "complete"];
+            const currentStepIdx = steps.indexOf(step);
+            const isActive = idx === currentStepIdx;
+            const isCompleted = idx < currentStepIdx;
+            
+            return (
+              <div key={label} className="flex items-center">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
+                  isActive ? "bg-[#FF6B35] text-white" :
+                  isCompleted ? "bg-[#FF6B35] text-white" :
+                  idx === 3 && step === "complete" ? "bg-green-500 text-white" :
+                  "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                }`}>
+                  {idx + 1}
+                </div>
+                {idx < 3 && (
+                  <div className={`w-8 h-1 mx-1 rounded-full transition-colors ${
+                    isCompleted ? "bg-[#FF6B35]" : "bg-gray-200 dark:bg-gray-700"
+                  }`} />
+                )}
               </div>
-              {idx < 2 && (
-                <div className={`w-12 h-1 mx-2 rounded-full transition-colors ${
-                  idx < ["info", "photo", "complete"].indexOf(step) 
-                    ? "bg-[#FF6B35]" 
-                    : "bg-gray-200"
-                }`} />
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* Step 1: 정보 입력 */}
-        {step === "info" && (
-          <div className="bg-white rounded-2xl p-6 border border-gray-100">
-            <h2 className="font-semibold text-gray-900 text-lg mb-1">구매자 정보</h2>
-            <p className="text-gray-500 text-sm mb-6">제품 구매자 정보를 입력해주세요</p>
+        {/* Step 1: 제품 선택 */}
+        {step === "product" && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-100 dark:border-gray-700">
+            <h2 className="font-semibold text-gray-900 dark:text-white text-lg mb-1">제품 선택</h2>
+            <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">보증서를 등록할 제품을 선택해주세요</p>
             
+            <div className="space-y-3">
+              {products.map((product) => (
+                <button
+                  key={product.id}
+                  onClick={() => setSelectedProduct(product.id)}
+                  className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
+                    selectedProduct === product.id 
+                      ? "border-[#FF6B35] bg-[#FFF8F5] dark:bg-[#FF6B35]/10" 
+                      : "border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-800"
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                      selectedProduct === product.id 
+                        ? "bg-[#FF6B35] text-white" 
+                        : "bg-gray-100 dark:bg-gray-700 text-gray-400"
+                    }`}>
+                      <Package className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className={`font-medium ${
+                        selectedProduct === product.id 
+                          ? "text-[#FF6B35]" 
+                          : "text-gray-900 dark:text-white"
+                      }`}>
+                        {product.name}
+                      </h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {product.description} · 보증기간 {product.warrantyPeriod}
+                      </p>
+                    </div>
+                    {selectedProduct === product.id && (
+                      <CheckCircle className="w-6 h-6 text-[#FF6B35]" />
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <Button 
+              className="w-full h-12 rounded-xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white font-medium mt-6"
+              onClick={() => setStep("info")}
+              disabled={!selectedProduct}
+            >
+              다음: 정보 입력
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl text-sm text-blue-700 dark:text-blue-300 mt-6">
+              <p className="font-medium mb-2">ℹ️ 보증서 등록 안내</p>
+              <ul className="space-y-1 text-blue-600 dark:text-blue-400">
+                <li>• 썬데이허그 정품 구매자 대상</li>
+                <li>• 등록 후 관리자 확인을 거쳐 승인됩니다</li>
+                <li>• 승인 시 보증기간 동안 무상 A/S 가능</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: 정보 입력 */}
+        {step === "info" && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-100 dark:border-gray-700">
+            <h2 className="font-semibold text-gray-900 dark:text-white text-lg mb-1">구매자 정보</h2>
+            <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">제품 구매자 정보를 입력해주세요</p>
+            
+            {/* 선택한 제품 표시 */}
+            <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-xl mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-[#FF6B35] rounded-lg flex items-center justify-center">
+                  <Package className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">{getSelectedProductInfo()?.name}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">보증기간 {getSelectedProductInfo()?.warrantyPeriod}</p>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="customerName" className="text-sm font-medium text-gray-700">
+                <Label htmlFor="customerName" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   이름 *
                 </Label>
                 <Input
@@ -335,12 +438,12 @@ export default function WarrantyRegister() {
                   placeholder="구매자 이름"
                   value={formData.customerName}
                   onChange={handleInputChange}
-                  className="h-12 rounded-xl border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
+                  className="h-12 rounded-xl border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone" className="text-sm font-medium text-gray-700">
+                <Label htmlFor="phone" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   연락처 *
                 </Label>
                 <Input
@@ -351,7 +454,7 @@ export default function WarrantyRegister() {
                   value={formData.phone}
                   onChange={handlePhoneChange}
                   maxLength={13}
-                  className="h-12 rounded-xl border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
+                  className="h-12 rounded-xl border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
                 />
                 <p className="text-xs text-gray-400">
                   승인 결과를 카카오톡으로 안내드립니다
@@ -359,7 +462,7 @@ export default function WarrantyRegister() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="purchaseDate" className="text-sm font-medium text-gray-700">
+                <Label htmlFor="purchaseDate" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   구매일 (선택)
                 </Label>
                 <Input
@@ -368,7 +471,7 @@ export default function WarrantyRegister() {
                   type="date"
                   value={formData.purchaseDate}
                   onChange={handleInputChange}
-                  className="h-12 rounded-xl border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
+                  className="h-12 rounded-xl border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
                 />
               </div>
 
@@ -388,10 +491,11 @@ export default function WarrantyRegister() {
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
 
-              <div className="p-4 bg-[#FFF8F5] rounded-xl text-sm text-[#FF6B35]">
+              <div className="p-4 bg-[#FFF8F5] dark:bg-[#FF6B35]/10 rounded-xl text-sm text-[#FF6B35]">
                 <p className="font-medium mb-2">📌 등록 안내</p>
-                <ul className="space-y-1 text-gray-600">
-                  <li>• ABC 이동식 아기침대 구매자 대상</li>
+                <ul className="space-y-1 text-gray-600 dark:text-gray-400">
+                  <li>• {getSelectedProductInfo()?.name} 구매자 대상</li>
+                  <li>• 보증기간: {getSelectedProductInfo()?.warrantyPeriod}</li>
                   <li>• 등록 후 관리자 확인을 거쳐 승인됩니다</li>
                   <li>• 승인 결과는 카카오톡으로 안내드립니다</li>
                 </ul>

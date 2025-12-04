@@ -100,6 +100,9 @@ export default [
         route("/view/:id", "features/warranty/screens/public/view.tsx"),
       ]),
       
+      // 이벤트 후기 (사은품)
+      route("/event/review", "features/customer/screens/event-review.tsx"),
+      
       // 수면 분석 허브
       ...prefix("/sleep", [
         index("features/customer/screens/sleep-hub.tsx"),
@@ -124,8 +127,8 @@ export default [
       route("/login", "features/customer/screens/login.tsx"),
       route("/register", "features/customer/screens/register.tsx"),
       route("/auth/callback", "features/customer/screens/auth-callback.tsx"),
-      // 레거시 콜백 (향후 제거 예정)
-      route("/kakao/callback", "features/warranty/screens/public/kakao-callback.tsx", { id: "customer-kakao-callback" }),
+      // 카카오 로그인 (REST API + Supabase Auth 하이브리드)
+      route("/kakao/callback", "features/customer/screens/kakao-callback.tsx", { id: "customer-kakao-callback" }),
       route("/naver/callback", "features/customer/screens/naver-callback.tsx"),
       
       // 마이페이지 (로그인 필요)
