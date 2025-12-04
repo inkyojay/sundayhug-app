@@ -31,6 +31,12 @@ export const profiles = pgTable(
       }),
     name: text().notNull(),
     avatar_url: text(),
+    email: text(), // 소셜 로그인에서 수집된 이메일
+    phone: text(), // 전화번호
+    gender: text(), // 성별 (male/female)
+    age_range: text(), // 연령대 (예: 20~29)
+    birthday: text(), // 생일 (MMDD 형식)
+    provider: text(), // 로그인 제공자 (email/kakao/naver/google)
     marketing_consent: boolean("marketing_consent").notNull().default(false),
     // Adds created_at and updated_at timestamp columns
     ...timestamps,
