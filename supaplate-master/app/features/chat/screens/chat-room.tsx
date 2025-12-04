@@ -3,7 +3,7 @@
  */
 import type { Route } from "./+types/chat-room";
 
-import { Link, useLoaderData, useFetcher, data, useNavigate } from "react-router";
+import { Link, useLoaderData, useFetcher, data } from "react-router";
 import { 
   ArrowLeft, 
   Send,
@@ -147,7 +147,6 @@ export async function action({ request, params }: Route.ActionArgs) {
 
 export default function ChatRoomScreen() {
   const { session, messages: initialMessages, babyProfile: initialBabyProfile, isNew } = useLoaderData<typeof loader>();
-  const navigate = useNavigate();
   const fetcher = useFetcher();
   const chatFetcher = useFetcher();
   const profileFetcher = useFetcher();
@@ -188,12 +187,12 @@ export default function ChatRoomScreen() {
     if (chatFetcher.data?.success && chatFetcher.data?.message) {
       setLocalMessages(prev => [...prev, chatFetcher.data.message]);
       
-      // 새 세션이면 리다이렉트 (React Router 사용으로 부드러운 전환)
+      // 새 세션이면 URL만 변경 (페이지 리로드 없이)
       if (isNew && chatFetcher.data?.sessionId) {
-        navigate(`/customer/chat/${chatFetcher.data.sessionId}`, { replace: true });
+        window.history.replaceState(null, "", `/customer/chat/${chatFetcher.data.sessionId}`);
       }
     }
-  }, [chatFetcher.data, isNew, navigate]);
+  }, [chatFetcher.data, isNew]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
