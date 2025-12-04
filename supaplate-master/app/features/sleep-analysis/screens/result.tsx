@@ -72,6 +72,7 @@ function convertToReport(
   let safetyScore = 70;
   let summary = "";
   let scoreComment = "";
+  let references: { title: string; uri: string }[] = [];
   
   // summary JSON 파싱
   if (analysis.summary) {
@@ -80,13 +81,17 @@ function convertToReport(
       safetyScore = parsed.safetyScore || 70;
       summary = parsed.summary || "";
       scoreComment = parsed.scoreComment || "";
+      references = parsed.references || [];
     } catch {
       summary = analysis.summary;
     }
   }
   
-  // feedbackItems 변환 (riskLevel 또는 risk_level 모두 지원)
-  const convertedFeedback: FeedbackItem[] = feedbackItems.map((item: any) => ({
+  // feedbackItems 변환 (id, x, y, riskLevel 모두 포함)
+  const convertedFeedback = feedbackItems.map((item: any, index: number) => ({
+    id: item.id || item.itemNumber || index + 1,
+    x: typeof item.x === 'number' ? item.x : parseFloat(item.x) || 50,
+    y: typeof item.y === 'number' ? item.y : parseFloat(item.y) || 50,
     title: item.title || "",
     feedback: item.feedback || "",
     riskLevel: (item.riskLevel || item.risk_level || "Low") as RiskLevel,
@@ -97,6 +102,7 @@ function convertToReport(
     summary,
     scoreComment,
     feedbackItems: convertedFeedback,
+    references,
   };
 }
 
