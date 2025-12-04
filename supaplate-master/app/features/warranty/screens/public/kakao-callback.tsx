@@ -55,9 +55,30 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
     
     const kakaoId = String(userData.id);
-    const kakaoNickname = userData.kakao_account?.profile?.nickname || null;
-    const kakaoProfileImage = userData.kakao_account?.profile?.profile_image_url || null;
-    const kakaoPhone = userData.kakao_account?.phone_number?.replace(/^\+82 /, "0").replace(/-/g, "") || null;
+    const kakaoAccount = userData.kakao_account || {};
+    
+    // 기본 정보
+    const kakaoNickname = kakaoAccount.profile?.nickname || null;
+    const kakaoProfileImage = kakaoAccount.profile?.profile_image_url || null;
+    const kakaoPhone = kakaoAccount.phone_number?.replace(/^\+82 /, "0").replace(/-/g, "") || null;
+    
+    // 추가 수집 정보 (카카오 개발자 콘솔에서 설정된 항목)
+    const kakaoEmail = kakaoAccount.email || null;
+    const kakaoName = kakaoAccount.name || kakaoNickname; // 실명 또는 닉네임
+    const kakaoGender = kakaoAccount.gender || null; // male / female
+    const kakaoAgeRange = kakaoAccount.age_range || null; // 예: 20~29
+    const kakaoBirthday = kakaoAccount.birthday || null; // MMDD 형식
+    
+    console.log("[Kakao] 수집된 정보:", {
+      id: kakaoId,
+      nickname: kakaoNickname,
+      email: kakaoEmail,
+      name: kakaoName,
+      phone: kakaoPhone,
+      gender: kakaoGender,
+      age_range: kakaoAgeRange,
+      birthday: kakaoBirthday
+    });
     
     // 3. 기존 회원 확인
     let { data: member } = await supabase
@@ -76,13 +97,18 @@ export async function loader({ request }: Route.LoaderArgs) {
           .single();
         
         if (phoneMatch) {
-          // 기존 회원에 카카오 연결
+          // 기존 회원에 카카오 연결 + 추가 정보 업데이트
           await supabase
             .from("warranty_members")
             .update({
               kakao_id: kakaoId,
               kakao_nickname: kakaoNickname,
               kakao_profile_image: kakaoProfileImage,
+              email: kakaoEmail || phoneMatch.email,
+              gender: kakaoGender,
+              age_range: kakaoAgeRange,
+              birthday: kakaoBirthday,
+              provider: "kakao",
             })
             .eq("id", phoneMatch.id);
           
@@ -91,7 +117,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       }
     }
     
-    // 4. 신규 회원이면 생성
+    // 4. 신규 회원이면 생성 (모든 수집 정보 포함)
     if (!member) {
       const { data: newMember, error: insertError } = await supabase
         .from("warranty_members")
@@ -100,7 +126,12 @@ export async function loader({ request }: Route.LoaderArgs) {
           kakao_nickname: kakaoNickname,
           kakao_profile_image: kakaoProfileImage,
           phone: kakaoPhone,
-          name: kakaoNickname,
+          email: kakaoEmail,
+          name: kakaoName || kakaoNickname,
+          gender: kakaoGender,
+          age_range: kakaoAgeRange,
+          birthday: kakaoBirthday,
+          provider: "kakao",
         })
         .select()
         .single();
