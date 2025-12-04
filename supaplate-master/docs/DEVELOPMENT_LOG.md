@@ -4,6 +4,167 @@
 
 ---
 
+## 📅 2025년 12월 4일 (목) - 오후 작업: 다크모드 개선, 후기 관리 UI 대폭 개선, 카카오 로그인 개선
+
+### 🎯 주요 작업 내용
+
+#### 1. 다크모드 UI 버그 수정
+
+**헤더 사용자 이름**
+- `text-gray-900` → `dark:text-white` 추가
+- VIP Member 텍스트 다크모드 대응
+
+**수면 분석 페이지**
+- 배경색: `bg-[#F5F5F0]` → `dark:bg-[#121212]`
+- 제목/텍스트: `dark:text-white`, `dark:text-gray-400`
+- 폼 컨테이너: `dark:bg-gray-800`, `dark:border-gray-700`
+- 로딩 메시지 다크모드 대응
+
+**동의 강조 텍스트 색상 개선**
+- "분석 사용 용도로만 이용됩니다" 텍스트를 **오렌지색(`text-[#FF6B35]`)**으로 변경
+- 다크/라이트 모드 모두에서 가독성 확보
+
+**홈 화면 Quick Links**
+- 배경: `dark:bg-gray-800/60`
+- 텍스트: `dark:text-white`, `dark:text-gray-400`
+- 아이콘: `dark:text-gray-500`
+
+**후기 이벤트 버튼**
+- 전체 카드 스타일 다크모드 적용
+
+#### 2. 후기 인증 관리 페이지 - 데이터 조회 수정
+
+**문제점**
+- Supabase에서 `profiles:user_id` 조인이 제대로 작동하지 않음
+- `profiles` 테이블은 `id`가 PK, `review_submissions`는 `user_id`로 참조
+
+**해결책**
+- `review_submissions`와 `profiles`를 별도로 쿼리
+- JavaScript에서 `user_id` 기준으로 병합
+
+#### 3. 후기 인증 관리 페이지 - UI 대폭 개선
+
+**이벤트/일반 후기 구분**
+- 🎉 **이벤트 후기**: 주황색-핑크색 그라데이션 배너 + 이벤트명 표시
+- ⭐ **일반 후기**: 파랑색-시안색 그라데이션 배너 + "포인트 적립" 표시
+
+**보증서 인증 여부 표시**
+- ✅ **보증서 인증됨**: 초록색 뱃지 (ShieldCheck 아이콘)
+- ⏳ **보증서 대기중**: 노란색 뱃지
+- ❌ **보증서 미등록**: 회색 뱃지
+
+**첨부 사진 크게 보기**
+- 썸네일 클릭 시 **전체화면 이미지 뷰어** 모달
+- 4장 이상일 경우 "+N" 표시
+- 여러 장일 때 **인디케이터**로 이동 가능
+
+**선물 상태 관리** (이벤트 후기)
+- 선택한 사은품 정보 표시 (이미지 + 이름)
+- 선물 상태: 대기 → 승인 → 발송완료 → 배송완료
+
+**확장 영역 (상세 정보 보기)**
+- 배송 정보 (이름, 연락처, 주소)
+- 보증서 상세 (번호, 제품, 보증기간)
+- 반려 사유
+
+**통계 카드 개선**
+- 전체 / 대기중 / 승인됨 / 반려됨
+- **이벤트 후기 수** / **일반 후기 수** 추가
+
+**기타 개선**
+- 다크모드 전체 지원
+- 반응형 디자인 (모바일/태블릿/데스크탑)
+- 승인 시 `gift_status`도 'approved'로 자동 변경
+
+#### 4. 카카오 로그인 개선
+
+**추가 정보 수집**
+- 카카오 OAuth scope 확장: `profile_nickname, profile_image, account_email, phone_number, name, gender, age_range, birthday`
+- 직접 Kakao REST API 호출로 상세 정보 수집
+
+**profiles 테이블 확장**
+- 새 컬럼: `kakao_id`, `kakao_nickname`, `kakao_profile_image`, `gender`, `age_range`, `birthday`, `provider`
+- 카카오 로그인 시 자동 저장
+
+**Supabase Admin API 연동**
+- `SUPABASE_SERVICE_ROLE_KEY` 환경변수 추가
+- `adminClient`로 사용자 생성/조회
+
+---
+
+### 🔧 수정/추가된 파일
+
+```
+수정 파일:
+app/features/customer/layouts/customer.layout.tsx    # 헤더 다크모드
+app/features/customer/screens/home.tsx               # Quick Links 다크모드
+app/features/customer/screens/login.tsx              # 카카오 로그인 scope
+app/features/customer/screens/kakao-callback.tsx     # 카카오 콜백 처리 (신규)
+app/features/sleep-analysis/screens/analyze-public.tsx  # 다크모드
+app/features/sleep-analysis/components/upload-form.tsx  # 동의 텍스트 색상
+app/features/review/screens/admin/review-list.tsx    # UI 대폭 개선
+app/routes.ts                                        # 카카오 콜백 라우트
+```
+
+---
+
+### 🔑 환경변수
+
+```bash
+# Vercel에 추가 필요
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIs...
+
+# 카카오 콘솔 Redirect URI 추가
+# Local: http://localhost:3000/customer/kakao/callback
+# Develop: https://app-sundayhug-members-git-develop-inkyos-projects.vercel.app/customer/kakao/callback
+# Main-Ready: https://app-sundayhug-members-git-main-ready-inkyos-projects.vercel.app/customer/kakao/callback
+# Production: https://app.sundayhug.kr/customer/kakao/callback
+```
+
+---
+
+### 🗃️ DB 변경사항
+
+```sql
+-- profiles 테이블 확장 (카카오 추가 정보)
+ALTER TABLE profiles ADD COLUMN kakao_id VARCHAR UNIQUE;
+ALTER TABLE profiles ADD COLUMN kakao_nickname VARCHAR;
+ALTER TABLE profiles ADD COLUMN kakao_profile_image TEXT;
+ALTER TABLE profiles ADD COLUMN gender TEXT;
+ALTER TABLE profiles ADD COLUMN age_range TEXT;
+ALTER TABLE profiles ADD COLUMN birthday TEXT;
+ALTER TABLE profiles ADD COLUMN provider TEXT;
+
+CREATE INDEX idx_profiles_kakao_id ON profiles(kakao_id);
+CREATE INDEX idx_profiles_provider ON profiles(provider);
+```
+
+---
+
+### ✅ 완료된 TODO
+
+- [x] 헤더 이름 값 다크모드 대응
+- [x] 수면 분석 페이지 다크모드 대응
+- [x] 동의 강조 텍스트 색상 개선
+- [x] 홈 화면 Quick Links 다크모드 대응
+- [x] 후기 이벤트 버튼 다크모드 대응
+- [x] 후기 인증 관리 데이터 조회 수정
+- [x] 후기 인증 관리 UI 대폭 개선
+- [x] 이벤트/일반 후기 구분 표시
+- [x] 보증서 인증 여부 표시
+- [x] 첨부 사진 크게 보기 (이미지 뷰어)
+- [x] 카카오 로그인 추가 정보 수집
+
+---
+
+### 🔜 향후 작업 예정
+
+- [ ] 후기 승인 시 포인트 자동 지급
+- [ ] 사은품 배송 처리 (송장번호 업로드)
+- [ ] AI 썸네일 생성 기능 완성 (Vertex AI Imagen 연동)
+
+---
+
 ## 📅 2025년 12월 4일 (목) - AI 상담 개선, 수면분석 결과 개선, 후기 이벤트 보증서 연동
 
 ### 🎯 주요 작업 내용
