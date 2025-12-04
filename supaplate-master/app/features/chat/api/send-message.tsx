@@ -10,10 +10,14 @@ import OpenAI from "openai";
 import makeServerClient from "~/core/lib/supa-client.server";
 import adminClient from "~/core/lib/supa-admin-client.server";
 
-// OpenAI 초기화 (벡터 임베딩용)
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY 
-});
+// OpenAI 초기화 (벡터 임베딩용) - lazy initialization
+let openai: OpenAI | null = null;
+function getOpenAI() {
+  if (!openai && process.env.OPENAI_API_KEY) {
+    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return openai;
+}
 
 // Gemini 초기화
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
@@ -92,8 +96,12 @@ function getAgeRange(months: number): string {
 
 // 벡터 임베딩 생성
 async function getEmbedding(text: string): Promise<number[]> {
+  const client = getOpenAI();
+  if (!client) {
+    throw new Error("OPENAI_API_KEY가 설정되지 않았습니다.");
+  }
   try {
-    const response = await openai.embeddings.create({
+    const response = await client.embeddings.create({
       model: 'text-embedding-3-small',
       input: text,
     });

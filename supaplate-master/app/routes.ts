@@ -79,6 +79,8 @@ export default [
     // 블로그 API
     ...prefix("/blog", [
       route("/generate-audio", "features/blog/api/generate-audio.tsx"),
+      route("/generate-thumbnail", "features/blog/api/generate-thumbnail.tsx"),
+      route("/generate-slug", "features/blog/api/generate-slug.tsx"),
     ]),
     // 채팅 API
     ...prefix("/chat", [
