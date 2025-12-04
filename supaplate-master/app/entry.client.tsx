@@ -13,6 +13,7 @@
  */
 
 import * as Sentry from "@sentry/react-router";
+import { injectSpeedInsights } from "@vercel/speed-insights";
 import i18next from "i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
 import { StrictMode, startTransition } from "react";
@@ -39,6 +40,9 @@ import ko from "./locales/ko";
  * performance, ensuring that critical user interactions are not blocked.
  */
 async function hydrate() {
+  // Initialize Vercel Speed Insights for performance monitoring
+  injectSpeedInsights();
+
   // Initialize Sentry for error monitoring in production environments only
   if (import.meta.env.VITE_SENTRY_DSN && !import.meta.env.DEV) {
     Sentry.init({
