@@ -52,12 +52,17 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const [client, headers] = makeServerClient(request);
 
   // Initialize OAuth flow with the specified provider
+  // 카카오의 경우 추가 동의 항목(scopes) 설정
+  const kakaoScopes = 'account_email profile_nickname profile_image phone_number gender age_range name';
+  
   const { data: signInData, error: signInError } =
     await client.auth.signInWithOAuth({
       provider: parsedParams.provider,
       options: {
         // Set the callback URL for when authentication is complete
         redirectTo: `${process.env.SITE_URL}/auth/social/complete/${parsedParams.provider}`,
+        // 카카오 추가 정보 동의 요청
+        scopes: parsedParams.provider === 'kakao' ? kakaoScopes : undefined,
       },
     });
 
