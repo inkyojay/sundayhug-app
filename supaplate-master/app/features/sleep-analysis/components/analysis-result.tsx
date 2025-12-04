@@ -295,17 +295,26 @@ export function AnalysisResult({
           카카오톡 공유
         </Button> */}
 
-        {/* 인스타 슬라이드 - 임시 비활성화 */}
-        {/* {onDownloadSlides && (
+        {/* 이미지로 저장하기 버튼 */}
+        {onDownloadSlides && (
           <Button 
             onClick={onDownloadSlides} 
             disabled={isDownloading}
             className="rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
           >
-            <Download className="mr-2 h-4 w-4" />
-            {isDownloading ? "생성 중..." : "인스타 슬라이드"}
+            {isDownloading ? (
+              <>
+                <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                이미지 생성 중...
+              </>
+            ) : (
+              <>
+                <Download className="mr-2 h-4 w-4" />
+                이미지로 저장하기
+              </>
+            )}
           </Button>
-        )} */}
+        )}
       </div>
 
       {analysisId && (
