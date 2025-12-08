@@ -94,7 +94,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   ]);
 
   return {
-    theme: getTheme(),
+    // 대시보드는 항상 라이트모드 고정 (다크모드에서 가독성 문제)
+    theme: "light" as const,
     locale,
     // 클라이언트에서 Supabase 사용을 위해 환경 변수 전달
     env: {

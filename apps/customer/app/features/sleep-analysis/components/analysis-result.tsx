@@ -220,7 +220,7 @@ export function AnalysisResult({
   const [saveProgress, setSaveProgress] = useState<string>("");
   const [showShareModal, setShowShareModal] = useState(false);
   
-  // 서버에서 생성한 이미지 다운로드/공유 (Vercel OG 사용)
+  // 서버에서 SVG 생성 후 클라이언트에서 PNG 변환
   const handleSaveAsImage = async (style: "square" | "vertical" = "square") => {
     if (!analysisId || isSavingImage) {
       alert("분석 결과가 저장된 후 이미지를 생성할 수 있어요.");
@@ -228,28 +228,72 @@ export function AnalysisResult({
     }
 
     setIsSavingImage(true);
-    setSaveProgress("이미지 생성 중...");
+    setSaveProgress("SVG 생성 중...");
     
     try {
-      // Vercel OG로 한글 지원 이미지 생성
-      const imageUrl = `/api/sleep/${analysisId}/instagram-card?style=${style}`;
-      const response = await fetch(imageUrl);
+      // SVG 가져오기
+      const svgUrl = `/api/sleep/${analysisId}/share-card?style=${style}`;
+      const response = await fetch(svgUrl);
       
       if (!response.ok) {
         throw new Error("이미지 생성에 실패했습니다.");
       }
       
-      const blob = await response.blob();
-      const fileName = `썬데이허그_수면분석_${new Date().toISOString().split("T")[0]}.png`;
+      const svgText = await response.text();
+      setSaveProgress("PNG 변환 중...");
       
-      setSaveProgress("이미지 저장 중...");
+      // SVG → PNG 변환
+      const width = style === "vertical" ? 1080 : 1080;
+      const height = style === "vertical" ? 1350 : 1080;
+      
+      // SVG를 data URL로 변환
+      const svgBlob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+      const svgDataUrl = URL.createObjectURL(svgBlob);
+      
+      // Canvas에 그리기
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      
+      if (!ctx) {
+        throw new Error("Canvas 컨텍스트를 생성할 수 없습니다.");
+      }
+      
+      // 이미지 로드 및 그리기
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => {
+          ctx.fillStyle = "#0f172a"; // 배경색
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve();
+        };
+        img.onerror = () => reject(new Error("SVG 로드 실패"));
+        img.src = svgDataUrl;
+      });
+      
+      URL.revokeObjectURL(svgDataUrl);
+      
+      // Canvas → PNG Blob
+      const pngBlob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error("PNG 변환 실패"));
+        }, "image/png", 1.0);
+      });
+      
+      const fileName = `썬데이허그_수면분석_${new Date().toISOString().split("T")[0]}.png`;
+      setSaveProgress("저장 중...");
       
       // 모바일 체크
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       
       // Web Share API로 공유 (모바일 우선)
       if (isMobile && navigator.share && navigator.canShare) {
-        const file = new File([blob], fileName, { type: "image/png" });
+        const file = new File([pngBlob], fileName, { type: "image/png" });
         const shareData = { 
           files: [file],
           title: "🌙 수면 환경 분석 결과",
@@ -264,14 +308,13 @@ export function AnalysisResult({
             setSaveProgress("");
             return;
           } catch (shareError) {
-            // 공유 취소됨 - 일반 다운로드로 폴백
             console.log("공유 취소됨");
           }
         }
       }
       
       // 일반 다운로드 (PC 또는 Web Share 미지원 시)
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(pngBlob);
       const link = document.createElement("a");
       link.download = fileName;
       link.href = url;
@@ -280,7 +323,8 @@ export function AnalysisResult({
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       
-      // 다운로드 완료 안내
+      setShowShareModal(false);
+      
       if (isMobile) {
         alert("이미지가 저장되었어요! 📸\n\n인스타그램에 공유하고 친구들에게 자랑해보세요!");
       }
