@@ -37,9 +37,10 @@ const CATEGORIES = [
 ];
 
 const AGE_RANGES = [
-  { value: "all", label: "전체" },
-  { value: "newborn", label: "신생아 (0-3개월)" },
-  { value: "3m+", label: "3개월 이상" },
+  { value: "0-3m", label: "0-3개월" },
+  { value: "3-6m", label: "3-6개월" },
+  { value: "6-12m", label: "6-12개월" },
+  { value: "12m+", label: "12개월 이상" },
 ];
 
 interface Product {
@@ -53,7 +54,7 @@ interface Product {
   purchase_url: string;
   category: string;
   keywords: string[];
-  age_range: string;
+  age_range: string[];  // 배열로 변경 (중복 선택)
   badge: string | null;
   display_order: number;
   is_active: boolean;
@@ -80,6 +81,9 @@ export async function action({ request }: Route.ActionArgs) {
   const actionType = formData.get("actionType") as string;
 
   if (actionType === "create" || actionType === "update") {
+    // 체크박스에서 선택된 age_range 값들 수집
+    const ageRanges = formData.getAll("age_range") as string[];
+    
     const productData = {
       name: formData.get("name") as string,
       short_name: formData.get("short_name") as string,
@@ -90,7 +94,7 @@ export async function action({ request }: Route.ActionArgs) {
       purchase_url: formData.get("purchase_url") as string,
       category: formData.get("category") as string,
       keywords: (formData.get("keywords") as string).split(",").map(k => k.trim()).filter(Boolean),
-      age_range: formData.get("age_range") as string || "all",
+      age_range: ageRanges.length > 0 ? ageRanges : ["0-3m", "3-6m", "6-12m", "12m+"],
       badge: formData.get("badge") as string || null,
       display_order: parseInt(formData.get("display_order") as string) || 0,
       is_active: formData.get("is_active") === "true",
@@ -377,7 +381,7 @@ export default function ProductManageScreen() {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>카테고리 *</Label>
                   <select 
@@ -392,18 +396,6 @@ export default function ProductManageScreen() {
                   </select>
                 </div>
                 <div>
-                  <Label>적용 월령</Label>
-                  <select 
-                    name="age_range" 
-                    defaultValue={editingProduct?.age_range || "all"}
-                    className="w-full h-10 px-3 rounded-md border border-gray-200"
-                  >
-                    {AGE_RANGES.map(age => (
-                      <option key={age.value} value={age.value}>{age.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
                   <Label>뱃지</Label>
                   <Input 
                     name="badge" 
@@ -411,6 +403,29 @@ export default function ProductManageScreen() {
                     placeholder="BEST, NEW, 인기 등"
                   />
                 </div>
+              </div>
+
+              <div>
+                <Label>적용 월령 (중복 선택 가능)</Label>
+                <div className="flex flex-wrap gap-3 mt-2 p-3 bg-gray-50 rounded-lg">
+                  {AGE_RANGES.map(age => (
+                    <label key={age.value} className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        name="age_range" 
+                        value={age.value}
+                        defaultChecked={
+                          editingProduct?.age_range?.includes(age.value) ?? true
+                        }
+                        className="w-4 h-4 rounded border-gray-300 text-[#FF6B35] focus:ring-[#FF6B35]"
+                      />
+                      <span className="text-sm text-gray-700">{age.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  선택한 월령의 아기에게만 이 제품이 추천됩니다
+                </p>
               </div>
 
               <div>
