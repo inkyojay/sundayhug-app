@@ -252,39 +252,48 @@ export function AnalysisResult({
   
   // 로딩 메시지
   const [loadingStep, setLoadingStep] = useState(0);
+  const [retryCount, setRetryCount] = useState(0);
   const loadingMessages = [
     { emoji: "🎨", text: "카드 디자인 준비 중..." },
     { emoji: "📸", text: "분석 이미지 처리 중..." },
     { emoji: "✨", text: "예쁜 카드뉴스 만드는 중..." },
     { emoji: "🌙", text: "수면 정보 정리 중..." },
     { emoji: "💾", text: "거의 다 됐어요!" },
+    { emoji: "⏳", text: "조금만 더 기다려주세요..." },
+    { emoji: "🔄", text: "열심히 만들고 있어요..." },
   ];
   
-  // 슬라이드 로드
-  const loadSlides = async () => {
-    if (!analysisId || slideUrls.length > 0) return;
+  // 슬라이드 로드 (타임아웃 없음)
+  const loadSlides = async (isRetry = false) => {
+    if (!analysisId) return;
+    if (!isRetry && slideUrls.length > 0) return;
     
     setIsLoadingSlides(true);
     setSlideError(null);
     setLoadingStep(0);
+    if (isRetry) {
+      setSlideUrls([]);
+      setRetryCount(prev => prev + 1);
+    }
     
     // 로딩 메시지 애니메이션
     const loadingInterval = setInterval(() => {
       setLoadingStep(prev => (prev + 1) % loadingMessages.length);
-    }, 2000);
+    }, 2500);
     
     try {
-      // 먼저 기존 슬라이드가 있는지 확인 (빠름)
+      // 먼저 기존 슬라이드가 있는지 확인
       const getResponse = await fetch(`/api/sleep/${analysisId}/slides`);
       const getData = await getResponse.json();
       
       if (getData.success && getData.data?.slideUrls?.length > 0) {
         setSlideUrls(getData.data.slideUrls);
         clearInterval(loadingInterval);
+        setIsLoadingSlides(false);
         return;
       }
       
-      // 슬라이드 생성 (PC/모바일 모두)
+      // 슬라이드 생성 (타임아웃 없음 - 끝까지 기다림)
       const postResponse = await fetch(`/api/sleep/${analysisId}/slides`, { method: "POST" });
       const postData = await postResponse.json();
       
@@ -295,7 +304,8 @@ export function AnalysisResult({
       }
     } catch (error) {
       console.error("슬라이드 로드 에러:", error);
-      setSlideError("슬라이드 생성에 실패했어요. 다시 시도해주세요!");
+      const errorMsg = error instanceof Error ? error.message : "알 수 없는 오류";
+      setSlideError(`슬라이드 생성 실패: ${errorMsg}`);
     } finally {
       clearInterval(loadingInterval);
       setIsLoadingSlides(false);
@@ -406,15 +416,23 @@ export function AnalysisResult({
               </div>
             ) : slideError ? (
               <div className="flex items-center justify-center h-full">
-                <div className="text-center p-8">
-                  <div className="text-4xl mb-4">😢</div>
-                  <p className="text-white mb-2">{slideError}</p>
+                <div className="text-center p-8 max-w-sm">
+                  <div className="text-6xl mb-4">😢</div>
+                  <p className="text-white text-lg font-medium mb-2">앗, 문제가 생겼어요!</p>
+                  <p className="text-gray-400 text-sm mb-6">{slideError}</p>
+                  
                   <button 
-                    onClick={loadSlides}
-                    className="text-orange-400 underline"
+                    onClick={() => loadSlides(true)}
+                    className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-4 px-6 rounded-xl mb-3 flex items-center justify-center gap-2"
                   >
-                    다시 시도
+                    🔄 다시 시도하기
                   </button>
+                  
+                  {retryCount > 0 && (
+                    <p className="text-gray-500 text-xs">
+                      재시도 {retryCount}회 • 네트워크 연결을 확인해주세요
+                    </p>
+                  )}
                 </div>
               </div>
             ) : slideUrls.length > 0 ? (
