@@ -223,6 +223,20 @@ export function AnalysisResult({
   const [saveProgress, setSaveProgress] = useState<string>("");
   const [showShareModal, setShowShareModal] = useState(false);
   
+  // Blob 다운로드 헬퍼
+  const downloadBlob = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setShowShareModal(false);
+    alert("✅ 이미지가 저장되었습니다!\n인스타그램에 공유해주세요 📸");
+  };
+  
   // 서버에서 SVG 생성 후 클라이언트에서 PNG 변환
   const handleSaveAsImage = async (style: "square" | "vertical" = "square") => {
     if (!analysisId || isSavingImage) {
@@ -384,9 +398,9 @@ export function AnalysisResult({
       {/* 공유 모달 */}
       {showShareModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 animate-in slide-in-from-bottom duration-300 max-h-[85vh] overflow-y-auto">
+          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 animate-in slide-in-from-bottom duration-300">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-900">📤 공유하기</h3>
+              <h3 className="text-xl font-bold text-gray-900">📸 인스타 공유</h3>
               <button 
                 onClick={() => setShowShareModal(false)}
                 className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"
@@ -395,117 +409,134 @@ export function AnalysisResult({
               </button>
             </div>
             
-            <p className="text-gray-600 mb-4 text-sm">
-              수면 분석 결과를 친구에게 공유해보세요!
+            {/* 메인: 인스타 이미지 저장 */}
+            <button
+              onClick={async () => {
+                setIsSavingImage(true);
+                setSaveProgress("이미지 생성 중...");
+                
+                try {
+                  // html2canvas로 점수 카드 캡처
+                  const html2canvas = (await import("html2canvas")).default;
+                  const scoreCard = document.querySelector("[data-result-card]") as HTMLElement;
+                  
+                  if (!scoreCard) {
+                    throw new Error("캡처할 영역을 찾을 수 없습니다.");
+                  }
+                  
+                  const canvas = await html2canvas(scoreCard, {
+                    backgroundColor: "#F5F5F0",
+                    scale: 2,
+                    useCORS: true,
+                    logging: false,
+                  });
+                  
+                  canvas.toBlob(async (blob) => {
+                    if (!blob) {
+                      alert("이미지 생성에 실패했습니다.");
+                      setIsSavingImage(false);
+                      return;
+                    }
+                    
+                    const fileName = `썬데이허그_수면분석_${report.safetyScore}점.png`;
+                    const file = new File([blob], fileName, { type: "image/png" });
+                    
+                    // 모바일: Web Share로 공유/저장
+                    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+                      try {
+                        await navigator.share({ files: [file] });
+                        setShowShareModal(false);
+                      } catch {
+                        // 취소됨 - 일반 다운로드
+                        downloadBlob(blob, fileName);
+                      }
+                    } else {
+                      // PC: 일반 다운로드
+                      downloadBlob(blob, fileName);
+                    }
+                    
+                    setIsSavingImage(false);
+                    setSaveProgress("");
+                  }, "image/png", 1.0);
+                  
+                } catch (error) {
+                  console.error("이미지 저장 에러:", error);
+                  alert("이미지 저장에 실패했습니다. 스크린샷으로 저장해주세요!");
+                  setIsSavingImage(false);
+                  setSaveProgress("");
+                }
+              }}
+              disabled={isSavingImage}
+              className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 text-white font-bold text-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 mb-4"
+            >
+              {isSavingImage ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="animate-spin">⏳</span> {saveProgress}
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  <Instagram className="w-6 h-6" />
+                  인스타 카드 저장하기
+                </span>
+              )}
+            </button>
+            
+            <p className="text-center text-sm text-gray-500 mb-6">
+              분석 결과가 이미지로 저장됩니다.<br />
+              인스타 스토리/피드에 바로 공유하세요! ✨
             </p>
             
-            {/* 간편 공유 버튼들 */}
-            <div className="grid grid-cols-4 gap-3 mb-6">
-              {/* 카카오톡 */}
+            {/* 구분선 */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 h-px bg-gray-200"></div>
+              <span className="text-xs text-gray-400">또는</span>
+              <div className="flex-1 h-px bg-gray-200"></div>
+            </div>
+            
+            {/* 보조 공유 버튼들 */}
+            <div className="grid grid-cols-3 gap-3">
               <button
                 onClick={() => {
                   setShowShareModal(false);
                   handleKakaoShare();
                 }}
-                className="flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-yellow-50 transition-colors"
+                className="flex flex-col items-center gap-1 p-3 rounded-xl bg-[#FEE500] hover:bg-[#FDD800] transition-colors"
               >
-                <div className="w-12 h-12 bg-[#FEE500] rounded-full flex items-center justify-center">
-                  <span className="text-2xl">💬</span>
-                </div>
-                <span className="text-xs font-medium text-gray-700">카카오톡</span>
+                <span className="text-xl">💬</span>
+                <span className="text-xs font-medium">카카오톡</span>
               </button>
               
-              {/* 링크 복사 */}
               <button
                 onClick={() => {
                   const url = analysisId 
                     ? `${window.location.origin}/customer/sleep/result/${analysisId}`
                     : window.location.href;
                   navigator.clipboard.writeText(url);
-                  alert("✅ 링크가 복사되었습니다!\n카카오톡, 문자 등에 붙여넣기 하세요.");
+                  alert("✅ 링크 복사 완료!");
                 }}
-                className="flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-blue-50 transition-colors"
+                className="flex flex-col items-center gap-1 p-3 rounded-xl bg-blue-100 hover:bg-blue-200 transition-colors"
               >
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <span className="text-2xl">🔗</span>
-                </div>
-                <span className="text-xs font-medium text-gray-700">링크복사</span>
+                <span className="text-xl">🔗</span>
+                <span className="text-xs font-medium">링크복사</span>
               </button>
               
-              {/* 문자 */}
               <button
                 onClick={() => {
                   const url = analysisId 
                     ? `${window.location.origin}/customer/sleep/result/${analysisId}`
                     : window.location.href;
-                  const text = `🌙 우리 아기 수면 환경 분석 결과: ${report.safetyScore}점!\n\n나도 무료로 분석 받아보세요 👉`;
+                  const text = `🌙 우리 아기 수면 환경 분석 결과: ${report.safetyScore}점!\n나도 무료로 분석 받아보세요 👉`;
                   window.location.href = `sms:?body=${encodeURIComponent(text + " " + url)}`;
                 }}
-                className="flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-green-50 transition-colors"
+                className="flex flex-col items-center gap-1 p-3 rounded-xl bg-green-100 hover:bg-green-200 transition-colors"
               >
-                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                  <span className="text-2xl">💌</span>
-                </div>
-                <span className="text-xs font-medium text-gray-700">문자</span>
-              </button>
-              
-              {/* 더보기 (Web Share) */}
-              <button
-                onClick={() => {
-                  const url = analysisId 
-                    ? `${window.location.origin}/customer/sleep/result/${analysisId}`
-                    : window.location.href;
-                  if (navigator.share) {
-                    navigator.share({
-                      title: `🌙 수면 환경 분석 결과: ${report.safetyScore}점`,
-                      text: `우리 아기 수면 환경 점수는 ${report.safetyScore}점! 무료로 분석 받아보세요.`,
-                      url: url,
-                    });
-                  } else {
-                    navigator.clipboard.writeText(url);
-                    alert("링크가 복사되었습니다!");
-                  }
-                }}
-                className="flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-gray-50 transition-colors"
-              >
-                <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
-                  <span className="text-2xl">📲</span>
-                </div>
-                <span className="text-xs font-medium text-gray-700">더보기</span>
+                <span className="text-xl">💌</span>
+                <span className="text-xs font-medium">문자</span>
               </button>
             </div>
             
-            <div className="border-t border-gray-100 pt-4 mb-4">
-              <p className="text-sm font-medium text-gray-700 mb-3">📸 인스타그램용 카드뉴스</p>
-              
-              {/* 카드뉴스 다운로드 */}
-              <button
-                onClick={() => {
-                  setShowShareModal(false);
-                  onDownloadSlides?.();
-                }}
-                disabled={isDownloading || !analysisId}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {isDownloading ? (
-                  <>
-                    <span className="animate-spin">⏳</span>
-                    카드뉴스 생성 중...
-                  </>
-                ) : (
-                  <>
-                    <Instagram className="w-5 h-5" />
-                    카드뉴스 이미지 저장
-                  </>
-                )}
-              </button>
-              <p className="text-xs text-gray-400 mt-2 text-center">
-                여러 장의 카드뉴스가 저장됩니다
-              </p>
-            </div>
-            
-            {/* 안내 메시지 */}
-            <div className="bg-orange-50 rounded-xl p-3 text-center">
+            {/* 안내 */}
+            <div className="mt-4 bg-orange-50 rounded-xl p-3 text-center">
               <p className="text-xs text-gray-600">
                 💡 @sundayhug.official 태그하면 선물이! 🎁
               </p>
