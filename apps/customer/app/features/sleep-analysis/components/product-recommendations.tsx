@@ -6,7 +6,17 @@ import { ExternalLink, ShoppingBag, Sparkles } from "lucide-react";
 import { cn } from "~/core/lib/utils";
 
 import type { RecommendationResult, Product } from "../lib/product-recommendations";
-import { formatPrice, getDiscountPercent } from "../lib/product-recommendations";
+
+// 가격 포맷팅
+function formatPrice(price: number): string {
+  return price.toLocaleString("ko-KR") + "원";
+}
+
+// 할인율 계산
+function getDiscountPercent(price: number, originalPrice?: number | null): number | null {
+  if (!originalPrice || originalPrice <= price) return null;
+  return Math.round((1 - price / originalPrice) * 100);
+}
 
 interface ProductCardProps {
   product: Product;
@@ -16,11 +26,11 @@ interface ProductCardProps {
 
 // 단일 제품 카드
 function ProductCard({ product, reasons, compact = false }: ProductCardProps) {
-  const discount = getDiscountPercent(product.price, product.originalPrice);
+  const discount = getDiscountPercent(product.price, product.original_price);
   
   return (
     <a
-      href={product.link}
+      href={product.purchase_url}
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
@@ -31,15 +41,20 @@ function ProductCard({ product, reasons, compact = false }: ProductCardProps) {
     >
       {/* 이미지 영역 */}
       <div className="relative aspect-square bg-gray-50 overflow-hidden">
-        <img
-          src={product.image}
-          alt={product.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          onError={(e) => {
-            // 이미지 로드 실패 시 플레이스홀더
-            (e.target as HTMLImageElement).src = "/images/placeholder-product.png";
-          }}
-        />
+        {product.image_url ? (
+          <img
+            src={product.image_url}
+            alt={product.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = "/images/placeholder-product.png";
+            }}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
+            <ShoppingBag className="w-12 h-12 text-gray-300" />
+          </div>
+        )}
         
         {/* 뱃지 */}
         {product.badge && (
@@ -49,6 +64,7 @@ function ProductCard({ product, reasons, compact = false }: ProductCardProps) {
             product.badge === "NEW" && "bg-blue-500 text-white",
             product.badge === "인기" && "bg-pink-500 text-white",
             product.badge === "신생아 추천" && "bg-purple-500 text-white",
+            !["BEST", "NEW", "인기", "신생아 추천"].includes(product.badge) && "bg-gray-700 text-white",
           )}>
             {product.badge}
           </span>
@@ -68,10 +84,10 @@ function ProductCard({ product, reasons, compact = false }: ProductCardProps) {
           "font-semibold text-gray-900 line-clamp-1 mb-1",
           compact ? "text-sm" : "text-base"
         )}>
-          {product.shortName}
+          {product.short_name}
         </h4>
         
-        {!compact && (
+        {!compact && product.description && (
           <p className="text-xs text-gray-500 line-clamp-2 mb-2 min-h-[32px]">
             {product.description}
           </p>
@@ -85,9 +101,9 @@ function ProductCard({ product, reasons, compact = false }: ProductCardProps) {
           )}>
             {formatPrice(product.price)}
           </span>
-          {product.originalPrice && (
+          {product.original_price && (
             <span className="text-xs text-gray-400 line-through">
-              {formatPrice(product.originalPrice)}
+              {formatPrice(product.original_price)}
             </span>
           )}
         </div>

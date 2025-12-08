@@ -220,7 +220,7 @@ export function AnalysisResult({
   const [saveProgress, setSaveProgress] = useState<string>("");
   const [showShareModal, setShowShareModal] = useState(false);
   
-  // 서버에서 생성한 이미지 다운로드/공유
+  // 서버에서 생성한 이미지 다운로드/공유 (Vercel OG 사용)
   const handleSaveAsImage = async (style: "square" | "vertical" = "square") => {
     if (!analysisId || isSavingImage) {
       alert("분석 결과가 저장된 후 이미지를 생성할 수 있어요.");
@@ -231,8 +231,8 @@ export function AnalysisResult({
     setSaveProgress("이미지 생성 중...");
     
     try {
-      // 서버에서 PNG 이미지 가져오기
-      const imageUrl = `/api/sleep/${analysisId}/share-card?format=png&style=${style}`;
+      // Vercel OG로 한글 지원 이미지 생성
+      const imageUrl = `/api/sleep/${analysisId}/instagram-card?style=${style}`;
       const response = await fetch(imageUrl);
       
       if (!response.ok) {

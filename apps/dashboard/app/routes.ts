@@ -138,6 +138,7 @@ export default [
           index("features/sleep-analysis/screens/analyze.tsx"),
           route("/history", "features/sleep-analysis/screens/history.tsx"),
           route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "dashboard-sleep-result" }),
+          route("/products", "features/sleep-analysis/screens/product-manage.tsx"),
         ]),
         
         // 블로그 관리 (관리자용)

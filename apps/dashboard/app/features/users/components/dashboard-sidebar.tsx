@@ -18,6 +18,7 @@ import {
   LayoutDashboardIcon,
   MegaphoneIcon,
   MessageSquareIcon,
+  MoonIcon,
   PackageIcon,
   Settings2Icon,
   ShieldCheckIcon,
@@ -150,6 +151,25 @@ const data = {
         {
           title: "상담 지식",
           url: "/dashboard/chat/knowledge",
+        },
+      ],
+    },
+    {
+      title: "수면 분석",
+      url: "/dashboard/sleep",
+      icon: MoonIcon,
+      items: [
+        {
+          title: "분석하기",
+          url: "/dashboard/sleep",
+        },
+        {
+          title: "분석 이력",
+          url: "/dashboard/sleep/history",
+        },
+        {
+          title: "추천 제품 관리",
+          url: "/dashboard/sleep/products",
         },
       ],
     },
