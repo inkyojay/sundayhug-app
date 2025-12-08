@@ -218,23 +218,70 @@ export function AnalysisResult({
     }
   };
 
-  // 인스타그램 카드 이미지 저장/공유
-  const [isSavingImage, setIsSavingImage] = useState(false);
-  const [saveProgress, setSaveProgress] = useState<string>("");
+  // 인스타그램 카드 슬라이드
   const [showShareModal, setShowShareModal] = useState(false);
+  const [slideUrls, setSlideUrls] = useState<string[]>([]);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [isLoadingSlides, setIsLoadingSlides] = useState(false);
+  const [slideError, setSlideError] = useState<string | null>(null);
   
-  // Blob 다운로드 헬퍼
-  const downloadBlob = (blob: Blob, fileName: string) => {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    setShowShareModal(false);
-    alert("✅ 이미지가 저장되었습니다!\n인스타그램에 공유해주세요 📸");
+  // 터치 스와이프 지원
+  const touchStartX = useRef<number>(0);
+  const touchEndX = useRef<number>(0);
+  
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+  
+  const handleTouchEnd = () => {
+    const diff = touchStartX.current - touchEndX.current;
+    const threshold = 50; // 최소 스와이프 거리
+    
+    if (diff > threshold && currentSlide < slideUrls.length - 1) {
+      // 왼쪽으로 스와이프 → 다음 슬라이드
+      setCurrentSlide(prev => prev + 1);
+    } else if (diff < -threshold && currentSlide > 0) {
+      // 오른쪽으로 스와이프 → 이전 슬라이드
+      setCurrentSlide(prev => prev - 1);
+    }
+  };
+  
+  // 슬라이드 로드
+  const loadSlides = async () => {
+    if (!analysisId || slideUrls.length > 0) return;
+    
+    setIsLoadingSlides(true);
+    setSlideError(null);
+    
+    try {
+      // 먼저 기존 슬라이드가 있는지 확인
+      const getResponse = await fetch(`/api/sleep/${analysisId}/slides`);
+      const getData = await getResponse.json();
+      
+      if (getData.success && getData.data?.slideUrls?.length > 0) {
+        setSlideUrls(getData.data.slideUrls);
+        return;
+      }
+      
+      // 없으면 새로 생성
+      const postResponse = await fetch(`/api/sleep/${analysisId}/slides`, { method: "POST" });
+      const postData = await postResponse.json();
+      
+      if (postData.success && postData.data?.slideUrls) {
+        setSlideUrls(postData.data.slideUrls);
+      } else {
+        throw new Error(postData.error || "슬라이드 생성 실패");
+      }
+    } catch (error) {
+      console.error("슬라이드 로드 에러:", error);
+      setSlideError("슬라이드를 불러올 수 없습니다.");
+    } finally {
+      setIsLoadingSlides(false);
+    }
   };
   
   // 서버에서 SVG 생성 후 클라이언트에서 PNG 변환
@@ -371,8 +418,11 @@ export function AnalysisResult({
 
         {/* 인스타그램 공유 버튼 - 가장 눈에 띄게 */}
         <Button 
-          onClick={() => setShowShareModal(true)}
-          disabled={isSavingImage || !analysisId}
+          onClick={() => {
+            setShowShareModal(true);
+            loadSlides();
+          }}
+          disabled={isLoadingSlides || !analysisId}
           className="rounded-xl bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 text-white hover:opacity-90 h-12 font-semibold shadow-lg"
         >
           {isSavingImage ? (
@@ -395,65 +445,132 @@ export function AnalysisResult({
         </p>
       )}
 
-      {/* 이미지 저장 모달 - 길게 눌러서 저장 방식 */}
+      {/* 캐러셀 슬라이드 모달 */}
       {showShareModal && (
         <div className="fixed inset-0 z-50 bg-black flex flex-col">
           {/* 헤더 */}
-          <div className="flex items-center justify-between p-4 bg-black/80">
+          <div className="flex items-center justify-between p-4">
             <button 
-              onClick={() => setShowShareModal(false)}
-              className="text-white text-lg"
+              onClick={() => { setShowShareModal(false); setCurrentSlide(0); }}
+              className="text-white text-lg font-medium"
             >
               ✕ 닫기
             </button>
-            <span className="text-white font-medium">인스타 카드</span>
+            <span className="text-white font-bold">
+              {slideUrls.length > 0 ? `${currentSlide + 1} / ${slideUrls.length}` : "인스타 카드"}
+            </span>
             <div className="w-16"></div>
           </div>
           
           {/* 안내 메시지 */}
-          <div className="bg-gradient-to-r from-purple-500 to-pink-500 py-3 px-4 text-center">
+          <div className="bg-gradient-to-r from-purple-500 to-pink-500 py-2 px-4 text-center">
             <p className="text-white font-bold text-sm">
-              👆 이미지를 길게 누르면 저장할 수 있어요!
+              👆 이미지 길게 누르면 저장! 👈👉 스와이프로 넘기기
             </p>
           </div>
           
-          {/* 이미지 표시 영역 */}
-          <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
-            {analysisId ? (
-              <img 
-                src={`/api/sleep/${analysisId}/share-card?v=${Date.now()}`}
-                alt="수면 분석 결과 카드"
-                className="max-w-full max-h-full rounded-2xl shadow-2xl"
-                style={{ WebkitTouchCallout: 'default' }}
-                onError={(e) => {
-                  // SVG 로딩 실패 시 대체 UI
-                  const target = e.target as HTMLImageElement;
-                  target.style.display = 'none';
-                  target.parentElement!.innerHTML = `
-                    <div class="bg-slate-800 rounded-2xl p-8 text-center max-w-sm">
-                      <div class="text-6xl mb-4">🌙</div>
-                      <div class="text-white text-4xl font-bold mb-2">${report.safetyScore}점</div>
-                      <div class="text-gray-400 mb-4">수면 환경 분석 결과</div>
-                      <div class="text-orange-400 text-sm">스크린샷으로 저장해주세요!</div>
+          {/* 캐러셀 영역 */}
+          <div 
+            className="flex-1 relative overflow-hidden"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            {isLoadingSlides ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <div className="animate-spin text-4xl mb-4">⏳</div>
+                  <p className="text-white">카드뉴스 생성 중...</p>
+                  <p className="text-gray-400 text-sm mt-2">잠시만 기다려주세요</p>
+                </div>
+              </div>
+            ) : slideError ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center p-8">
+                  <div className="text-4xl mb-4">😢</div>
+                  <p className="text-white mb-2">{slideError}</p>
+                  <button 
+                    onClick={loadSlides}
+                    className="text-orange-400 underline"
+                  >
+                    다시 시도
+                  </button>
+                </div>
+              </div>
+            ) : slideUrls.length > 0 ? (
+              <>
+                {/* 슬라이드 컨테이너 */}
+                <div 
+                  className="flex h-full transition-transform duration-300 ease-out"
+                  style={{ transform: `translateX(-${currentSlide * 100}%)` }}
+                >
+                  {slideUrls.map((url, index) => (
+                    <div 
+                      key={index}
+                      className="min-w-full h-full flex items-center justify-center p-4"
+                    >
+                      <img 
+                        src={url}
+                        alt={`슬라이드 ${index + 1}`}
+                        className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                        style={{ WebkitTouchCallout: 'default' }}
+                        draggable={false}
+                      />
                     </div>
-                  `;
-                }}
-              />
+                  ))}
+                </div>
+                
+                {/* 좌우 네비게이션 버튼 */}
+                {currentSlide > 0 && (
+                  <button
+                    onClick={() => setCurrentSlide(prev => prev - 1)}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/20 hover:bg-white/40 rounded-full flex items-center justify-center text-white text-2xl backdrop-blur-sm"
+                  >
+                    ‹
+                  </button>
+                )}
+                {currentSlide < slideUrls.length - 1 && (
+                  <button
+                    onClick={() => setCurrentSlide(prev => prev + 1)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/20 hover:bg-white/40 rounded-full flex items-center justify-center text-white text-2xl backdrop-blur-sm"
+                  >
+                    ›
+                  </button>
+                )}
+              </>
             ) : (
-              <div className="bg-slate-800 rounded-2xl p-8 text-center">
-                <div className="text-6xl mb-4">🌙</div>
-                <div className="text-white text-4xl font-bold mb-2">{report.safetyScore}점</div>
-                <div className="text-gray-400">수면 환경 분석 결과</div>
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <div className="text-4xl mb-4">📸</div>
+                  <p className="text-white mb-4">카드뉴스를 불러오는 중...</p>
+                </div>
               </div>
             )}
           </div>
           
-          {/* 하단 안내 */}
-          <div className="p-4 bg-black/80 text-center space-y-2">
-            <p className="text-gray-400 text-sm">
-              저장 후 인스타그램 스토리에 공유하세요! ✨
+          {/* 하단 인디케이터 & 안내 */}
+          <div className="p-4 bg-black/80">
+            {/* 페이지 인디케이터 */}
+            {slideUrls.length > 0 && (
+              <div className="flex justify-center gap-2 mb-3">
+                {slideUrls.map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setCurrentSlide(index)}
+                    className={`w-2 h-2 rounded-full transition-all ${
+                      index === currentSlide 
+                        ? "bg-white w-6" 
+                        : "bg-white/40"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+            
+            <p className="text-gray-400 text-sm text-center">
+              원하는 이미지만 골라서 저장하세요! ✨
             </p>
-            <p className="text-orange-400 text-xs">
+            <p className="text-orange-400 text-xs text-center mt-1">
               @sundayhug.official 태그하면 선물이! 🎁
             </p>
           </div>
