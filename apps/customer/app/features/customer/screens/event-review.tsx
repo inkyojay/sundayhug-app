@@ -339,9 +339,12 @@ export default function EventReviewScreen() {
     }
   }, [fetcherData]);
 
-  // 제품 선택 시 보증서 모드 결정
+  // 제품 선택 시 보증서 모드 결정 (아기침대 제품만)
+  const selectedProduct = eventProducts.find((p: any) => p.id === selectedProductId);
+  const needsWarranty = selectedProduct?.product_name?.includes("아기침대") || selectedProduct?.product_name?.includes("ABC");
+  
   useEffect(() => {
-    if (selectedProductId) {
+    if (selectedProductId && needsWarranty) {
       // ABC 침대 관련 보증서가 있는지 확인
       const hasWarranty = localWarranties.some((w: any) => 
         w.product_name?.includes("ABC") || w.product_name?.includes("아기침대")
@@ -356,7 +359,7 @@ export default function EventReviewScreen() {
       setWarrantyMode(null);
       setSelectedWarrantyId(null);
     }
-  }, [selectedProductId, localWarranties]);
+  }, [selectedProductId, localWarranties, needsWarranty]);
 
   // 보증서 사진 선택
   const handleWarrantyPhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -732,9 +735,24 @@ export default function EventReviewScreen() {
             </div>
           )}
 
+          {/* 에러 팝업 (이미 신청한 후기 등) */}
           {fetcherData?.error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl">
-              <p className="text-red-700">❌ {fetcherData.error}</p>
+            <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <X className="w-8 h-8 text-red-500" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">알림</h3>
+                  <p className="text-gray-600 mb-6">{fetcherData.error}</p>
+                  <Button 
+                    onClick={() => window.location.reload()}
+                    className="w-full h-12 rounded-xl bg-gray-900 hover:bg-gray-800 text-white"
+                  >
+                    확인
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1036,8 +1054,8 @@ export default function EventReviewScreen() {
                     </div>
                   )}
 
-                  {/* 보증서 연동 섹션 */}
-                  {selectedProductId && warrantyMode && (
+                  {/* 보증서 연동 섹션 (아기침대 제품만) */}
+                  {selectedProductId && needsWarranty && warrantyMode && (
                     <div className="bg-white rounded-2xl p-5 border border-gray-100">
                       <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                         <CheckCircle className="w-5 h-5 text-emerald-500" />
@@ -1057,7 +1075,14 @@ export default function EventReviewScreen() {
                             <button
                               key={warranty.id}
                               type="button"
-                              onClick={() => setSelectedWarrantyId(warranty.id)}
+                              onClick={() => {
+                                // 같은 항목 클릭 시 선택 취소
+                                if (selectedWarrantyId === warranty.id) {
+                                  setSelectedWarrantyId(null);
+                                } else {
+                                  setSelectedWarrantyId(warranty.id);
+                                }
+                              }}
                               className={`w-full p-4 rounded-xl border transition-all text-left ${
                                 selectedWarrantyId === warranty.id
                                   ? "border-emerald-400 bg-emerald-50"

@@ -217,8 +217,14 @@ export default function ReviewSubmitScreen() {
 
   const fetcherData = fetcher.data as any;
   const isSubmitting = fetcher.state === "submitting";
+  const [showComplete, setShowComplete] = useState(false);
 
   const selectedTypeInfo = reviewTypes.find(t => t.id === selectedType);
+
+  // 성공 시 완료 화면 표시
+  if (fetcherData?.success && !showComplete) {
+    setShowComplete(true);
+  }
 
   const filteredProducts = productSearch.length > 0
     ? productList.filter((p: string) => p.toLowerCase().includes(productSearch.toLowerCase()))
@@ -325,8 +331,68 @@ export default function ReviewSubmitScreen() {
     setPhotos([]);
   };
 
-  if (fetcherData?.success && !isSubmitting) {
-    setTimeout(() => resetForm(), 100);
+  const handleNewSubmit = () => {
+    setShowComplete(false);
+    resetForm();
+  };
+
+  // 완료 화면
+  if (showComplete) {
+    return (
+      <div className="min-h-screen bg-[#F5F5F0]">
+        <div className="mx-auto max-w-2xl px-4 md:px-6 py-8 md:py-10">
+          <div className="flex flex-col items-center justify-center min-h-[70vh]">
+            {/* 성공 아이콘 */}
+            <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6">
+              <CheckCircle className="w-12 h-12 text-green-500" />
+            </div>
+            
+            {/* 완료 메시지 */}
+            <h1 className="text-2xl font-bold text-gray-900 mb-2 text-center">
+              후기 인증 신청 완료!
+            </h1>
+            <p className="text-gray-500 text-center mb-8">
+              검토 후 1~2 영업일 내 포인트가 적립됩니다.
+            </p>
+            
+            {/* 적립 예정 포인트 */}
+            {selectedTypeInfo && (
+              <div className="bg-white rounded-2xl p-6 mb-8 w-full max-w-sm border border-gray-100">
+                <div className="text-center">
+                  <p className="text-gray-500 text-sm mb-1">적립 예정 포인트</p>
+                  <p className="text-3xl font-bold text-orange-500">+{selectedTypeInfo.points}P</p>
+                </div>
+              </div>
+            )}
+            
+            {/* 버튼들 */}
+            <div className="flex flex-col gap-3 w-full max-w-sm">
+              <Button
+                onClick={handleNewSubmit}
+                className="h-14 rounded-xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white font-medium"
+              >
+                추가로 인증하기
+              </Button>
+              <Link to="/customer/mypage">
+                <Button
+                  variant="outline"
+                  className="w-full h-14 rounded-xl border-gray-300 text-gray-700 hover:bg-gray-100"
+                >
+                  마이페이지로 돌아가기
+                </Button>
+              </Link>
+            </div>
+            
+            {/* 안내 */}
+            <div className="mt-8 p-4 bg-blue-50 rounded-2xl w-full max-w-sm">
+              <p className="text-sm text-blue-700 text-center">
+                💡 신청 내역은 마이페이지에서 확인하실 수 있습니다.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -349,17 +415,6 @@ export default function ReviewSubmitScreen() {
             </p>
           </div>
         </div>
-
-        {/* 성공/에러 메시지 */}
-        {fetcherData?.success && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-2xl">
-            <div className="flex items-center gap-2 mb-1">
-              <CheckCircle className="w-5 h-5 text-green-600" />
-              <p className="text-green-700 font-medium">{fetcherData.message}</p>
-            </div>
-            <p className="text-green-600 text-sm">검토 후 1~2 영업일 내 포인트가 적립됩니다.</p>
-          </div>
-        )}
 
         {fetcherData?.error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl">

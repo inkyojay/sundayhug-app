@@ -224,12 +224,33 @@ export function AnalysisResult({
       // 캡처 대상 요소
       const element = resultRef.current;
       
+      // 이미지 CORS 문제 해결: 이미지를 먼저 base64로 변환
+      const images = element.querySelectorAll('img');
+      for (const img of Array.from(images)) {
+        if (img.src && !img.src.startsWith('data:')) {
+          try {
+            const response = await fetch(img.src);
+            const blob = await response.blob();
+            const reader = new FileReader();
+            await new Promise((resolve) => {
+              reader.onload = () => {
+                img.src = reader.result as string;
+                resolve(null);
+              };
+              reader.readAsDataURL(blob);
+            });
+          } catch (e) {
+            console.warn('이미지 변환 실패, 원본 사용:', e);
+          }
+        }
+      }
+      
       const canvas = await html2canvas(element, {
         backgroundColor: "#F5F5F0",
         scale: 2,
         useCORS: true,
         allowTaint: true,
-        logging: false,
+        logging: true, // 디버깅용
         imageTimeout: 15000,
         onclone: (clonedDoc) => {
           // 클론된 문서에서 스타일 조정
@@ -243,8 +264,11 @@ export function AnalysisResult({
       setSaveProgress("이미지 저장 중...");
       
       // Blob으로 변환하여 다운로드 (모바일 호환성 개선)
-      const blob = await new Promise<Blob>((resolve) => {
-        canvas.toBlob((b) => resolve(b!), "image/png", 1.0);
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((b) => {
+          if (b) resolve(b);
+          else reject(new Error('Canvas to Blob failed'));
+        }, "image/png", 1.0);
       });
       
       const fileName = `수면분석결과-${new Date().toISOString().split("T")[0]}.png`;
@@ -287,7 +311,9 @@ export function AnalysisResult({
       
     } catch (error) {
       console.error("이미지 저장 실패:", error);
-      alert("이미지 저장에 실패했습니다. 다시 시도해주세요.");
+      // 더 자세한 에러 메시지
+      const errorMsg = error instanceof Error ? error.message : "알 수 없는 오류";
+      alert(`이미지 저장에 실패했습니다.\n오류: ${errorMsg}\n\n브라우저 콘솔에서 자세한 내용을 확인해주세요.`);
     } finally {
       setIsSavingImage(false);
       setSaveProgress("");
@@ -307,26 +333,24 @@ export function AnalysisResult({
           새로 분석
         </Button>
 
-        {/* 이미지로 저장하기 버튼 (인스타 슬라이드 다운로드) */}
-        {onDownloadSlides && (
-          <Button 
-            onClick={onDownloadSlides}
-            disabled={isDownloading}
-            className="rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
-          >
-            {isDownloading ? (
-              <>
-                <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                이미지 생성 중... 잠시만 기다려주세요
-              </>
-            ) : (
-              <>
-                <Download className="mr-2 h-4 w-4" />
-                이미지로 저장하기
-              </>
-            )}
-          </Button>
-        )}
+        {/* 이미지로 저장하기 버튼 (html2canvas 직접 사용) */}
+        <Button 
+          onClick={handleSaveAsImage}
+          disabled={isSavingImage}
+          className="rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
+        >
+          {isSavingImage ? (
+            <>
+              <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              {saveProgress || "이미지 생성 중..."}
+            </>
+          ) : (
+            <>
+              <Download className="mr-2 h-4 w-4" />
+              이미지로 저장하기
+            </>
+          )}
+        </Button>
       </div>
 
       {analysisId && (

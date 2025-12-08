@@ -154,6 +154,7 @@ export default function ChatRoomScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [localMessages, setLocalMessages] = useState(initialMessages);
   const [localBabyProfile, setLocalBabyProfile] = useState(initialBabyProfile);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(session?.id || null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -164,6 +165,7 @@ export default function ChatRoomScreen() {
 
   const isLoading = chatFetcher.state !== "idle";
   const babyProfile = localBabyProfile;
+  const isNewSession = !currentSessionId;
 
   // 아기 프로필 저장 후 업데이트
   useEffect(() => {
@@ -177,6 +179,13 @@ export default function ChatRoomScreen() {
     setLocalMessages(initialMessages);
   }, [initialMessages]);
 
+  // 세션 ID 동기화 (페이지 로드 시)
+  useEffect(() => {
+    if (session?.id) {
+      setCurrentSessionId(session.id);
+    }
+  }, [session?.id]);
+
   // 새 메시지 시 스크롤
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -187,12 +196,13 @@ export default function ChatRoomScreen() {
     if (chatFetcher.data?.success && chatFetcher.data?.message) {
       setLocalMessages(prev => [...prev, chatFetcher.data.message]);
       
-      // 새 세션이면 URL만 변경 (페이지 리로드 없이)
-      if (isNew && chatFetcher.data?.sessionId) {
+      // 새 세션이면 세션 ID 저장 및 URL 변경 (페이지 리로드 없이)
+      if (chatFetcher.data?.sessionId && !currentSessionId) {
+        setCurrentSessionId(chatFetcher.data.sessionId);
         window.history.replaceState(null, "", `/customer/chat/${chatFetcher.data.sessionId}`);
       }
     }
-  }, [chatFetcher.data, isNew]);
+  }, [chatFetcher.data, currentSessionId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -207,11 +217,11 @@ export default function ChatRoomScreen() {
     };
     setLocalMessages(prev => [...prev, userMessage]);
 
-    // API 호출
+    // API 호출 (currentSessionId 사용으로 일관성 유지)
     chatFetcher.submit(
       { 
         message: inputValue,
-        sessionId: session?.id || "new"
+        sessionId: currentSessionId || "new"
       },
       { method: "post", action: "/api/chat/send" }
     );
@@ -250,7 +260,7 @@ export default function ChatRoomScreen() {
   };
 
   // 아기 정보가 없으면 입력 화면 표시
-  if (!babyProfile && isNew) {
+  if (!babyProfile && isNewSession) {
     return (
       <div className="flex flex-col h-screen bg-[#F5F5F0]">
         <div className="bg-white border-b px-4 py-3 flex items-center gap-3">
@@ -423,25 +433,33 @@ export default function ChatRoomScreen() {
                 <p className="whitespace-pre-wrap text-inherit">{msg.content}</p>
                 
                 {/* 출처 표시 */}
-                {msg.role === "assistant" && msg.sources && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <p className="text-xs text-gray-400 mb-1">📚 참고 자료</p>
-                    <div className="flex flex-wrap gap-1">
-                      {JSON.parse(msg.sources).map((source: { name: string; url?: string }, i: number) => (
-                        <a
-                          key={i}
-                          href={source.url || "#"}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-500 hover:underline flex items-center gap-1"
-                        >
-                          {source.name}
-                          {source.url && <ExternalLink className="w-3 h-3" />}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {msg.role === "assistant" && msg.sources && (() => {
+                  try {
+                    const sources = typeof msg.sources === 'string' ? JSON.parse(msg.sources) : msg.sources;
+                    if (!Array.isArray(sources) || sources.length === 0) return null;
+                    return (
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <p className="text-xs text-gray-400 mb-1">📚 참고 자료</p>
+                        <div className="flex flex-wrap gap-1">
+                          {sources.map((source: { name: string; url?: string }, i: number) => (
+                            <a
+                              key={i}
+                              href={source.url || "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-500 hover:underline flex items-center gap-1"
+                            >
+                              {source.name}
+                              {source.url && <ExternalLink className="w-3 h-3" />}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  } catch {
+                    return null;
+                  }
+                })()}
               </div>
               
               {/* 피드백 버튼 */}
