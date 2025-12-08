@@ -110,19 +110,27 @@ export async function action({ request, params }: Route.ActionArgs) {
       references: parsedReport.references || [],
     };
 
-    // Get image base64
-    let imageBase64 = result.image_base64;
+    // Get image as data URL
+    let imageDataUrl: string | undefined;
 
-    if (!imageBase64 && result.image_url) {
-      // Download from storage if needed
+    if (result.image_base64) {
+      // 이미 base64가 있으면 data URL로 변환
+      const isDataUrl = result.image_base64.startsWith("data:");
+      imageDataUrl = isDataUrl 
+        ? result.image_base64 
+        : `data:image/jpeg;base64,${result.image_base64}`;
+      console.log("📷 Using existing base64 image");
+    } else if (result.image_url) {
+      // Storage에서 다운로드 후 data URL로 변환
       console.log("📥 Downloading image from Storage:", result.image_url);
-      const { buffer } = await downloadImageFromUrl(result.image_url);
-      imageBase64 = buffer.toString("base64");
+      const { buffer, contentType } = await downloadImageFromUrl(result.image_url);
+      imageDataUrl = `data:${contentType};base64,${buffer.toString("base64")}`;
+      console.log(`📷 Downloaded image, type: ${contentType}, size: ${buffer.length}`);
     }
 
     // Generate slides as PNG
     console.log(`📊 Generating PNG slides for analysis ${id}...`);
-    const pngBuffers = await generateAllSlidesAsPng(report, imageBase64 ?? undefined);
+    const pngBuffers = await generateAllSlidesAsPng(report, imageDataUrl);
     console.log(`✅ Generated ${pngBuffers.length} PNG slides`);
 
     // Upload to Storage

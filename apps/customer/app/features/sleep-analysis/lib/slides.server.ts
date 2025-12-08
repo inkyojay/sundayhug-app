@@ -271,10 +271,10 @@ export async function generateImageSlide(
           },
         },
         el("img", {
-          src: imageBase64.startsWith("data:") ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`,
+          src: imageBase64, // 이미 data URL 형태로 전달됨
           style: {
-            maxWidth: "100%",
-            maxHeight: "100%",
+            width: "100%",
+            height: "100%",
             objectFit: "contain",
           },
         }),

@@ -151,39 +151,47 @@ export default function ResultPage() {
       const slideUrls = responseData.data.slideUrls as string[];
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       
+      // 모든 슬라이드를 File 객체로 변환
+      const files: File[] = [];
       for (let i = 0; i < slideUrls.length; i++) {
         const slideUrl = slideUrls[i];
         const imgResponse = await fetch(slideUrl);
         const blob = await imgResponse.blob();
-        const fileName = `수면분석-${i + 1}.png`;
+        const fileName = `썬데이허그_수면분석_${i + 1}.png`;
+        files.push(new File([blob], fileName, { type: "image/png" }));
+      }
+      
+      // 모바일: Web Share API로 전체 파일 공유 (사진첩 저장 옵션 제공)
+      if (isMobile && navigator.share && navigator.canShare) {
+        const shareData = { files };
         
-        // 모바일: Web Share API 시도
-        if (isMobile && navigator.share && navigator.canShare) {
-          const file = new File([blob], fileName, { type: "image/png" });
-          if (navigator.canShare({ files: [file] })) {
-            try {
-              await navigator.share({ files: [file] });
-              continue;
-            } catch { /* 공유 취소 시 일반 다운로드 */ }
+        if (navigator.canShare(shareData)) {
+          try {
+            await navigator.share(shareData);
+            alert("📸 이미지를 공유/저장했어요!\n\n'사진에 저장'을 선택하면 사진첩에 저장됩니다.");
+            return;
+          } catch (shareError) {
+            // 사용자가 공유 취소 시 일반 다운로드로 폴백
+            console.log("Share cancelled, falling back to download");
           }
         }
-        
-        // 일반 다운로드
-        const blobUrl = URL.createObjectURL(blob);
+      }
+      
+      // PC 또는 Web Share 미지원: 일반 다운로드
+      for (const file of files) {
+        const blobUrl = URL.createObjectURL(file);
         const link = document.createElement("a");
         link.href = blobUrl;
-        link.download = fileName;
+        link.download = file.name;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(blobUrl);
         
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
       
-      if (!isMobile) {
-        alert(`${slideUrls.length}장의 이미지가 저장되었습니다!`);
-      }
+      alert(`✅ ${files.length}장의 카드뉴스가 저장되었습니다!\n\n인스타그램에 공유하고 @sundayhug.official 태그해주세요 🎁`);
     } catch (err) {
       console.error("Download error:", err);
       alert(err instanceof Error ? err.message : "다운로드 중 오류가 발생했습니다.");

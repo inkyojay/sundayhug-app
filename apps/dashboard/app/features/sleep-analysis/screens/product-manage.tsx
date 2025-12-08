@@ -6,7 +6,7 @@
 import type { Route } from "./+types/product-manage";
 
 import { data, useLoaderData, useFetcher, Form } from "react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Plus, 
   Pencil, 
@@ -155,6 +155,14 @@ export default function ProductManageScreen() {
   const fetcher = useFetcher();
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+
+  // 저장 완료 시 모달 닫기
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.success) {
+      setIsCreating(false);
+      setEditingProduct(null);
+    }
+  }, [fetcher.state, fetcher.data]);
 
   const getCategoryLabel = (value: string) => 
     CATEGORIES.find(c => c.value === value)?.label || value;
