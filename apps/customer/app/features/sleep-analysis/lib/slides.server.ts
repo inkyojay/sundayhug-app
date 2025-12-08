@@ -700,9 +700,18 @@ export function svgToDataUrl(svg: string): string {
  * Convert SVG string to PNG buffer using sharp
  */
 export async function svgToPng(svgString: string): Promise<Buffer> {
-  const sharp = (await import("sharp")).default;
-  const svgBuffer = Buffer.from(svgString);
-  return sharp(svgBuffer).png().toBuffer();
+  try {
+    const sharp = (await import("sharp")).default;
+    const svgBuffer = Buffer.from(svgString);
+    
+    // sharp 옵션 명시적 설정
+    return await sharp(svgBuffer, { density: 150 })
+      .png({ quality: 90, compressionLevel: 6 })
+      .toBuffer();
+  } catch (error) {
+    console.error("SVG to PNG conversion error:", error);
+    throw new Error(`PNG 변환 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
+  }
 }
 
 /**

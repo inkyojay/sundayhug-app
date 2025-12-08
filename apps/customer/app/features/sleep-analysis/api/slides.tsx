@@ -130,8 +130,17 @@ export async function action({ request, params }: Route.ActionArgs) {
 
     // Generate slides as PNG
     console.log(`📊 Generating PNG slides for analysis ${id}...`);
-    const pngBuffers = await generateAllSlidesAsPng(report, imageDataUrl);
-    console.log(`✅ Generated ${pngBuffers.length} PNG slides`);
+    let pngBuffers: Buffer[];
+    try {
+      pngBuffers = await generateAllSlidesAsPng(report, imageDataUrl);
+      console.log(`✅ Generated ${pngBuffers.length} PNG slides`);
+    } catch (slideError) {
+      console.error("슬라이드 생성 에러:", slideError);
+      return data(
+        { success: false, error: "슬라이드 이미지 생성에 실패했습니다. 잠시 후 다시 시도해주세요." },
+        { status: 500 }
+      );
+    }
 
     // Upload to Storage
     const slideUrls = await uploadSlidesToStorage(adminClient, pngBuffers, id);

@@ -194,7 +194,23 @@ export default function ResultPage() {
       alert(`✅ ${files.length}장의 카드뉴스가 저장되었습니다!\n\n인스타그램에 공유하고 @sundayhug.official 태그해주세요 🎁`);
     } catch (err) {
       console.error("Download error:", err);
-      alert(err instanceof Error ? err.message : "다운로드 중 오류가 발생했습니다.");
+      // 에러 시 대안 제안
+      const useAlternative = confirm(
+        "이미지 생성 중 오류가 발생했습니다.\n\n대신 '링크 공유'로 친구에게 공유할까요?"
+      );
+      if (useAlternative) {
+        const url = `${window.location.origin}/customer/sleep/result/${analysisId}`;
+        if (navigator.share) {
+          navigator.share({
+            title: `🌙 수면 환경 분석 결과`,
+            text: `우리 아기 수면 환경을 분석해봤어요! 나도 무료로 분석 받아보세요.`,
+            url: url,
+          });
+        } else {
+          navigator.clipboard.writeText(url);
+          alert("링크가 복사되었습니다!");
+        }
+      }
     } finally {
       setIsDownloading(false);
     }
