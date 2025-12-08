@@ -13,7 +13,8 @@ import {
   CheckCircle,
   Moon,
   Image as ImageIcon,
-  MessageCircle
+  MessageCircle,
+  Instagram
 } from "lucide-react";
 import { useState, useRef } from "react";
 
@@ -21,6 +22,8 @@ import { Button } from "~/core/components/ui/button";
 import { cn } from "~/core/lib/utils";
 
 import type { AnalysisReport, RiskLevel } from "../schema";
+import { getProductRecommendations, type FeedbackItem } from "../lib/product-recommendations";
+import { ProductRecommendations } from "./product-recommendations";
 
 // 점수에 따른 색상 반환
 function getScoreColor(score: number): string {
@@ -70,6 +73,7 @@ interface AnalysisResultProps {
   report: AnalysisReport;
   imagePreview: string;
   analysisId?: string;
+  babyAgeMonths?: number;
   onReset: () => void;
   onDownloadSlides?: () => void;
   isDownloading?: boolean;
@@ -119,6 +123,7 @@ export function AnalysisResult({
   report,
   imagePreview,
   analysisId,
+  babyAgeMonths,
   onReset,
   onDownloadSlides,
   isDownloading = false,
@@ -126,6 +131,12 @@ export function AnalysisResult({
   const [activeFeedbackId, setActiveFeedbackId] = useState<number | null>(null);
   const [showShareOptions, setShowShareOptions] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
+
+  // 제품 추천 생성
+  const productRecommendations = getProductRecommendations(
+    report.feedbackItems as FeedbackItem[],
+    babyAgeMonths
+  );
 
   // 카카오톡 공유
   const handleKakaoShare = async () => {
@@ -204,92 +215,57 @@ export function AnalysisResult({
     }
   };
 
-  // 이미지로 저장 (html2canvas)
+  // 인스타그램 카드 이미지 저장/공유
   const [isSavingImage, setIsSavingImage] = useState(false);
   const [saveProgress, setSaveProgress] = useState<string>("");
+  const [showShareModal, setShowShareModal] = useState(false);
   
-  const handleSaveAsImage = async () => {
-    if (!resultRef.current || isSavingImage) return;
+  // 서버에서 생성한 이미지 다운로드/공유
+  const handleSaveAsImage = async (style: "square" | "vertical" = "square") => {
+    if (!analysisId || isSavingImage) {
+      alert("분석 결과가 저장된 후 이미지를 생성할 수 있어요.");
+      return;
+    }
 
     setIsSavingImage(true);
     setSaveProgress("이미지 생성 중...");
     
     try {
-      // 동적 import - Vite 번들 분석 제외
-      const html2canvasModule = await import(/* @vite-ignore */ "html2canvas");
-      const html2canvas = html2canvasModule.default;
+      // 서버에서 PNG 이미지 가져오기
+      const imageUrl = `/api/sleep/${analysisId}/share-card?format=png&style=${style}`;
+      const response = await fetch(imageUrl);
       
-      setSaveProgress("화면 캡처 중...");
-      
-      // 캡처 대상 요소
-      const element = resultRef.current;
-      
-      // 이미지 CORS 문제 해결: 이미지를 먼저 base64로 변환
-      const images = element.querySelectorAll('img');
-      for (const img of Array.from(images)) {
-        if (img.src && !img.src.startsWith('data:')) {
-          try {
-            const response = await fetch(img.src);
-            const blob = await response.blob();
-            const reader = new FileReader();
-            await new Promise((resolve) => {
-              reader.onload = () => {
-                img.src = reader.result as string;
-                resolve(null);
-              };
-              reader.readAsDataURL(blob);
-            });
-          } catch (e) {
-            console.warn('이미지 변환 실패, 원본 사용:', e);
-          }
-        }
+      if (!response.ok) {
+        throw new Error("이미지 생성에 실패했습니다.");
       }
       
-      const canvas = await html2canvas(element, {
-        backgroundColor: "#F5F5F0",
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        logging: true, // 디버깅용
-        imageTimeout: 15000,
-        onclone: (clonedDoc) => {
-          // 클론된 문서에서 스타일 조정
-          const clonedElement = clonedDoc.querySelector('[data-result-card]');
-          if (clonedElement) {
-            (clonedElement as HTMLElement).style.overflow = 'visible';
-          }
-        }
-      });
+      const blob = await response.blob();
+      const fileName = `썬데이허그_수면분석_${new Date().toISOString().split("T")[0]}.png`;
       
       setSaveProgress("이미지 저장 중...");
-      
-      // Blob으로 변환하여 다운로드 (모바일 호환성 개선)
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((b) => {
-          if (b) resolve(b);
-          else reject(new Error('Canvas to Blob failed'));
-        }, "image/png", 1.0);
-      });
-      
-      const fileName = `수면분석결과-${new Date().toISOString().split("T")[0]}.png`;
       
       // 모바일 체크
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       
-      // Web Share API 지원 확인 (모바일에서 사진첩 저장 가능)
+      // Web Share API로 공유 (모바일 우선)
       if (isMobile && navigator.share && navigator.canShare) {
         const file = new File([blob], fileName, { type: "image/png" });
-        const shareData = { files: [file] };
+        const shareData = { 
+          files: [file],
+          title: "🌙 수면 환경 분석 결과",
+          text: `아기 수면 환경 점수: ${report.safetyScore}점! 나도 무료로 분석 받아보세요 👉 app.sundayhug.kr/customer/sleep`,
+        };
         
         if (navigator.canShare(shareData)) {
           try {
             await navigator.share(shareData);
-            setSaveProgress("");
+            setShowShareModal(false);
             setIsSavingImage(false);
+            setSaveProgress("");
             return;
           } catch (shareError) {
-            // 공유 취소 또는 실패 시 일반 다운로드로 폴백
-            console.log("공유 취소됨, 일반 다운로드 시도");
+            // 공유 취소됨 - 일반 다운로드로 폴백
+            console.log("공유 취소됨");
           }
         }
       }
@@ -304,16 +280,15 @@ export function AnalysisResult({
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       
-      // 모바일에서 다운로드 안내
+      // 다운로드 완료 안내
       if (isMobile) {
-        alert("이미지가 다운로드되었습니다.\n'파일' 또는 '다운로드' 폴더에서 확인하세요.");
+        alert("이미지가 저장되었어요! 📸\n\n인스타그램에 공유하고 친구들에게 자랑해보세요!");
       }
       
     } catch (error) {
       console.error("이미지 저장 실패:", error);
-      // 더 자세한 에러 메시지
       const errorMsg = error instanceof Error ? error.message : "알 수 없는 오류";
-      alert(`이미지 저장에 실패했습니다.\n오류: ${errorMsg}\n\n브라우저 콘솔에서 자세한 내용을 확인해주세요.`);
+      alert(`이미지 저장에 실패했습니다.\n오류: ${errorMsg}`);
     } finally {
       setIsSavingImage(false);
       setSaveProgress("");
@@ -322,32 +297,32 @@ export function AnalysisResult({
 
   return (
     <div className="space-y-6">
-      {/* Action Buttons */}
-      <div className="flex flex-wrap items-center justify-center gap-3">
+      {/* Action Buttons - 모바일 친화적 */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3">
         <Button 
           onClick={onReset} 
           variant="outline"
-          className="rounded-xl border-gray-300 text-gray-700 hover:bg-gray-100"
+          className="rounded-xl border-gray-300 text-gray-700 hover:bg-gray-100 h-12"
         >
           <RefreshCw className="mr-2 h-4 w-4" />
           새로 분석
         </Button>
 
-        {/* 이미지로 저장하기 버튼 (html2canvas 직접 사용) */}
+        {/* 인스타그램 공유 버튼 - 가장 눈에 띄게 */}
         <Button 
-          onClick={handleSaveAsImage}
-          disabled={isSavingImage}
-          className="rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
+          onClick={() => setShowShareModal(true)}
+          disabled={isSavingImage || !analysisId}
+          className="rounded-xl bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 text-white hover:opacity-90 h-12 font-semibold shadow-lg"
         >
           {isSavingImage ? (
             <>
               <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              {saveProgress || "이미지 생성 중..."}
+              {saveProgress || "생성 중..."}
             </>
           ) : (
             <>
-              <Download className="mr-2 h-4 w-4" />
-              이미지로 저장하기
+              <Instagram className="mr-2 h-5 w-5" />
+              인스타 카드 만들기
             </>
           )}
         </Button>
@@ -357,6 +332,65 @@ export function AnalysisResult({
         <p className="text-center text-sm text-gray-500">
           ✓ 분석 저장 완료 (ID: {analysisId.substring(0, 8)}...)
         </p>
+      )}
+
+      {/* 공유 모달 */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 animate-in slide-in-from-bottom duration-300">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">📸 인스타 카드 만들기</h3>
+              <button 
+                onClick={() => setShowShareModal(false)}
+                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <p className="text-gray-600 mb-6">
+              분석 결과를 예쁜 카드로 저장하고<br />
+              인스타그램에 공유해보세요! ✨
+            </p>
+            
+            {/* 카드 스타일 선택 */}
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <button
+                onClick={() => handleSaveAsImage("square")}
+                disabled={isSavingImage}
+                className="flex flex-col items-center p-4 rounded-2xl border-2 border-gray-200 hover:border-[#FF6B35] hover:bg-orange-50 transition-all"
+              >
+                <div className="w-16 h-16 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl mb-2 flex items-center justify-center">
+                  <span className="text-white text-2xl font-bold">{report.safetyScore}</span>
+                </div>
+                <span className="font-medium text-gray-900">1:1 정사각형</span>
+                <span className="text-xs text-gray-500">피드 포스트용</span>
+              </button>
+              
+              <button
+                onClick={() => handleSaveAsImage("vertical")}
+                disabled={isSavingImage}
+                className="flex flex-col items-center p-4 rounded-2xl border-2 border-gray-200 hover:border-[#FF6B35] hover:bg-orange-50 transition-all"
+              >
+                <div className="w-12 h-16 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl mb-2 flex items-center justify-center">
+                  <span className="text-white text-xl font-bold">{report.safetyScore}</span>
+                </div>
+                <span className="font-medium text-gray-900">4:5 세로형</span>
+                <span className="text-xs text-gray-500">스토리/릴스용</span>
+              </button>
+            </div>
+            
+            {/* 안내 메시지 */}
+            <div className="bg-orange-50 rounded-xl p-4 text-center">
+              <p className="text-sm text-gray-700">
+                💡 <strong>Tip!</strong> 저장 후 인스타그램 앱에서 공유하세요
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                @sundayhug.official 태그하면 소정의 선물이! 🎁
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Main Content */}
@@ -551,6 +585,9 @@ export function AnalysisResult({
             </ul>
           </div>
         )}
+
+        {/* 제품 추천 섹션 */}
+        <ProductRecommendations recommendations={productRecommendations} />
       </div>
 
       {/* 안내 메시지 */}

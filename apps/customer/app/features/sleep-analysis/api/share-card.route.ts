@@ -2,11 +2,14 @@
  * Share Card API Route
  * 
  * GET /api/sleep/:id/share-card - 공유 카드 이미지 반환
+ * 
+ * Query Params:
+ * - format: "svg" | "png" (기본: svg)
+ * - style: "square" | "vertical" (기본: square, 인스타 1:1 또는 4:5)
  */
 import type { Route } from "./+types/share-card.route";
-import { data } from "react-router";
 import makeServerClient from "~/core/lib/supa-client.server";
-import { generateShareCardSVG, createShareCardData } from "./share-card.server";
+import { generateShareCardSVG, generateVerticalShareCardSVG, createShareCardData } from "./share-card.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { id } = params;
@@ -55,37 +58,42 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     created_at: analysis.created_at,
   });
 
-  // SVG 생성
-  const svg = generateShareCardSVG(cardData);
-
-  // format 파라미터 확인
+  // URL 파라미터 확인
   const url = new URL(request.url);
-  const format = url.searchParams.get("format");
+  const format = url.searchParams.get("format") || "svg";
+  const style = url.searchParams.get("style") || "square";
+
+  // SVG 생성 (스타일에 따라 선택)
+  const svg = style === "vertical" 
+    ? generateVerticalShareCardSVG(cardData) 
+    : generateShareCardSVG(cardData);
 
   if (format === "png") {
-    // PNG 변환 (sharp 사용)
+    // PNG 변환 시도 (sharp 사용 - Vercel에서 지원)
     try {
       const sharp = (await import("sharp")).default;
       const pngBuffer = await sharp(Buffer.from(svg))
-        .png()
+        .png({ quality: 90 })
         .toBuffer();
 
       return new Response(pngBuffer, {
         headers: {
           "Content-Type": "image/png",
+          "Content-Disposition": `inline; filename="sleep-analysis-${id.slice(0, 8)}.png"`,
           "Cache-Control": "public, max-age=3600",
         },
       });
     } catch (e) {
-      console.error("PNG conversion failed:", e);
-      // PNG 변환 실패시 SVG 반환
+      console.error("PNG conversion failed, returning SVG:", e);
+      // PNG 변환 실패시 SVG 반환 (fallback)
     }
   }
 
-  // SVG 반환
+  // SVG 반환 (기본)
   return new Response(svg, {
     headers: {
       "Content-Type": "image/svg+xml",
+      "Content-Disposition": `inline; filename="sleep-analysis-${id.slice(0, 8)}.svg"`,
       "Cache-Control": "public, max-age=3600",
     },
   });
