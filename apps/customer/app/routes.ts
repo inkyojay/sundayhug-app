@@ -64,6 +64,8 @@ export default [
       route("/tts", "features/chat/api/text-to-speech.tsx"),
       route("/stt", "features/chat/api/speech-to-text.tsx"),
     ]),
+    // 수면 예보 API
+    route("/sleep-forecast", "features/sleep-forecast/api/forecast.tsx"),
   ]),
 
   // ========================================
@@ -88,6 +90,7 @@ export default [
         index("features/customer/screens/sleep-hub.tsx"),
         route("/analyze", "features/sleep-analysis/screens/analyze-public.tsx"),
         route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "customer-sleep-result" }),
+        route("/forecast", "features/sleep-forecast/screens/forecast.tsx"),
       ]),
       
       // 블로그

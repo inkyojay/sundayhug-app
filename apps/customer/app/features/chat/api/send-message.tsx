@@ -22,41 +22,31 @@ function getOpenAI() {
 // Gemini 초기화
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-// 시스템 프롬프트 - 자연스러운 대화체
-const SYSTEM_PROMPT = `당신은 썬데이허그 AI 육아 상담사예요. 경험 많은 선배 엄마처럼 따뜻하게 대화해주세요.
+// 시스템 프롬프트 - 간결하고 핵심적인 답변
+const SYSTEM_PROMPT = `당신은 썬데이허그 AI 육아 상담사입니다. 선배 엄마처럼 따뜻하지만 간결하게 답변해주세요.
 
-[대화 스타일 - 반드시 지켜주세요]
-- 친한 언니나 선배 엄마가 카톡으로 조언해주는 느낌으로 말해주세요
-- 마크다운 문법 절대 사용 금지! (###, **, -, 1. 2. 3. 등 사용하지 마세요)
-- 글머리 기호나 번호 없이 자연스러운 문장으로 이어가세요
-- 한 문단에 2~3문장씩 짧게 끊어서 읽기 편하게 답변해주세요
-- 이모지는 답변 끝에 하나만 자연스럽게 넣어주세요
+[핵심 원칙]
+1. 짧고 명확하게: 3~4문장으로 핵심만 전달
+2. 대화체 사용: "~해요", "~예요" 형태로 친근하게
+3. 실용적 조언: 바로 실천할 수 있는 구체적 팁 제공
+4. 공감 표현: 부모의 어려움에 먼저 공감
 
-[좋은 예시]
-"아, 밤에 자주 깨서 힘드시죠? 저도 그 시기가 제일 힘들었어요.
+[형식 규칙]
+- 마크다운 금지 (###, **, - 등 사용하지 마세요)
+- 번호 목록 금지 (1. 2. 3. 대신 자연스러운 문장으로)
+- 이모지는 마지막에 1개만
 
-이 월령 아기들은 수면 패턴이 아직 완전히 자리 잡지 않아서 그래요. 보통 4~6개월 사이에 점점 나아지거든요.
+[이미지 분석 시]
+- 사진 속 상황을 먼저 간단히 설명
+- 육아와 관련된 조언을 자연스럽게 연결
+- 아기의 표정, 환경, 상황 등을 관찰하여 답변
 
-낮잠 시간을 좀 조절해보시면 어떨까요? 오후 4시 이후에는 재우지 않는 게 좋아요. 그리고 저녁에 목욕 후 수유하고 재우는 루틴을 만들어보세요.
+[금지사항]
+- 의료적 진단 금지 (증상 심하면 병원 권유)
+- 불확실한 정보 금지
+- 장황한 설명 금지
 
-힘내세요! 지금 정말 잘하고 계신 거예요 😊"
-
-[나쁜 예시 - 이렇게 하지 마세요]
-"### 1. 수면 환경 점검
-- 온도: 20~22도 유지
-- 습도: 50~60%
-
-### 2. 수면 루틴 형성
-**규칙적인 취침 시간**이 중요합니다."
-
-[규칙]
-- 추측하지 말고 확실한 정보만 알려주세요
-- 출처는 자연스럽게 녹여서 (예: "소아과학회에서도 권장하는 방법인데요")
-- 의료 증상은 진단하지 말고 병원 방문 권유하세요
-- 부모님을 안심시키고 응원해주세요
-
-[참고 자료가 있다면]
-딱딱하게 인용하지 말고 자연스러운 대화로 풀어서 설명해주세요.
+예시: "밤에 자주 깨서 힘드시죠? 이 시기 아기들은 원래 그래요. 낮잠을 오후 4시 전에 끝내고, 저녁 루틴을 만들어보세요. 목욕 후 수유하고 재우면 도움이 돼요 😊"
 `;
 
 // 월령 계산
@@ -237,9 +227,20 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const message = formData.get("message") as string;
   const sessionId = formData.get("sessionId") as string;
+  const imageFile = formData.get("image") as File | null;
 
-  if (!message?.trim()) {
+  // 이미지가 있으면 메시지 없어도 OK
+  if (!message?.trim() && !imageFile) {
     return data({ error: "메시지를 입력해주세요." }, { status: 400 });
+  }
+
+  // 이미지를 Base64로 변환
+  let imageBase64: string | null = null;
+  let imageMimeType: string | null = null;
+  if (imageFile && imageFile.size > 0) {
+    const arrayBuffer = await imageFile.arrayBuffer();
+    imageBase64 = Buffer.from(arrayBuffer).toString('base64');
+    imageMimeType = imageFile.type || 'image/jpeg';
   }
 
   try {
@@ -287,13 +288,31 @@ export async function action({ request }: Route.ActionArgs) {
       .order("created_at", { ascending: true })
       .limit(10);
 
+    // 이미지 업로드 (있는 경우)
+    let imageUrl: string | null = null;
+    if (imageBase64 && imageMimeType) {
+      const fileName = `chat/${user.id}/${Date.now()}.${imageMimeType.split('/')[1] || 'jpg'}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('chat-images')
+        .upload(fileName, Buffer.from(imageBase64, 'base64'), {
+          contentType: imageMimeType,
+          upsert: false,
+        });
+      
+      if (!uploadError && uploadData) {
+        const { data: urlData } = supabase.storage.from('chat-images').getPublicUrl(fileName);
+        imageUrl = urlData?.publicUrl || null;
+      }
+    }
+
     // 사용자 메시지 저장
     const { error: userMsgError } = await supabase
       .from("chat_messages")
       .insert({
         session_id: currentSessionId,
         role: "user",
-        content: message,
+        content: message || "[이미지]",
+        image_url: imageUrl,
       });
 
     if (userMsgError) {
@@ -340,19 +359,44 @@ export async function action({ request }: Route.ActionArgs) {
       conversationHistory += "---\n위 대화 맥락을 참고해서 자연스럽게 이어서 답변해주세요.\n";
     }
 
-    // Gemini API 호출 (새로운 @google/genai 패키지)
-    const prompt = `${SYSTEM_PROMPT}${babyContext}${conversationHistory}${contextText}
+    // Gemini API 호출 (이미지 지원)
+    const textPrompt = `${SYSTEM_PROMPT}${babyContext}${conversationHistory}${contextText}
 
 [현재 질문]
-${message}
+${message || "이 사진에 대해 육아 관점에서 조언해주세요."}
 
 [답변]`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: prompt,
-    });
-    const aiResponse = response.text ?? "";
+    let aiResponse = "";
+    
+    if (imageBase64 && imageMimeType) {
+      // 이미지가 있는 경우 Vision 모델 사용
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: textPrompt },
+              {
+                inlineData: {
+                  mimeType: imageMimeType,
+                  data: imageBase64,
+                },
+              },
+            ],
+          },
+        ],
+      });
+      aiResponse = response.text ?? "";
+    } else {
+      // 텍스트만 있는 경우
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: textPrompt,
+      });
+      aiResponse = response.text ?? "";
+    }
 
     // AI 응답 저장
     const { data: aiMessage, error: aiMsgError } = await supabase

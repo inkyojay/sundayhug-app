@@ -10,9 +10,9 @@ import makeServerClient from "~/core/lib/supa-client.server";
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1";
 
-// 한국어 지원 여성 음성 (ElevenLabs 기본 제공)
-// Rachel - 자연스럽고 따뜻한 여성 음성
-const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // Rachel
+// 한국어 전문 여성 음성 (Voice Library)
+// Hanna - Natural and Clear, 290만+ 사용, 자연스럽고 따뜻한 한국어 음성
+const DEFAULT_VOICE_ID = "zgDzx5jLLCqEp6Fl7Kl7"; // Hanna (Korean)
 
 export async function action({ request }: Route.ActionArgs) {
   const [supabase] = makeServerClient(request);
@@ -52,9 +52,9 @@ export async function action({ request }: Route.ActionArgs) {
         text,
         model_id: "eleven_multilingual_v2", // 한국어 포함 다국어 모델
         voice_settings: {
-          stability: 0.5,        // 음성 안정성 (0-1)
-          similarity_boost: 0.75, // 원본 음성 유사도 (0-1)
-          style: 0.0,            // 스타일 강도 (0-1)
+          stability: 0.7,        // 음성 안정성 높임 (더 일관된 톤)
+          similarity_boost: 0.8, // 원본 음성 유사도 높임
+          style: 0.2,            // 약간의 표현력 추가
           use_speaker_boost: true,
         },
       }),
