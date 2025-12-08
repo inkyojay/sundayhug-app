@@ -22,7 +22,7 @@ import { Button } from "~/core/components/ui/button";
 import { cn } from "~/core/lib/utils";
 
 import type { AnalysisReport, RiskLevel } from "../schema";
-import { getProductRecommendations, type FeedbackItem } from "../lib/product-recommendations";
+import { getProductRecommendationsFromDB, type FeedbackItem, type Product } from "../lib/product-recommendations";
 import { ProductRecommendations } from "./product-recommendations";
 
 // 점수에 따른 색상 반환
@@ -74,6 +74,7 @@ interface AnalysisResultProps {
   imagePreview: string;
   analysisId?: string;
   babyAgeMonths?: number;
+  products?: Product[];  // DB에서 가져온 추천 제품 목록
   onReset: () => void;
   onDownloadSlides?: () => void;
   isDownloading?: boolean;
@@ -124,6 +125,7 @@ export function AnalysisResult({
   imagePreview,
   analysisId,
   babyAgeMonths,
+  products = [],
   onReset,
   onDownloadSlides,
   isDownloading = false,
@@ -132,8 +134,9 @@ export function AnalysisResult({
   const [showShareOptions, setShowShareOptions] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
 
-  // 제품 추천 생성
-  const productRecommendations = getProductRecommendations(
+  // 제품 추천 생성 (DB 데이터 사용)
+  const productRecommendations = getProductRecommendationsFromDB(
+    products,
     report.feedbackItems as FeedbackItem[],
     babyAgeMonths
   );
@@ -383,7 +386,7 @@ export function AnalysisResult({
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 animate-in slide-in-from-bottom duration-300">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">📸 인스타 카드 만들기</h3>
+              <h3 className="text-xl font-bold text-gray-900">📸 인스타 카드뉴스</h3>
               <button 
                 onClick={() => setShowShareModal(false)}
                 className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"
@@ -393,36 +396,34 @@ export function AnalysisResult({
             </div>
             
             <p className="text-gray-600 mb-6">
-              분석 결과를 예쁜 카드로 저장하고<br />
+              분석 결과를 예쁜 카드뉴스로 저장하고<br />
               인스타그램에 공유해보세요! ✨
             </p>
             
-            {/* 카드 스타일 선택 */}
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              <button
-                onClick={() => handleSaveAsImage("square")}
-                disabled={isSavingImage}
-                className="flex flex-col items-center p-4 rounded-2xl border-2 border-gray-200 hover:border-[#FF6B35] hover:bg-orange-50 transition-all"
-              >
-                <div className="w-16 h-16 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl mb-2 flex items-center justify-center">
-                  <span className="text-white text-2xl font-bold">{report.safetyScore}</span>
-                </div>
-                <span className="font-medium text-gray-900">1:1 정사각형</span>
-                <span className="text-xs text-gray-500">피드 포스트용</span>
-              </button>
-              
-              <button
-                onClick={() => handleSaveAsImage("vertical")}
-                disabled={isSavingImage}
-                className="flex flex-col items-center p-4 rounded-2xl border-2 border-gray-200 hover:border-[#FF6B35] hover:bg-orange-50 transition-all"
-              >
-                <div className="w-12 h-16 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl mb-2 flex items-center justify-center">
-                  <span className="text-white text-xl font-bold">{report.safetyScore}</span>
-                </div>
-                <span className="font-medium text-gray-900">4:5 세로형</span>
-                <span className="text-xs text-gray-500">스토리/릴스용</span>
-              </button>
-            </div>
+            {/* 카드뉴스 슬라이드 다운로드 - 메인 */}
+            <button
+              onClick={() => {
+                setShowShareModal(false);
+                onDownloadSlides?.();
+              }}
+              disabled={isDownloading || !analysisId}
+              className="w-full mb-4 py-4 px-6 rounded-2xl bg-gradient-to-r from-[#FF6B35] to-[#FF8B5C] text-white font-bold text-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
+            >
+              {isDownloading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="animate-spin">⏳</span> 카드뉴스 생성 중...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  📥 카드뉴스 슬라이드 다운로드
+                </span>
+              )}
+            </button>
+            
+            <p className="text-center text-sm text-gray-500 mb-4">
+              인트로 + 분석 이미지 + 요약 + 상세분석 + 아웃트로<br />
+              총 여러 장의 카드뉴스가 생성됩니다
+            </p>
             
             {/* 안내 메시지 */}
             <div className="bg-orange-50 rounded-xl p-4 text-center">

@@ -29,12 +29,22 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
   const { data: { user } } = await supabase.auth.getUser();
 
-  // 분석 데이터 조회
-  const { data: analysis, error: analysisError } = await supabase
-    .from("sleep_analyses")
-    .select("*")
-    .eq("id", id)
-    .single();
+  // 분석 데이터와 추천 제품 병렬 조회
+  const [analysisResult, productsResult] = await Promise.all([
+    supabase
+      .from("sleep_analyses")
+      .select("*")
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("sleep_recommended_products")
+      .select("*")
+      .eq("is_active", true)
+      .order("display_order", { ascending: true })
+  ]);
+
+  const { data: analysis, error: analysisError } = analysisResult;
+  const { data: products } = productsResult;
 
   if (analysisError || !analysis) {
     console.error("분석 조회 오류:", analysisError);
@@ -61,6 +71,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     analysisId: id,
     analysis,
     feedbackItems,
+    products: products || [],
   });
 }
 
@@ -107,7 +118,7 @@ function convertToReport(
 }
 
 export default function ResultPage() {
-  const { analysisId, analysis, feedbackItems } = useLoaderData<typeof loader>();
+  const { analysisId, analysis, feedbackItems, products } = useLoaderData<typeof loader>();
   const [isDownloading, setIsDownloading] = useState(false);
 
   // 이미지 URL 결정 (image_url > image_base64 > 없음)
@@ -211,6 +222,7 @@ export default function ResultPage() {
           report={report}
           imagePreview={imageUrl}
           analysisId={analysisId}
+          products={products}
           onReset={() => window.location.href = "/customer/sleep/analyze"}
           onDownloadSlides={handleDownloadSlides}
           isDownloading={isDownloading}

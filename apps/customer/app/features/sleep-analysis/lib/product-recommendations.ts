@@ -18,7 +18,7 @@ export interface Product {
   purchase_url: string;
   category: string;
   keywords: string[];
-  age_range: string;
+  age_range: string[];  // 배열로 변경 (중복 선택 지원)
   badge: string | null;
   display_order: number;
   is_active: boolean;
@@ -65,12 +65,18 @@ export function getProductRecommendationsFromDB(
   for (const product of products) {
     if (!product.is_active) continue;
 
-    // 월령에 따른 필터링
-    if (product.age_range === "newborn" && babyAgeMonths !== undefined && babyAgeMonths >= 3) {
-      continue;
-    }
-    if (product.age_range === "3m+" && babyAgeMonths !== undefined && babyAgeMonths < 3) {
-      continue;
+    // 월령에 따른 필터링 (새로운 배열 기반 로직)
+    if (babyAgeMonths !== undefined && product.age_range?.length > 0) {
+      let ageMatch = false;
+      
+      for (const range of product.age_range) {
+        if (range === "0-3m" && babyAgeMonths < 3) ageMatch = true;
+        else if (range === "3-6m" && babyAgeMonths >= 3 && babyAgeMonths < 6) ageMatch = true;
+        else if (range === "6-12m" && babyAgeMonths >= 6 && babyAgeMonths < 12) ageMatch = true;
+        else if (range === "12m+" && babyAgeMonths >= 12) ageMatch = true;
+      }
+      
+      if (!ageMatch) continue;
     }
 
     let score = 0;

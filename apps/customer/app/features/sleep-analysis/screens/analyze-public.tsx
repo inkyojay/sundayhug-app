@@ -30,6 +30,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   let defaultPhoneNumber = "";
   let babies: { id: string; name: string; birth_date: string; gender: string | null }[] = [];
   
+  // 추천 제품 목록 가져오기
+  const { data: products } = await supabase
+    .from("sleep_recommended_products")
+    .select("*")
+    .eq("is_active", true)
+    .order("display_order", { ascending: true });
+  
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
@@ -54,6 +61,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     userId: user?.id || null,
     defaultPhoneNumber,
     babies,
+    products: products || [],
   });
 }
 
@@ -270,6 +278,7 @@ export default function AnalyzePublicPage() {
   const defaultPhoneNumber = loaderData?.defaultPhoneNumber || "";
   const babies = loaderData?.babies || [];
   const isLoggedIn = loaderData?.isLoggedIn || false;
+  const products = loaderData?.products || [];
 
   const isLoading = fetcher.state === "submitting";
   const result = fetcher.data;
@@ -400,6 +409,7 @@ export default function AnalyzePublicPage() {
                 report={report}
                 imagePreview={formData.imagePreview}
                 analysisId={analysisId}
+                products={products}
                 onReset={handleReset}
                 onDownloadSlides={handleDownloadSlides}
                 isDownloading={isDownloading}
