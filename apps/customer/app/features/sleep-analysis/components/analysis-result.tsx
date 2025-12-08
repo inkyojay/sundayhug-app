@@ -250,12 +250,28 @@ export function AnalysisResult({
     }
   };
   
-  // 슬라이드 로드 (폴백: 단일 이미지)
+  // 로딩 메시지
+  const [loadingStep, setLoadingStep] = useState(0);
+  const loadingMessages = [
+    { emoji: "🎨", text: "카드 디자인 준비 중..." },
+    { emoji: "📸", text: "분석 이미지 처리 중..." },
+    { emoji: "✨", text: "예쁜 카드뉴스 만드는 중..." },
+    { emoji: "🌙", text: "수면 정보 정리 중..." },
+    { emoji: "💾", text: "거의 다 됐어요!" },
+  ];
+  
+  // 슬라이드 로드
   const loadSlides = async () => {
     if (!analysisId || slideUrls.length > 0) return;
     
     setIsLoadingSlides(true);
     setSlideError(null);
+    setLoadingStep(0);
+    
+    // 로딩 메시지 애니메이션
+    const loadingInterval = setInterval(() => {
+      setLoadingStep(prev => (prev + 1) % loadingMessages.length);
+    }, 2000);
     
     try {
       // 먼저 기존 슬라이드가 있는지 확인 (빠름)
@@ -264,20 +280,11 @@ export function AnalysisResult({
       
       if (getData.success && getData.data?.slideUrls?.length > 0) {
         setSlideUrls(getData.data.slideUrls);
+        clearInterval(loadingInterval);
         return;
       }
       
-      // 모바일 체크 - 모바일에서는 단일 이미지로 폴백
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      
-      if (isMobile) {
-        // 모바일: 단일 SVG 이미지 사용 (빠름)
-        const fallbackUrl = `/api/sleep/${analysisId}/share-card?v=${Date.now()}`;
-        setSlideUrls([fallbackUrl]);
-        return;
-      }
-      
-      // PC: 슬라이드 생성 시도
+      // 슬라이드 생성 (PC/모바일 모두)
       const postResponse = await fetch(`/api/sleep/${analysisId}/slides`, { method: "POST" });
       const postData = await postResponse.json();
       
@@ -288,10 +295,9 @@ export function AnalysisResult({
       }
     } catch (error) {
       console.error("슬라이드 로드 에러:", error);
-      // 에러 시에도 단일 이미지로 폴백
-      const fallbackUrl = `/api/sleep/${analysisId}/share-card?v=${Date.now()}`;
-      setSlideUrls([fallbackUrl]);
+      setSlideError("슬라이드 생성에 실패했어요. 다시 시도해주세요!");
     } finally {
+      clearInterval(loadingInterval);
       setIsLoadingSlides(false);
     }
   };
@@ -362,10 +368,40 @@ export function AnalysisResult({
           >
             {isLoadingSlides ? (
               <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <div className="animate-spin text-4xl mb-4">⏳</div>
-                  <p className="text-white">카드뉴스 생성 중...</p>
-                  <p className="text-gray-400 text-sm mt-2">잠시만 기다려주세요</p>
+                <div className="text-center px-8">
+                  {/* 귀여운 로딩 애니메이션 */}
+                  <div className="relative mb-6">
+                    <div className="text-6xl animate-bounce">
+                      {loadingMessages[loadingStep].emoji}
+                    </div>
+                    {/* 반짝이는 별들 */}
+                    <div className="absolute -top-2 -left-4 text-yellow-400 animate-pulse text-xl">✨</div>
+                    <div className="absolute -top-1 -right-2 text-yellow-400 animate-pulse text-lg" style={{ animationDelay: '0.5s' }}>✨</div>
+                    <div className="absolute -bottom-1 left-0 text-yellow-400 animate-pulse text-sm" style={{ animationDelay: '1s' }}>✨</div>
+                  </div>
+                  
+                  {/* 로딩 메시지 */}
+                  <p className="text-white text-lg font-medium mb-2">
+                    {loadingMessages[loadingStep].text}
+                  </p>
+                  
+                  {/* 프로그레스 바 */}
+                  <div className="w-48 mx-auto bg-gray-700 rounded-full h-2 mb-4 overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 rounded-full transition-all duration-500"
+                      style={{ 
+                        width: `${((loadingStep + 1) / loadingMessages.length) * 100}%`,
+                        animation: 'pulse 1s infinite'
+                      }}
+                    />
+                  </div>
+                  
+                  {/* 팁 메시지 */}
+                  <div className="bg-white/10 rounded-xl px-4 py-3 max-w-xs mx-auto">
+                    <p className="text-gray-300 text-sm">
+                      💡 <span className="text-orange-400">Tip!</span> 카드뉴스는 인스타 스토리에 딱이에요!
+                    </p>
+                  </div>
                 </div>
               </div>
             ) : slideError ? (
