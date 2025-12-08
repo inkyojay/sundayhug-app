@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>인스타 카드 - B안 (위험 강조)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      min-height: 100vh; 
+      background: #1a1a1a;
+      padding: 20px;
+    }
+    
+    .card {
+      width: 1080px;
+      height: 1080px;
+      background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+      border-radius: 0;
+      padding: 80px;
+      display: flex;
+      flex-direction: column;
+      font-family: 'Pretendard', -apple-system, sans-serif;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    /* 배경 장식 */
+    .bg-circle {
+      position: absolute;
+      border-radius: 50%;
+      opacity: 0.1;
+    }
+    .bg-circle-1 {
+      width: 400px;
+      height: 400px;
+      background: #ef4444;
+      top: -100px;
+      right: -100px;
+    }
+    .bg-circle-2 {
+      width: 300px;
+      height: 300px;
+      background: #f97316;
+      bottom: 100px;
+      left: -100px;
+    }
+    
+    /* 상단 브랜드 */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 40px;
+      position: relative;
+      z-index: 1;
+    }
+    .brand {
+      color: #94a3b8;
+      font-size: 28px;
+      font-weight: 500;
+    }
+    .badge {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+      padding: 12px 24px;
+      border-radius: 50px;
+      font-size: 24px;
+      font-weight: 700;
+    }
+    
+    /* 메인 경고 영역 */
+    .warning-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      position: relative;
+      z-index: 1;
+    }
+    
+    .warning-icon {
+      font-size: 100px;
+      margin-bottom: 30px;
+    }
+    
+    .warning-title {
+      color: #ef4444;
+      font-size: 64px;
+      font-weight: 800;
+      margin-bottom: 30px;
+      text-shadow: 0 4px 20px rgba(239, 68, 68, 0.3);
+    }
+    
+    .warning-message {
+      background: rgba(255, 255, 255, 0.05);
+      border: 2px solid rgba(239, 68, 68, 0.3);
+      border-radius: 24px;
+      padding: 40px 60px;
+      margin-bottom: 50px;
+      max-width: 800px;
+    }
+    
+    .warning-text {
+      color: #ffffff;
+      font-size: 36px;
+      font-weight: 600;
+      line-height: 1.5;
+    }
+    .warning-text em {
+      color: #fbbf24;
+      font-style: normal;
+    }
+    
+    /* 점수 영역 */
+    .score-section {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 40px;
+      margin-bottom: 40px;
+    }
+    
+    .score-circle {
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 10px 40px rgba(239, 68, 68, 0.4);
+    }
+    .score-number {
+      color: white;
+      font-size: 72px;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .score-label {
+      color: rgba(255,255,255,0.8);
+      font-size: 24px;
+      font-weight: 500;
+    }
+    
+    .score-info {
+      text-align: left;
+    }
+    .score-status {
+      color: #f97316;
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .score-desc {
+      color: #94a3b8;
+      font-size: 26px;
+    }
+    
+    /* 하단 CTA */
+    .cta-section {
+      text-align: center;
+      position: relative;
+      z-index: 1;
+    }
+    
+    .cta-button {
+      display: inline-block;
+      background: linear-gradient(135deg, #FF6B35 0%, #FF8B5C 100%);
+      color: white;
+      padding: 24px 60px;
+      border-radius: 60px;
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 30px rgba(255, 107, 53, 0.4);
+    }
+    
+    .cta-url {
+      color: #64748b;
+      font-size: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <!-- 배경 장식 -->
+    <div class="bg-circle bg-circle-1"></div>
+    <div class="bg-circle bg-circle-2"></div>
+    
+    <!-- 상단 -->
+    <div class="header">
+      <span class="brand">@sundayhug.official</span>
+      <span class="badge">⚠️ 위험 발견</span>
+    </div>
+    
+    <!-- 메인 경고 -->
+    <div class="warning-section">
+      <div class="warning-icon">🚨</div>
+      <h1 class="warning-title">수면 환경 점검 필요!</h1>
+      
+      <div class="warning-message">
+        <p class="warning-text">
+          "<em>이불이 아기 얼굴 근처에</em><br>
+          위치해 있어요"
+        </p>
+      </div>
+      
+      <!-- 점수 -->
+      <div class="score-section">
+        <div class="score-circle">
+          <span class="score-number">72</span>
+          <span class="score-label">/ 100</span>
+        </div>
+        <div class="score-info">
+          <p class="score-status">주의가 필요해요</p>
+          <p class="score-desc">위험 2개 · 주의 1개 발견</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 하단 CTA -->
+    <div class="cta-section">
+      <div class="cta-button">나도 무료로 검사받기 →</div>
+      <p class="cta-url">app.sundayhug.kr</p>
+    </div>
+  </div>
+</body>
+</html>
+
