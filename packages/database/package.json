@@ -1,0 +1,28 @@
+{
+  "name": "@sundayhug/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.server.ts",
+    "./admin": "./src/admin.server.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "db:typegen": "supabase gen types typescript --project-id ugzwgegkvxcczwiottej > src/types.ts"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.6.1",
+    "@supabase/supabase-js": "^2.49.1",
+    "drizzle-orm": "^0.40.1",
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "drizzle-kit": "^0.30.5",
+    "typescript": "^5.7.2"
+  }
+}
+

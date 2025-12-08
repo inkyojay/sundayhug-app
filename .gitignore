@@ -1,23 +1,35 @@
-# 환경 변수
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build outputs
+build
+.react-router
+.turbo
+
+# Environment variables
 .env
 .env.local
+.env.*.local
 
-# 운영체제
-.DS_Store
-Thumbs.db
-
-# 에디터
-.vscode/
-.idea/
+# IDE
+.idea
+.vscode
 *.swp
 *.swo
 
-# 로그
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
 *.log
 npm-debug.log*
 
-# 임시 파일
-*.tmp
-.cache/
+# Test
+coverage
+.playwright
 
-
+# Misc
+*.pem

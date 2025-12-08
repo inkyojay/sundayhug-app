@@ -79,6 +79,8 @@ export default [
     // 블로그 API
     ...prefix("/blog", [
       route("/generate-audio", "features/blog/api/generate-audio.tsx"),
+      route("/generate-thumbnail", "features/blog/api/generate-thumbnail.tsx"),
+      route("/generate-slug", "features/blog/api/generate-slug.tsx"),
     ]),
     // 채팅 API
     ...prefix("/chat", [
@@ -110,18 +112,18 @@ export default [
         route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "customer-sleep-result" }),
       ]),
       
-      // 블로그 (준비 중 - 비활성화)
-      // ...prefix("/blog", [
-      //   index("features/customer/screens/blog/index.tsx"),
-      //   route("/:postId", "features/customer/screens/blog/post.tsx"),
-      // ]),
+      // 블로그
+      ...prefix("/blog", [
+        index("features/customer/screens/blog/index.tsx"),
+        route("/:postId", "features/customer/screens/blog/post.tsx"),
+      ]),
       
-      // AI 육아 상담 (준비 중 - 비활성화)
-      // ...prefix("/chat", [
-      //   index("features/chat/screens/chat-list.tsx"),
-      //   route("/baby-profile", "features/chat/screens/baby-profile.tsx"),
-      //   route("/:sessionId", "features/chat/screens/chat-room.tsx"),
-      // ]),
+      // AI 육아 상담
+      ...prefix("/chat", [
+        index("features/chat/screens/chat-list.tsx"),
+        route("/baby-profile", "features/chat/screens/baby-profile.tsx"),
+        route("/:sessionId", "features/chat/screens/chat-room.tsx"),
+      ]),
       
       // 통합 로그인/회원가입 (Supabase Auth)
       route("/login", "features/customer/screens/login.tsx"),
@@ -139,7 +141,8 @@ export default [
         route("/warranty/:id", "features/customer/screens/mypage/warranty-detail.tsx"),
         route("/analyses", "features/customer/screens/mypage/analyses.tsx"),
         route("/as", "features/customer/screens/mypage/as-list.tsx"),
-        route("/review", "features/customer/screens/mypage/review-submit.tsx"),
+        route("/review-submit", "features/customer/screens/mypage/review-submit.tsx"),
+        route("/points", "features/customer/screens/mypage/points.tsx"),
       ]),
       
       // A/S 신청
@@ -252,8 +255,16 @@ export default [
         ]),
         
         // 후기 인증 관리 (관리자용)
-        ...prefix("/review", [
+        ...prefix("/reviews", [
           index("features/review/screens/admin/review-list.tsx"),
+        ]),
+        
+        // 후기 이벤트 관리 (관리자용)
+        ...prefix("/events", [
+          index("features/review/screens/admin/event-list.tsx"),
+          route("/new", "features/review/screens/admin/event-form.tsx", { id: "event-new" }),
+          route("/:id", "features/review/screens/admin/event-form.tsx", { id: "event-edit" }),
+          route("/:id/submissions", "features/review/screens/admin/event-submissions.tsx"),
         ]),
       ]),
       
