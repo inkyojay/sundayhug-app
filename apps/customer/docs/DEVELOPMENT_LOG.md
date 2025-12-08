@@ -4,6 +4,175 @@
 
 ---
 
+## 📅 2025년 12월 8일 (월) - 수면 예보 기능 구현 + AI 채팅 음성 기능
+
+### 🎯 주요 작업 내용
+
+#### 1. 수면 예보 기능 (Sleep Forecast) 완전 구현
+
+**핵심 개념**
+- 아기 정보 + 오늘 컨디션 + 날씨 데이터 기반 수면 예측
+- 0~100점 점수 + good/caution/hard 레벨
+- 예보 사유 + 행동 가이드 제공
+- 매일 반복 사용되는 핵심 기능
+
+**DB 마이그레이션**
+```sql
+-- baby_profiles에 수면 민감도 추가
+ALTER TABLE baby_profiles ADD COLUMN sleep_sensitivity TEXT DEFAULT 'normal' 
+  CHECK (sleep_sensitivity IN ('high', 'normal', 'low'));
+
+-- 수면 예보 로그 테이블
+CREATE TABLE forecast_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  baby_id UUID NOT NULL,
+  date DATE NOT NULL,
+  input_json JSONB NOT NULL,
+  score INTEGER NOT NULL CHECK (score >= 0 AND score <= 100),
+  level TEXT NOT NULL CHECK (level IN ('good', 'caution', 'hard')),
+  reasons JSONB NOT NULL,
+  actions JSONB NOT NULL,
+  weather_temp NUMERIC,
+  weather_humidity NUMERIC,
+  weather_pressure NUMERIC,
+  actual_sleep_quality TEXT, -- 사후 피드백용
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+**예보 로직 (Rule-based v1)**
+- 날씨 영향: 기압 < 1005 → -10점, 습도 > 75% → -5점
+- 원더윅스 시기: 5, 8, 12, 19, 26, 37주 → -10점
+- 오늘 컨디션: 낮잠 많음 -10, 기분 나쁨 -10, 예방접종/감기/이앓이 -12~15
+- 아기 성향: 예민함 -5, 잘 잠 +5
+
+**OpenWeather API 연동**
+- 현재 기온, 습도, 기압 실시간 조회
+- API 키 없으면 계절 기반 기본값 사용
+
+**UI 페이지** (`/customer/sleep/forecast`)
+- 아기 정보 카드 + 현재 날씨 카드
+- 이모지 버튼으로 컨디션 입력 (낮잠, 기분, 외출, 특이사항)
+- 점수 게이지 + 분석 + 행동 가이드 결과 표시
+- 면책 문구 포함
+
+#### 2. AI 육아 상담 - ElevenLabs 음성 기능
+
+**Text-to-Speech (TTS)**
+- ElevenLabs API 연동 (`eleven_multilingual_v2` 모델)
+- 한국어 음성: "Hanna" (zgDzx5jLLCqEp6Fl7Kl7)
+- AI 답변 옆 🔊 버튼으로 음성 재생
+- 오디오 캐싱으로 재생 시 API 재호출 방지
+
+**Speech-to-Text (STT)**
+- 마이크 버튼으로 음성 녹음
+- ElevenLabs STT API로 텍스트 변환
+- 변환된 텍스트 입력창에 자동 입력
+
+**음성 설정**
+- stability: 0.5
+- similarity_boost: 0.8
+- style: 0.5
+- use_speaker_boost: true
+
+#### 3. AI 채팅 - 이미지 분석 기능
+
+**Gemini Vision 연동**
+- 이미지 업로드 버튼 추가
+- 업로드된 이미지를 base64로 변환
+- Gemini API에 이미지 + 텍스트 함께 전송
+- AI가 이미지 내용 분석 후 답변
+
+**메시지 저장**
+- `chat_messages.image_url` 컬럼에 이미지 URL 저장
+- 채팅 히스토리에서 이미지 표시
+
+#### 4. AI 응답 최적화
+
+**시스템 프롬프트 조정**
+- 간결하고 핵심적인 답변 우선
+- 필요시에만 상세 설명
+- 마크다운 사용 금지, 자연스러운 대화체
+
+#### 5. UI 개선
+
+**채팅 UI → 썬데이허그 브랜드 스타일 복원**
+- 오렌지 브랜드 컬러 (#FF6B35)
+- 크림색 배경 (#F5F5F0)
+- 말풍선 스타일 메시지
+- 사용자 오른쪽 / AI 왼쪽 배치
+- 원형 아바타 (Bot, User 아이콘)
+
+**수면 허브 페이지 업데이트**
+- "수면 예보" 버튼: "준비중" → "NEW" 활성화
+- `/customer/sleep/forecast`로 연결
+
+---
+
+### 🔧 수정/추가된 파일
+
+```
+신규 파일:
+app/features/sleep-forecast/
+├── lib/
+│   ├── types.ts              # 타입 정의 (BabyProfile, TodayStatus, WeatherData, SleepForecast)
+│   ├── forecast.server.ts    # 예보 로직 (calcSleepForecast)
+│   └── weather.server.ts     # OpenWeather API 연동
+├── api/
+│   └── forecast.tsx          # POST /api/sleep-forecast
+└── screens/
+    └── forecast.tsx          # 수면 예보 UI 페이지
+
+app/features/chat/api/
+├── text-to-speech.tsx        # ElevenLabs TTS API
+└── speech-to-text.tsx        # ElevenLabs STT API
+
+수정 파일:
+app/features/chat/screens/chat-room.tsx    # 음성 녹음/재생, 이미지 업로드, UI 복원
+app/features/chat/api/send-message.tsx     # 이미지 분석, 응답 최적화
+app/features/customer/screens/sleep-hub.tsx # 수면 예보 버튼 활성화
+app/routes.ts                              # 신규 라우트 추가
+```
+
+---
+
+### 🔑 환경변수
+
+```bash
+# ElevenLabs (음성)
+ELEVENLABS_API_KEY=sk_xxx
+
+# OpenWeather (날씨) - 선택, 없으면 기본값 사용
+OPENWEATHER_API_KEY=xxx
+```
+
+---
+
+### ✅ 완료된 TODO
+
+- [x] 수면 예보 DB 마이그레이션 (forecast_logs, sleep_sensitivity)
+- [x] 예보 로직 함수 구현 (calcSleepForecast)
+- [x] OpenWeather API 연동
+- [x] 수면 예보 API 엔드포인트 (/api/sleep-forecast)
+- [x] 수면 예보 UI 페이지 (/customer/sleep/forecast)
+- [x] 홈/허브 페이지 연동
+- [x] ElevenLabs TTS 연동 (AI 답변 음성 재생)
+- [x] ElevenLabs STT 연동 (음성 입력)
+- [x] Gemini Vision 이미지 분석 연동
+- [x] 채팅 UI 썬데이허그 스타일 복원
+
+---
+
+### 🔜 향후 작업 예정
+
+- [ ] 수면 예보 사후 피드백 기능 (실제 수면 품질 입력)
+- [ ] 예보 정확도 추적 및 ML 모델 개선
+- [ ] 푸시 알림 (저녁에 예보 리마인더)
+- [ ] 주간/월간 수면 리포트
+
+---
+
 ## 📅 2025년 12월 4일 (목) - 저녁 작업: main-ready 브랜치 배포, 수면 분석 개선
 
 ### 🎯 주요 작업 내용
