@@ -1,5 +1,6 @@
 /**
- * AI 육아 상담 - 채팅방
+ * AI 육아 상담 - 채팅방 (음성 상담 지원)
+ * ElevenLabs TTS/STT 연동
  */
 import type { Route } from "./+types/chat-room";
 
@@ -11,19 +12,155 @@ import {
   Mic,
   MicOff,
   Volume2,
+  VolumeX,
   Loader2,
   Bot,
   User,
   Sparkles,
   ThumbsUp,
   ThumbsDown,
-  ExternalLink
+  ExternalLink,
+  Square,
+  Pause,
+  Play
 } from "lucide-react";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 
 import { Button } from "~/core/components/ui/button";
 import { Textarea } from "~/core/components/ui/textarea";
 import makeServerClient from "~/core/lib/supa-client.server";
+
+// 음성 녹음 훅
+function useVoiceRecorder() {
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  const startRecording = useCallback(async () => {
+    try {
+      setError(null);
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: { 
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100,
+        } 
+      });
+      
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm') 
+          ? 'audio/webm' 
+          : 'audio/mp4'
+      });
+      
+      chunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
+      };
+      
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start(100); // 100ms마다 데이터 수집
+      setIsRecording(true);
+    } catch (err) {
+      console.error("마이크 접근 오류:", err);
+      setError("마이크에 접근할 수 없습니다. 권한을 확인해주세요.");
+    }
+  }, []);
+
+  const stopRecording = useCallback((): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") {
+        resolve(null);
+        return;
+      }
+
+      mediaRecorderRef.current.onstop = () => {
+        const blob = new Blob(chunksRef.current, { 
+          type: mediaRecorderRef.current?.mimeType || 'audio/webm' 
+        });
+        
+        // 스트림 정리
+        mediaRecorderRef.current?.stream.getTracks().forEach(track => track.stop());
+        
+        setIsRecording(false);
+        resolve(blob);
+      };
+
+      mediaRecorderRef.current.stop();
+    });
+  }, []);
+
+  const cancelRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      mediaRecorderRef.current.stop();
+    }
+    chunksRef.current = [];
+    setIsRecording(false);
+  }, []);
+
+  return { 
+    isRecording, 
+    isProcessing, 
+    setIsProcessing,
+    error, 
+    startRecording, 
+    stopRecording, 
+    cancelRecording 
+  };
+}
+
+// 오디오 플레이어 훅
+function useAudioPlayer() {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const play = useCallback((audioUrl: string, messageId: string) => {
+    // 기존 재생 중지
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+    setCurrentPlayingId(messageId);
+    setIsPlaying(true);
+
+    audio.onended = () => {
+      setIsPlaying(false);
+      setCurrentPlayingId(null);
+    };
+
+    audio.onerror = () => {
+      setIsPlaying(false);
+      setCurrentPlayingId(null);
+    };
+
+    audio.play().catch(err => {
+      console.error("오디오 재생 오류:", err);
+      setIsPlaying(false);
+      setCurrentPlayingId(null);
+    });
+  }, []);
+
+  const stop = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setIsPlaying(false);
+    setCurrentPlayingId(null);
+  }, []);
+
+  return { isPlaying, currentPlayingId, play, stop };
+}
 
 export function meta(): Route.MetaDescriptors {
   return [{ title: "AI 상담 | 썬데이허그" }];
@@ -150,13 +287,20 @@ export default function ChatRoomScreen() {
   const fetcher = useFetcher();
   const chatFetcher = useFetcher();
   const profileFetcher = useFetcher();
+  const ttsFetcher = useFetcher();
+  const sttFetcher = useFetcher();
   const [inputValue, setInputValue] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
   const [localMessages, setLocalMessages] = useState(initialMessages);
   const [localBabyProfile, setLocalBabyProfile] = useState(initialBabyProfile);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(session?.id || null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  // 음성 기능
+  const voiceRecorder = useVoiceRecorder();
+  const audioPlayer = useAudioPlayer();
+  const [loadingTtsId, setLoadingTtsId] = useState<string | null>(null);
+  const [audioCache, setAudioCache] = useState<Record<string, string>>({});
 
   // 아기 정보 입력 폼
   const [babyName, setBabyName] = useState("");
@@ -203,6 +347,83 @@ export default function ChatRoomScreen() {
       }
     }
   }, [chatFetcher.data, currentSessionId]);
+
+  // 음성 녹음 시작/중지 핸들러
+  const handleVoiceRecord = async () => {
+    if (voiceRecorder.isRecording) {
+      // 녹음 중지 및 STT 변환
+      voiceRecorder.setIsProcessing(true);
+      const audioBlob = await voiceRecorder.stopRecording();
+      
+      if (audioBlob && audioBlob.size > 0) {
+        // STT API 호출
+        const formData = new FormData();
+        formData.append("audio", audioBlob, "recording.webm");
+        
+        sttFetcher.submit(formData, { 
+          method: "post", 
+          action: "/api/chat/stt",
+          encType: "multipart/form-data"
+        });
+      } else {
+        voiceRecorder.setIsProcessing(false);
+      }
+    } else {
+      // 녹음 시작
+      await voiceRecorder.startRecording();
+    }
+  };
+
+  // STT 결과 처리
+  useEffect(() => {
+    if (sttFetcher.data?.success && sttFetcher.data?.text) {
+      setInputValue(prev => prev + (prev ? " " : "") + sttFetcher.data.text);
+      voiceRecorder.setIsProcessing(false);
+    } else if (sttFetcher.data?.error) {
+      console.error("STT 오류:", sttFetcher.data.error);
+      voiceRecorder.setIsProcessing(false);
+    }
+  }, [sttFetcher.data]);
+
+  // TTS 재생 핸들러
+  const handlePlayTTS = async (messageId: string, text: string) => {
+    // 이미 재생 중이면 중지
+    if (audioPlayer.currentPlayingId === messageId && audioPlayer.isPlaying) {
+      audioPlayer.stop();
+      return;
+    }
+
+    // 캐시된 오디오가 있으면 재생
+    if (audioCache[messageId]) {
+      audioPlayer.play(audioCache[messageId], messageId);
+      return;
+    }
+
+    // TTS API 호출
+    setLoadingTtsId(messageId);
+    
+    const formData = new FormData();
+    formData.append("text", text);
+    
+    ttsFetcher.submit(formData, { 
+      method: "post", 
+      action: "/api/chat/tts"
+    });
+  };
+
+  // TTS 결과 처리
+  useEffect(() => {
+    if (ttsFetcher.data?.success && ttsFetcher.data?.audioUrl && loadingTtsId) {
+      // 캐시에 저장
+      setAudioCache(prev => ({ ...prev, [loadingTtsId]: ttsFetcher.data.audioUrl }));
+      // 재생
+      audioPlayer.play(ttsFetcher.data.audioUrl, loadingTtsId);
+      setLoadingTtsId(null);
+    } else if (ttsFetcher.data?.error) {
+      console.error("TTS 오류:", ttsFetcher.data.error);
+      setLoadingTtsId(null);
+    }
+  }, [ttsFetcher.data, loadingTtsId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -462,9 +683,28 @@ export default function ChatRoomScreen() {
                 })()}
               </div>
               
-              {/* 피드백 버튼 */}
+              {/* 피드백 및 음성 재생 버튼 */}
               {msg.role === "assistant" && (
                 <div className="flex gap-1 mt-1">
+                  {/* TTS 재생 버튼 */}
+                  <button
+                    onClick={() => handlePlayTTS(msg.id, msg.content)}
+                    disabled={loadingTtsId === msg.id}
+                    className={`p-1.5 rounded-full transition-colors ${
+                      audioPlayer.currentPlayingId === msg.id && audioPlayer.isPlaying
+                        ? "text-[#FF6B35] bg-orange-50"
+                        : "text-gray-400 hover:text-[#FF6B35] hover:bg-orange-50"
+                    }`}
+                    title={audioPlayer.currentPlayingId === msg.id && audioPlayer.isPlaying ? "재생 중지" : "음성으로 듣기"}
+                  >
+                    {loadingTtsId === msg.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : audioPlayer.currentPlayingId === msg.id && audioPlayer.isPlaying ? (
+                      <VolumeX className="w-4 h-4" />
+                    ) : (
+                      <Volume2 className="w-4 h-4" />
+                    )}
+                  </button>
                   <button
                     onClick={() => handleFeedback(msg.id, true)}
                     className="p-1.5 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-full transition-colors"
@@ -517,13 +757,32 @@ export default function ChatRoomScreen() {
             {/* 음성 입력 */}
             <button
               type="button"
-              onClick={() => setIsRecording(!isRecording)}
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${
-                isRecording ? "bg-red-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+              onClick={handleVoiceRecord}
+              disabled={voiceRecorder.isProcessing || isLoading}
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
+                voiceRecorder.isRecording 
+                  ? "bg-red-500 text-white animate-pulse" 
+                  : voiceRecorder.isProcessing
+                    ? "bg-orange-400 text-white"
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
               }`}
+              title={voiceRecorder.isRecording ? "녹음 중지" : voiceRecorder.isProcessing ? "변환 중..." : "음성으로 입력"}
             >
-              {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+              {voiceRecorder.isProcessing ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : voiceRecorder.isRecording ? (
+                <Square className="w-4 h-4" />
+              ) : (
+                <Mic className="w-5 h-5" />
+              )}
             </button>
+            
+            {/* 녹음 중 표시 */}
+            {voiceRecorder.isRecording && (
+              <span className="text-xs text-red-500 font-medium animate-pulse">
+                🎙️ 녹음 중...
+              </span>
+            )}
 
             {/* 텍스트 입력 */}
             <div className="flex-1 relative">

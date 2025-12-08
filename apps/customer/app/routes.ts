@@ -61,6 +61,8 @@ export default [
     // 채팅 API
     ...prefix("/chat", [
       route("/send", "features/chat/api/send-message.tsx"),
+      route("/tts", "features/chat/api/text-to-speech.tsx"),
+      route("/stt", "features/chat/api/speech-to-text.tsx"),
     ]),
   ]),
 
