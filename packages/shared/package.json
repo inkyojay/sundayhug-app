@@ -1,0 +1,29 @@
+{
+  "name": "@sundayhug/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./hooks/*": "./src/hooks/*.ts",
+    "./lib/*": "./src/lib/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "i18next": "^24.2.3",
+    "react-i18next": "^15.4.1",
+    "remix-i18next": "^7.1.0",
+    "remix-themes": "^2.0.4",
+    "zod": "^3.24.2"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.1",
+    "typescript": "^5.7.2"
+  }
+}
+
