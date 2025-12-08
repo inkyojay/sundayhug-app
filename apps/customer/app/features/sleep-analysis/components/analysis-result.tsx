@@ -250,7 +250,7 @@ export function AnalysisResult({
     }
   };
   
-  // 슬라이드 로드
+  // 슬라이드 로드 (폴백: 단일 이미지)
   const loadSlides = async () => {
     if (!analysisId || slideUrls.length > 0) return;
     
@@ -258,7 +258,7 @@ export function AnalysisResult({
     setSlideError(null);
     
     try {
-      // 먼저 기존 슬라이드가 있는지 확인
+      // 먼저 기존 슬라이드가 있는지 확인 (빠름)
       const getResponse = await fetch(`/api/sleep/${analysisId}/slides`);
       const getData = await getResponse.json();
       
@@ -267,7 +267,17 @@ export function AnalysisResult({
         return;
       }
       
-      // 없으면 새로 생성
+      // 모바일 체크 - 모바일에서는 단일 이미지로 폴백
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      if (isMobile) {
+        // 모바일: 단일 SVG 이미지 사용 (빠름)
+        const fallbackUrl = `/api/sleep/${analysisId}/share-card?v=${Date.now()}`;
+        setSlideUrls([fallbackUrl]);
+        return;
+      }
+      
+      // PC: 슬라이드 생성 시도
       const postResponse = await fetch(`/api/sleep/${analysisId}/slides`, { method: "POST" });
       const postData = await postResponse.json();
       
@@ -278,7 +288,9 @@ export function AnalysisResult({
       }
     } catch (error) {
       console.error("슬라이드 로드 에러:", error);
-      setSlideError("슬라이드를 불러올 수 없습니다.");
+      // 에러 시에도 단일 이미지로 폴백
+      const fallbackUrl = `/api/sleep/${analysisId}/share-card?v=${Date.now()}`;
+      setSlideUrls([fallbackUrl]);
     } finally {
       setIsLoadingSlides(false);
     }
