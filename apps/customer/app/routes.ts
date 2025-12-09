@@ -32,6 +32,7 @@ export default [
     ...prefix("/auth/phone", [
       route("/send-otp", "features/auth/api/send-otp.tsx"),
       route("/verify-otp", "features/auth/api/verify-otp.tsx"),
+      route("/check", "features/auth/api/check-phone.tsx"),
     ]),
     // 네이버 로그인 API
     route("/auth/naver/token", "features/auth/api/naver-token.tsx"),
@@ -61,11 +62,18 @@ export default [
     // 채팅 API
     ...prefix("/chat", [
       route("/send", "features/chat/api/send-message.tsx"),
-      route("/tts", "features/chat/api/text-to-speech.tsx"),
       route("/stt", "features/chat/api/speech-to-text.tsx"),
+      route("/tts", "features/chat/api/text-to-speech.tsx"),
+    ]),
+    // 베이비릴스 API
+    ...prefix("/baby-reels", [
+      route("/generate-lyrics", "features/baby-reels/api/generate-lyrics.tsx"),
+      route("/generate-music", "features/baby-reels/api/generate-music.tsx"),
     ]),
     // 수면 예보 API
-    route("/sleep-forecast", "features/sleep-forecast/api/forecast.tsx"),
+    ...prefix("/sleep-forecast", [
+      route("/get", "features/sleep-forecast/api/forecast.tsx"),
+    ]),
   ]),
 
   // ========================================
@@ -89,8 +97,10 @@ export default [
       ...prefix("/sleep", [
         index("features/customer/screens/sleep-hub.tsx"),
         route("/analyze", "features/sleep-analysis/screens/analyze-public.tsx"),
-        route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "customer-sleep-result" }),
         route("/forecast", "features/sleep-forecast/screens/forecast.tsx"),
+        route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "customer-sleep-result" }),
+        // 베이비릴스 (수면 분석 → 릴스 생성)
+        route("/reels/:analysisId", "features/baby-reels/screens/create-reels.tsx"),
       ]),
       
       // 블로그
@@ -109,6 +119,8 @@ export default [
       // 통합 로그인/회원가입 (Supabase Auth)
       route("/login", "features/customer/screens/login.tsx"),
       route("/register", "features/customer/screens/register.tsx"),
+      route("/logout", "features/auth/screens/logout.tsx"),
+      route("/forgot-password", "features/customer/screens/forgot-password.tsx"),
       route("/auth/callback", "features/customer/screens/auth-callback.tsx"),
       // 카카오 로그인 (REST API + Supabase Auth 하이브리드)
       route("/kakao/callback", "features/customer/screens/kakao-callback.tsx", { id: "customer-kakao-callback" }),
@@ -118,6 +130,7 @@ export default [
       ...prefix("/mypage", [
         index("features/customer/screens/mypage/index.tsx"),
         route("/profile", "features/customer/screens/mypage/profile.tsx"),
+        route("/baby-history", "features/customer/screens/mypage/baby-history.tsx"),
         route("/warranties", "features/customer/screens/mypage/warranties.tsx"),
         route("/warranty/:id", "features/customer/screens/mypage/warranty-detail.tsx"),
         route("/analyses", "features/customer/screens/mypage/analyses.tsx"),

@@ -210,8 +210,18 @@ export default function CustomerLoginScreen() {
           </Form>
         )}
 
+        {/* 비밀번호 찾기 */}
+        <div className="mt-6 text-center">
+          <Link 
+            to="/customer/forgot-password"
+            className="text-sm text-gray-500 hover:text-[#FF6B35] transition-colors"
+          >
+            비밀번호를 잊으셨나요?
+          </Link>
+        </div>
+
         {/* 회원가입 링크 */}
-        <div className="mt-10 pt-8 border-t border-gray-200">
+        <div className="mt-8 pt-8 border-t border-gray-200">
           <Link 
             to="/customer/register"
             className="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-200 hover:bg-gray-50 transition-colors group"

@@ -82,3 +82,4 @@ GEMINI_API_KEY=your_gemini_key
 - 블로그/AI 상담 지식 관리
 - 후기 이벤트 관리
 
+

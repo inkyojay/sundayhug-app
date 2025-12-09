@@ -67,31 +67,6 @@ export default function CustomerHomeScreen() {
   const isSystemTheme = metadata.definedBy === "SYSTEM";
   const isLight = theme === Theme.LIGHT;
 
-  // 테마 순환: System → Light → Dark → System
-  const cycleTheme = () => {
-    if (isSystemTheme) {
-      setTheme(Theme.LIGHT);
-    } else if (isLight) {
-      setTheme(Theme.DARK);
-    } else {
-      setTheme(null); // System
-    }
-  };
-
-  // 현재 테마 아이콘과 라벨
-  const getThemeInfo = () => {
-    if (isSystemTheme) {
-      return { icon: Monitor, label: "시스템" };
-    } else if (isLight) {
-      return { icon: Sun, label: "라이트" };
-    } else {
-      return { icon: Moon, label: "다크" };
-    }
-  };
-
-  const themeInfo = getThemeInfo();
-  const ThemeIcon = themeInfo.icon;
-
   return (
     <div className="min-h-screen bg-[#F5F5F0] dark:bg-[#121212] transition-colors duration-300">
       <div className="mx-auto max-w-6xl px-6 py-10 md:py-16">
@@ -104,17 +79,47 @@ export default function CustomerHomeScreen() {
               <span className="text-sm font-medium text-gray-600 dark:text-gray-300">썬데이허그 고객 서비스</span>
             </div>
             
-            {/* Theme Toggle Button */}
-            <button
-              onClick={cycleTheme}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200"
-              title={`현재: ${themeInfo.label} 모드 (클릭하여 변경)`}
-            >
-              <ThemeIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-300 hidden sm:inline">
-                {themeInfo.label}
-              </span>
-            </button>
+            {/* Theme Toggle - 3단 세그먼트 */}
+            <div className="flex items-center gap-1 p-1 rounded-full bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700">
+              {/* System */}
+              <button
+                onClick={() => setTheme(null)}
+                className={`p-2 rounded-full transition-all duration-200 ${
+                  isSystemTheme 
+                    ? "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white" 
+                    : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                }`}
+                title="시스템 설정"
+              >
+                <Monitor className="w-5 h-5" />
+              </button>
+              
+              {/* Light */}
+              <button
+                onClick={() => setTheme(Theme.LIGHT)}
+                className={`p-2 rounded-full transition-all duration-200 ${
+                  !isSystemTheme && isLight 
+                    ? "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white" 
+                    : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                }`}
+                title="라이트 모드"
+              >
+                <Sun className="w-5 h-5" />
+              </button>
+              
+              {/* Dark */}
+              <button
+                onClick={() => setTheme(Theme.DARK)}
+                className={`p-2 rounded-full transition-all duration-200 ${
+                  !isSystemTheme && !isLight 
+                    ? "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white" 
+                    : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                }`}
+                title="다크 모드"
+              >
+                <Moon className="w-5 h-5" />
+              </button>
+            </div>
           </div>
           
           <h1 className="text-4xl md:text-6xl font-light tracking-tight leading-tight">
