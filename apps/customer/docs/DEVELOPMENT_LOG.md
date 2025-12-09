@@ -4,6 +4,203 @@
 
 ---
 
+## 📅 2025년 12월 9일 (월) - AI 육아 상담 대폭 개선, BabyReels MVP, 마이페이지 아이별 활동 내역
+
+### 🎯 주요 작업 내용
+
+#### 1. AI 육아 상담 채팅 기능 대폭 개선
+
+**채팅 안정성 개선**
+- 채팅 답변 중복 방지: 메시지 ID로 중복 체크하여 같은 답변 2번 나오는 버그 수정
+- 채팅 "튕김" 현상 해결: `window.history.replaceState` 제거로 페이지 리로드 방지
+- 채팅 메모리 유지: `useEffect` 로직 수정으로 이전 대화 내용 유지
+
+**선택한 아이 정보로 상담**
+- `babyProfileId`를 API로 전달하도록 수정
+- 첫째/둘째 등 여러 아이 중 선택한 아이의 정보로 상담 진행
+- 콘솔 로그 추가로 디버깅 용이하게
+
+**이미지 비전 분석 기능 추가**
+- Gemini Vision API 연동
+- 사진 첨부 시 AI가 이미지 내용 분석 후 답변
+- 수면 환경 사진 분석 → 위험 요소 확인 가능
+
+**후속 질문 품질 개선**
+- `summarizeConversation()` 함수로 대화 요약
+- `isFollowUpQuestion()` 함수로 후속 질문 감지
+- 프롬프트에 대화 요약 + 최근 3턴 내용 포함
+
+**음성 대화 기능 (ElevenLabs)**
+- STT (Speech-to-Text): 음성 → 텍스트 변환
+- TTS (Text-to-Speech): AI 응답 음성 재생
+- 한국어 여성 음성 (Hanna) 사용
+
+#### 2. BabyReels - 맞춤형 육아 릴스 생성 서비스 MVP
+
+**수면 분석 결과 → 릴스 자동 생성 플로우**
+- 4단계 UI: 사진 업로드 → 가사 편집 → 음악 선택 → 영상 미리보기
+
+**AI 가사 생성 (Claude Text API)**
+- 수면 분석 결과 기반 감성적 가사 자동 생성
+- 아기 이름 포함한 개인화된 가사
+
+**음악 생성 (Suno API)**
+- 6가지 스타일: lullaby, upbeat, emotional, hopeful, dreamy, acoustic
+- API 엔드포인트 수정 및 폴링 로직 구현
+- 에러 핸들링 및 폴백 URL 제공
+
+**UI/UX 개선**
+- 브랜드 스타일 적용 (크림 배경 #F5F5F0, 오렌지 #FF6B35)
+- 버튼 텍스트 가독성 개선
+
+#### 3. 회원가입 및 인증 개선
+
+**일반 이메일 회원가입 구현**
+- 이름/닉네임 필수
+- 전화번호 필수 + SMS OTP 인증
+- 전화번호 중복 체크 (카카오/네이버/이메일 계정 통합)
+- 이메일 인증 없이 바로 로그인 가능 (Admin API 사용)
+
+**비밀번호 찾기 기능**
+- 이메일 입력 → 등록된 전화번호로 OTP 발송
+- OTP 인증 후 새 비밀번호 설정
+- 전화번호 마스킹 표시 (010-****-5837)
+
+**카카오 로그인 개선**
+- 직접 Kakao REST API 호출 (scope 세부 제어)
+- 전화번호 포함 사용자 정보 수집
+
+#### 4. 마이페이지 - 우리 아이 섹션 신규
+
+**아이 목록 표시**
+- 등록된 모든 아이 카드로 표시
+- 아이 추가 버튼
+
+**아이별 활동 내역 페이지** (`/customer/mypage/baby-history?id=xxx`)
+- 선택한 아이의 프로필 정보
+- 해당 아이의 채팅 상담 내역 리스트
+- 해당 아이의 수면 분석 내역 리스트
+- 새 상담/분석 시작 바로가기
+
+#### 5. 아기 정보 등록 개선
+
+**필수값 강화**
+- "아기 이름 또는 별명" 필수
+- 생년월일 필수
+
+**동적 필드 표시**
+- 12개월 미만: 수유 방식 (모유/분유/혼합)
+- 24개월 미만: 성별, 수면 민감도
+- 24개월 이상: 기본 정보만
+
+#### 6. 기타 UI/UX 개선
+
+**테마 관리**
+- 기본 테마: 라이트 모드
+- 3단계 토글: 시스템 → 라이트 → 다크
+
+**채팅 화면 모바일 최적화**
+- 채팅방 진입 시 헤더/하단 네비게이션 숨김
+- 전체 화면으로 채팅 집중
+
+**수면 예보 페이지 활성화**
+- `/customer/sleep/forecast` 라우트 활성화
+- 수면 허브에서 접근 가능
+
+---
+
+### 🔧 수정/추가된 파일
+
+```
+신규 파일:
+app/features/customer/screens/mypage/baby-history.tsx     # 아이별 활동 내역 페이지
+app/features/customer/screens/forgot-password.tsx         # 비밀번호 찾기 페이지
+app/features/auth/screens/logout.tsx                      # 로그아웃 처리
+app/features/auth/api/check-phone.tsx                     # 전화번호 중복 체크 API
+app/features/chat/api/speech-to-text.tsx                  # STT API (ElevenLabs)
+app/features/chat/api/text-to-speech.tsx                  # TTS API (ElevenLabs)
+app/features/baby-reels/screens/create-reels.tsx          # 릴스 생성 페이지
+app/features/baby-reels/api/generate-lyrics.tsx           # 가사 생성 API
+app/features/baby-reels/api/generate-music.tsx            # 음악 생성 API
+app/features/baby-reels/lib/suno.server.ts                # Suno API 클라이언트
+app/features/sleep-forecast/screens/forecast.tsx          # 수면 예보 페이지
+
+수정 파일:
+app/features/chat/screens/chat-room.tsx                   # 채팅 안정성, 음성 대화, 이미지 비전
+app/features/chat/screens/chat-list.tsx                   # 다중 아이 지원
+app/features/chat/screens/baby-profile.tsx                # 동적 필드, 프로필 수정
+app/features/chat/api/send-message.tsx                    # Gemini Vision, 대화 품질 개선
+app/features/customer/screens/register.tsx                # 이메일 회원가입, OTP 인증
+app/features/customer/screens/login.tsx                   # 비밀번호 찾기 링크
+app/features/customer/screens/home.tsx                    # 테마 토글
+app/features/customer/screens/mypage/index.tsx            # 우리 아이 섹션
+app/features/customer/screens/sleep-hub.tsx               # 수면 예보 활성화
+app/features/customer/layouts/customer.layout.tsx         # 채팅방 네비 숨김, 로그아웃 수정
+app/features/sleep-analysis/components/analysis-result.tsx # 릴스 만들기 버튼
+app/features/auth/api/verify-otp.tsx                      # OTP 검증 로직 분리
+app/root.tsx                                              # 기본 테마 라이트
+app/routes.ts                                             # 신규 라우트 추가
+```
+
+---
+
+### 🗄️ 데이터베이스 변경
+
+```sql
+-- BabyReels 관련 테이블 (생성 예정 또는 생성됨)
+baby_reels_projects
+baby_reels_photos
+project_lyrics
+project_music
+project_videos
+
+-- 기존 테이블 활용
+baby_profiles (gender, sleep_sensitivity 컬럼 활용)
+chat_sessions (baby_id로 아이별 필터링)
+sleep_analyses (baby_id로 아이별 필터링)
+phone_otp_verifications (비밀번호 찾기에도 사용)
+```
+
+---
+
+### 🔑 환경 변수 추가
+
+```
+SUNO_API_KEY=xxx              # Suno 음악 생성 API
+ELEVENLABS_API_KEY=xxx        # ElevenLabs TTS/STT
+SOLAPI_API_KEY=xxx            # SMS OTP 발송
+SOLAPI_API_SECRET=xxx         # SMS OTP 발송
+```
+
+---
+
+### ✅ 완료된 TODO
+
+- [x] 채팅 답변 중복 방지
+- [x] 선택한 아이 정보로 상담하기
+- [x] 이미지 비전 분석 (Gemini Vision)
+- [x] 채팅 품질 개선 (대화 요약, 후속 질문)
+- [x] 음성 대화 기능 (ElevenLabs STT/TTS)
+- [x] BabyReels MVP (가사 생성, 음악 생성)
+- [x] 일반 이메일 회원가입 + SMS 인증
+- [x] 비밀번호 찾기 기능
+- [x] 전화번호 중복 체크
+- [x] 마이페이지 우리 아이 섹션
+- [x] 아이별 활동 내역 페이지
+- [x] 아기 정보 동적 필드
+- [x] 기본 테마 라이트 모드
+
+---
+
+### 🔜 향후 작업 예정
+
+- [ ] BabyReels 영상 렌더링 (Remotion)
+- [ ] 인스타그램 카드 뉴스 다운로드 개선
+- [ ] 메인 브랜치 배포 준비
+- [ ] AI 썸네일 생성 (Vertex AI Imagen)
+
+---
+
 ## 📅 2025년 12월 4일 (목) - 저녁 작업: main-ready 브랜치 배포, 수면 분석 개선
 
 ### 🎯 주요 작업 내용
