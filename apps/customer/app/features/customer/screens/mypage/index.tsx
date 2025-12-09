@@ -18,7 +18,9 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  Coins
+  Coins,
+  Baby,
+  Plus
 } from "lucide-react";
 
 import { Badge } from "~/core/components/ui/badge";
@@ -67,6 +69,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     approved: reviewStats?.filter(r => r.status === "approved").length || 0,
     rejected: reviewStats?.filter(r => r.status === "rejected").length || 0,
   };
+
+  // 아기 프로필 목록
+  const { data: babyProfiles } = await supabase
+    .from("baby_profiles")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: true });
   
   // 이름에서 first name 추출 (한글이면 전체, 영문이면 첫 단어)
   const fullName = profile?.name || user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split("@")[0] || "회원";
@@ -85,7 +94,17 @@ export async function loader({ request }: Route.LoaderArgs) {
     },
     reviewSubmissions: reviewSubmissions || [],
     reviewCounts,
+    babyProfiles: babyProfiles || [],
   });
+}
+
+// 월령 계산
+function calculateMonths(birthDate: string | null): number | null {
+  if (!birthDate) return null;
+  const birth = new Date(birthDate);
+  const today = new Date();
+  const months = (today.getFullYear() - birth.getFullYear()) * 12 + (today.getMonth() - birth.getMonth());
+  return Math.max(0, months);
 }
 
 const reviewTypeLabels: Record<string, string> = {
@@ -101,7 +120,7 @@ const statusConfig: Record<string, { label: string; color: string; icon: any }> 
 };
 
 export default function CustomerMypageIndexScreen() {
-  const { user, reviewSubmissions, reviewCounts } = useLoaderData<typeof loader>();
+  const { user, reviewSubmissions, reviewCounts, babyProfiles } = useLoaderData<typeof loader>();
 
   return (
     <div className="min-h-screen bg-[#F5F5F0]">
@@ -292,6 +311,68 @@ export default function CustomerMypageIndexScreen() {
               </div>
             </div>
           </Link>
+        </div>
+
+        {/* 우리 아이 섹션 */}
+        <div className="mt-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <Baby className="w-5 h-5 text-[#FF6B35]" />
+              우리 아이
+            </h2>
+            <Link 
+              to="/customer/chat/baby-profile"
+              className="text-sm text-[#FF6B35] font-medium hover:underline flex items-center gap-1"
+            >
+              <Plus className="w-4 h-4" /> 추가
+            </Link>
+          </div>
+
+          {babyProfiles.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {babyProfiles.map((baby: any) => {
+                const months = calculateMonths(baby.birth_date);
+                return (
+                  <Link
+                    key={baby.id}
+                    to={`/customer/mypage/baby-history?id=${baby.id}`}
+                    className="bg-white rounded-2xl p-4 border border-gray-100 hover:border-[#FF6B35]/30 hover:shadow-md transition-all group"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 bg-gradient-to-br from-[#FF6B35] to-orange-400 rounded-full flex items-center justify-center flex-shrink-0">
+                        <Baby className="w-7 h-7 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-gray-900 truncate">
+                          {baby.name || "우리 아기"}
+                        </h3>
+                        <p className="text-gray-500 text-sm">
+                          {months !== null ? `${months}개월` : "월령 미설정"}
+                          {baby.feeding_type && ` • ${
+                            baby.feeding_type === "breast" ? "모유" :
+                            baby.feeding_type === "formula" ? "분유" :
+                            baby.feeding_type === "mixed" ? "혼합" : ""
+                          }`}
+                        </p>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <Link
+              to="/customer/chat/baby-profile"
+              className="block bg-white rounded-2xl p-6 border border-dashed border-gray-300 hover:border-[#FF6B35] transition-colors text-center"
+            >
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Plus className="w-8 h-8 text-gray-400" />
+              </div>
+              <p className="text-gray-600 font-medium">아이 정보 등록하기</p>
+              <p className="text-gray-400 text-sm mt-1">AI 상담을 위해 아이 정보를 등록해주세요</p>
+            </Link>
+          )}
         </div>
 
         {/* 후기 인증 내역 섹션 */}

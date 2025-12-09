@@ -94,6 +94,53 @@ function getAgeRange(months: number): string {
   return "13-24m";
 }
 
+// 후속 질문 감지 (이전 대화 참조가 필요한 질문인지)
+function isFollowUpQuestion(message: string): boolean {
+  const followUpPatterns = [
+    "그거", "그건", "그게", "거기", "이거", "이건", "저거", "저건",
+    "그러면", "그럼", "근데", "그래서", "그리고",
+    "아까", "방금", "위에", "앞서",
+    "더 자세히", "더 알려", "예를 들어", "예시",
+    "왜요", "왜죠", "어떻게요", "뭐죠",
+    "다른", "또", "추가로", "그 외에",
+    "맞아요", "아니요", "네", "응",
+  ];
+  
+  const lowerMessage = message.toLowerCase();
+  return followUpPatterns.some(pattern => lowerMessage.includes(pattern));
+}
+
+// 대화 히스토리를 더 구조화된 형태로 정리
+function formatConversationHistory(
+  messages: Array<{ role: string; content: string }>,
+  isFollowUp: boolean
+): string {
+  if (!messages || messages.length === 0) return "";
+  
+  // 최근 대화 (최대 6개 메시지 = 3턴)
+  const recentMessages = messages.slice(-6);
+  
+  let history = "\n\n[이전 대화 내용]\n";
+  
+  recentMessages.forEach((msg, idx) => {
+    const roleName = msg.role === "user" ? "👤 부모님" : "🤖 상담사";
+    // 메시지가 너무 길면 요약
+    const content = msg.content.length > 300 
+      ? msg.content.slice(0, 300) + "..." 
+      : msg.content;
+    history += `${roleName}: ${content}\n\n`;
+  });
+  
+  if (isFollowUp) {
+    history += "---\n⚠️ 위 대화의 맥락을 잘 파악해서, 이전에 논의한 내용을 바탕으로 답변해주세요.\n";
+    history += "사용자가 '그거', '그건' 등으로 이전 내용을 참조하고 있으니, 무엇을 가리키는지 파악하세요.\n";
+  } else {
+    history += "---\n위 대화 흐름을 참고해서 자연스럽게 이어서 답변해주세요.\n";
+  }
+  
+  return history;
+}
+
 // 벡터 임베딩 생성
 async function getEmbedding(text: string): Promise<number[]> {
   const client = getOpenAI();
@@ -238,9 +285,20 @@ export async function action({ request }: Route.ActionArgs) {
   const message = formData.get("message") as string;
   const sessionId = formData.get("sessionId") as string;
   const babyProfileId = formData.get("babyProfileId") as string;
+  const imageFile = formData.get("image") as File | null;
 
-  if (!message?.trim()) {
+  if (!message?.trim() && !imageFile) {
     return data({ error: "메시지를 입력해주세요." }, { status: 400 });
+  }
+  
+  // 이미지가 있으면 base64로 변환
+  let imageBase64: string | null = null;
+  let imageMimeType: string | null = null;
+  if (imageFile && imageFile.size > 0) {
+    const arrayBuffer = await imageFile.arrayBuffer();
+    imageBase64 = Buffer.from(arrayBuffer).toString("base64");
+    imageMimeType = imageFile.type || "image/jpeg";
+    console.log(`📷 이미지 첨부: ${imageFile.name} (${(imageFile.size / 1024).toFixed(1)}KB)`);
   }
 
   try {
@@ -248,18 +306,27 @@ export async function action({ request }: Route.ActionArgs) {
 
     // 아기 프로필 가져오기 (선택된 아이 또는 첫 번째 아이)
     let babyProfile = null;
+    console.log(`👶 전달받은 babyProfileId: ${babyProfileId || "없음"}`);
+    
     if (babyProfileId) {
-      const { data: selectedProfile } = await supabase
+      const { data: selectedProfile, error } = await supabase
         .from("baby_profiles")
         .select("*")
         .eq("id", babyProfileId)
         .eq("user_id", user.id)
         .single();
-      babyProfile = selectedProfile;
+      
+      if (error) {
+        console.log(`⚠️ 아이 프로필 조회 실패: ${error.message}`);
+      } else {
+        babyProfile = selectedProfile;
+        console.log(`✅ 선택된 아이: ${selectedProfile?.name} (${calculateMonths(selectedProfile?.birth_date)}개월)`);
+      }
     }
     
     // 선택된 아이가 없으면 첫 번째 아이 사용
     if (!babyProfile) {
+      console.log(`⚠️ 선택된 아이가 없어 첫 번째 아이를 사용합니다.`);
       const { data: firstProfile } = await supabase
         .from("baby_profiles")
         .select("*")
@@ -268,6 +335,9 @@ export async function action({ request }: Route.ActionArgs) {
         .limit(1)
         .single();
       babyProfile = firstProfile;
+      if (firstProfile) {
+        console.log(`✅ 첫 번째 아이 사용: ${firstProfile.name}`);
+      }
     }
 
     const babyMonths = babyProfile?.birth_date 
@@ -347,30 +417,57 @@ export async function action({ request }: Route.ActionArgs) {
 `;
     }
 
-    // 이전 대화 히스토리 구성 (대화 맥락 유지)
-    let conversationHistory = "";
-    if (previousMessages && previousMessages.length > 0) {
-      conversationHistory = "\n\n[이전 대화 내용]\n";
-      previousMessages.forEach((msg: { role: string; content: string }) => {
-        const roleName = msg.role === "user" ? "부모님" : "상담사";
-        conversationHistory += `${roleName}: ${msg.content}\n\n`;
-      });
-      conversationHistory += "---\n위 대화 맥락을 참고해서 자연스럽게 이어서 답변해주세요.\n";
-    }
+    // 후속 질문 여부 감지
+    const isFollowUp = isFollowUpQuestion(message);
+    console.log(`📝 질문 분석: "${message.slice(0, 30)}..." | 후속질문: ${isFollowUp}`);
+    
+    // 이전 대화 히스토리 구성 (개선된 버전)
+    const conversationHistory = formatConversationHistory(
+      previousMessages || [],
+      isFollowUp
+    );
 
     // Gemini API 호출 (새로운 @google/genai 패키지)
-    const prompt = `${SYSTEM_PROMPT}${babyContext}${conversationHistory}${contextText}
+    const textPrompt = `${SYSTEM_PROMPT}${babyContext}${conversationHistory}${contextText}
 
 [현재 질문]
-${message}
+${message || "(이미지 분석 요청)"}
+${isFollowUp ? "\n(참고: 이 질문은 이전 대화 내용을 참조하는 후속 질문입니다. 맥락을 잘 파악해주세요.)" : ""}
+${imageBase64 ? "\n(참고: 사용자가 이미지를 첨부했습니다. 이미지 내용을 분석해서 답변해주세요.)" : ""}
 
 [답변]`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: prompt,
-    });
-    const aiResponse = response.text ?? "";
+    let aiResponse: string;
+    
+    if (imageBase64 && imageMimeType) {
+      // 이미지가 있으면 Vision 모델 사용
+      console.log("🖼️ Gemini Vision API 호출 (이미지 분석)");
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: textPrompt },
+              {
+                inlineData: {
+                  mimeType: imageMimeType,
+                  data: imageBase64,
+                },
+              },
+            ],
+          },
+        ],
+      });
+      aiResponse = response.text ?? "";
+    } else {
+      // 텍스트만 있으면 일반 호출
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: textPrompt,
+      });
+      aiResponse = response.text ?? "";
+    }
 
     // AI 응답 저장
     const { data: aiMessage, error: aiMsgError } = await supabase

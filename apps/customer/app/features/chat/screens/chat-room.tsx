@@ -115,13 +115,35 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   const sessionId = params.sessionId;
+  const url = new URL(request.url);
+  const selectedBabyId = url.searchParams.get("babyId");
 
   if (sessionId === "new") {
-    const { data: babyProfile } = await supabase
-      .from("baby_profiles")
-      .select("*")
-      .eq("user_id", user.id)
-      .single();
+    let babyProfile = null;
+    
+    // URL에서 선택된 아기 ID가 있으면 해당 아기 정보 가져오기
+    if (selectedBabyId) {
+      const { data: selectedProfile } = await supabase
+        .from("baby_profiles")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("id", selectedBabyId)
+        .single();
+      babyProfile = selectedProfile;
+    }
+    
+    // 선택된 아기가 없으면 첫 번째 아기 정보 가져오기
+    if (!babyProfile) {
+      const { data: firstProfile } = await supabase
+        .from("baby_profiles")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .single();
+      babyProfile = firstProfile;
+    }
+    
     return data({ session: null, messages: [], babyProfile, isNew: true });
   }
 
@@ -220,17 +242,29 @@ export default function ChatRoomScreen() {
     }
   }, [profileFetcher.data]);
 
-  useEffect(() => { setLocalMessages(initialMessages); }, [initialMessages]);
-  useEffect(() => { if (session?.id) setCurrentSessionId(session.id); }, [session?.id]);
+  // initialMessages는 최초 로드 시에만 사용 (이후 chatFetcher 응답으로 업데이트)
+  // 빈 의존성 배열로 최초 1회만 실행
+  useEffect(() => { 
+    if (initialMessages.length > 0 && localMessages.length === 0) {
+      setLocalMessages(initialMessages); 
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  
+  useEffect(() => { if (session?.id && !currentSessionId) setCurrentSessionId(session.id); }, [session?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [localMessages]);
 
   useEffect(() => {
     if (chatFetcher.data?.success && chatFetcher.data?.message) {
-      setLocalMessages((prev: typeof initialMessages) => [...prev, chatFetcher.data.message]);
+      const newMessage = chatFetcher.data.message;
+      // 중복 메시지 방지: 같은 ID의 메시지가 이미 있으면 추가하지 않음
+      setLocalMessages((prev: typeof initialMessages) => {
+        const alreadyExists = prev.some((msg: any) => msg.id === newMessage.id);
+        if (alreadyExists) return prev;
+        return [...prev, newMessage];
+      });
       // 새 세션이 생성되면 sessionId만 저장 (URL 변경 없이 - React Router 충돌 방지)
       if (chatFetcher.data?.sessionId && !currentSessionId) {
         setCurrentSessionId(chatFetcher.data.sessionId);
-        // URL 변경은 하지 않음 - 페이지 튕김 방지
       }
     }
   }, [chatFetcher.data, currentSessionId]);
@@ -316,6 +350,10 @@ export default function ChatRoomScreen() {
     const formData = new FormData();
     formData.append("message", inputValue);
     formData.append("sessionId", currentSessionId || "new");
+    // 선택한 아이 정보 전달 (중요!)
+    if (localBabyProfile?.id) {
+      formData.append("babyProfileId", localBabyProfile.id);
+    }
     if (selectedImage?.file) {
       formData.append("image", selectedImage.file);
     }

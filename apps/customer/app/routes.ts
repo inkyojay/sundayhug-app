@@ -130,6 +130,7 @@ export default [
       ...prefix("/mypage", [
         index("features/customer/screens/mypage/index.tsx"),
         route("/profile", "features/customer/screens/mypage/profile.tsx"),
+        route("/baby-history", "features/customer/screens/mypage/baby-history.tsx"),
         route("/warranties", "features/customer/screens/mypage/warranties.tsx"),
         route("/warranty/:id", "features/customer/screens/mypage/warranty-detail.tsx"),
         route("/analyses", "features/customer/screens/mypage/analyses.tsx"),
