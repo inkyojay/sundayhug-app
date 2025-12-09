@@ -227,9 +227,10 @@ export default function ChatRoomScreen() {
   useEffect(() => {
     if (chatFetcher.data?.success && chatFetcher.data?.message) {
       setLocalMessages((prev: typeof initialMessages) => [...prev, chatFetcher.data.message]);
+      // 새 세션이 생성되면 sessionId만 저장 (URL 변경 없이 - React Router 충돌 방지)
       if (chatFetcher.data?.sessionId && !currentSessionId) {
         setCurrentSessionId(chatFetcher.data.sessionId);
-        window.history.replaceState(null, "", `/customer/chat/${chatFetcher.data.sessionId}`);
+        // URL 변경은 하지 않음 - 페이지 튕김 방지
       }
     }
   }, [chatFetcher.data, currentSessionId]);
