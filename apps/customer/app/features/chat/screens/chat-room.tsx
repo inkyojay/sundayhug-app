@@ -9,8 +9,9 @@ import {
   Send,
   ImagePlus,
   Mic,
-  MicOff,
+  Square,
   Volume2,
+  VolumeX,
   Loader2,
   Bot,
   User,
@@ -19,7 +20,80 @@ import {
   ThumbsDown,
   ExternalLink
 } from "lucide-react";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+
+// 음성 녹음 훅
+function useVoiceRecorder() {
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 } 
+      });
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+      });
+      chunksRef.current = [];
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start(100);
+      setIsRecording(true);
+    } catch (err) {
+      console.error("마이크 접근 오류:", err);
+      alert("마이크 접근 권한을 허용해주세요.");
+    }
+  }, []);
+
+  const stopRecording = useCallback((): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") {
+        resolve(null);
+        return;
+      }
+      mediaRecorderRef.current.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' });
+        mediaRecorderRef.current?.stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+        setIsRecording(false);
+        resolve(blob);
+      };
+      mediaRecorderRef.current.stop();
+    });
+  }, []);
+
+  return { isRecording, isProcessing, setIsProcessing, startRecording, stopRecording };
+}
+
+// 오디오 플레이어 훅
+function useAudioPlayer() {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const play = useCallback((audioUrl: string, messageId: string) => {
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+    setCurrentPlayingId(messageId);
+    setIsPlaying(true);
+    audio.onended = () => { setIsPlaying(false); setCurrentPlayingId(null); };
+    audio.onerror = () => { setIsPlaying(false); setCurrentPlayingId(null); };
+    audio.play().catch(() => { setIsPlaying(false); setCurrentPlayingId(null); });
+  }, []);
+
+  const stop = useCallback(() => {
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    setIsPlaying(false);
+    setCurrentPlayingId(null);
+  }, []);
+
+  return { isPlaying, currentPlayingId, play, stop };
+}
 
 import { Button } from "~/core/components/ui/button";
 import { Textarea } from "~/core/components/ui/textarea";
@@ -162,11 +236,19 @@ export default function ChatRoomScreen() {
   const fetcher = useFetcher();
   const chatFetcher = useFetcher();
   const profileFetcher = useFetcher();
+  const sttFetcher = useFetcher();
+  const ttsFetcher = useFetcher();
+  
+  // 음성 기능 훅
+  const voiceRecorder = useVoiceRecorder();
+  const audioPlayer = useAudioPlayer();
+  
   const [inputValue, setInputValue] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
   const [localMessages, setLocalMessages] = useState(initialMessages);
   const [localBabyProfile, setLocalBabyProfile] = useState(initialBabyProfile);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(session?.id || null);
+  const [audioCache, setAudioCache] = useState<Record<string, string>>({});
+  const [loadingTtsId, setLoadingTtsId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -219,6 +301,29 @@ export default function ChatRoomScreen() {
     }
   }, [chatFetcher.data, currentSessionId]);
 
+  // STT 응답 처리 (음성 → 텍스트)
+  useEffect(() => {
+    if (sttFetcher.data?.success && sttFetcher.data?.text) {
+      setInputValue(sttFetcher.data.text);
+      voiceRecorder.setIsProcessing(false);
+    } else if (sttFetcher.data?.error) {
+      console.error("STT 오류:", sttFetcher.data.error);
+      voiceRecorder.setIsProcessing(false);
+    }
+  }, [sttFetcher.data]);
+
+  // TTS 응답 처리 (텍스트 → 음성)
+  useEffect(() => {
+    if (ttsFetcher.data?.success && ttsFetcher.data?.audioUrl && loadingTtsId) {
+      setAudioCache((prev: Record<string, string>) => ({ ...prev, [loadingTtsId]: ttsFetcher.data.audioUrl }));
+      audioPlayer.play(ttsFetcher.data.audioUrl, loadingTtsId);
+      setLoadingTtsId(null);
+    } else if (ttsFetcher.data?.error) {
+      console.error("TTS 오류:", ttsFetcher.data.error);
+      setLoadingTtsId(null);
+    }
+  }, [ttsFetcher.data, loadingTtsId, audioPlayer]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
@@ -256,6 +361,43 @@ export default function ChatRoomScreen() {
       { actionType: "feedback", messageId, helpful: String(helpful) },
       { method: "post" }
     );
+  };
+
+  // 음성 녹음 토글
+  const handleVoiceToggle = async () => {
+    if (voiceRecorder.isRecording) {
+      voiceRecorder.setIsProcessing(true);
+      const audioBlob = await voiceRecorder.stopRecording();
+      if (audioBlob && audioBlob.size > 0) {
+        const formData = new FormData();
+        formData.append("audio", audioBlob, "recording.webm");
+        sttFetcher.submit(formData, { method: "post", action: "/api/chat/speech-to-text" });
+      } else {
+        voiceRecorder.setIsProcessing(false);
+      }
+    } else {
+      await voiceRecorder.startRecording();
+    }
+  };
+
+  // TTS 재생 토글
+  const handlePlayTTS = (messageId: string, text: string) => {
+    if (audioPlayer.currentPlayingId === messageId && audioPlayer.isPlaying) {
+      audioPlayer.stop();
+      return;
+    }
+    
+    // 캐시된 오디오가 있으면 바로 재생
+    if (audioCache[messageId]) {
+      audioPlayer.play(audioCache[messageId], messageId);
+      return;
+    }
+    
+    // 새로 TTS 요청
+    setLoadingTtsId(messageId);
+    const formData = new FormData();
+    formData.append("text", text);
+    ttsFetcher.submit(formData, { method: "post", action: "/api/chat/text-to-speech" });
   };
 
   // 월령 계산
@@ -484,9 +626,28 @@ export default function ChatRoomScreen() {
                 })()}
               </div>
               
-              {/* 피드백 버튼 */}
+              {/* 피드백 + TTS 버튼 */}
               {msg.role === "assistant" && (
                 <div className="flex gap-1 mt-1">
+                  {/* TTS 버튼 */}
+                  <button
+                    onClick={() => handlePlayTTS(msg.id, msg.content)}
+                    disabled={loadingTtsId === msg.id}
+                    className={`p-1.5 rounded-full transition-colors ${
+                      audioPlayer.currentPlayingId === msg.id && audioPlayer.isPlaying
+                        ? "text-[#FF6B35] bg-orange-50"
+                        : "text-gray-400 hover:text-[#FF6B35] hover:bg-orange-50"
+                    }`}
+                    title={audioPlayer.currentPlayingId === msg.id && audioPlayer.isPlaying ? "정지" : "음성으로 듣기"}
+                  >
+                    {loadingTtsId === msg.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : audioPlayer.currentPlayingId === msg.id && audioPlayer.isPlaying ? (
+                      <VolumeX className="w-4 h-4" />
+                    ) : (
+                      <Volume2 className="w-4 h-4" />
+                    )}
+                  </button>
                   <button
                     onClick={() => handleFeedback(msg.id, true)}
                     className="p-1.5 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-full transition-colors"
@@ -539,12 +700,23 @@ export default function ChatRoomScreen() {
             {/* 음성 입력 */}
             <button
               type="button"
-              onClick={() => setIsRecording(!isRecording)}
+              onClick={handleVoiceToggle}
+              disabled={voiceRecorder.isProcessing}
               className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${
-                isRecording ? "bg-red-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                voiceRecorder.isRecording 
+                  ? "bg-red-500 text-white animate-pulse" 
+                  : voiceRecorder.isProcessing 
+                    ? "bg-orange-100 text-orange-500" 
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
               }`}
             >
-              {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+              {voiceRecorder.isProcessing ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : voiceRecorder.isRecording ? (
+                <Square className="w-4 h-4" />
+              ) : (
+                <Mic className="w-5 h-5" />
+              )}
             </button>
 
             {/* 텍스트 입력 */}

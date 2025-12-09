@@ -62,11 +62,17 @@ export default [
     // 채팅 API
     ...prefix("/chat", [
       route("/send", "features/chat/api/send-message.tsx"),
+      route("/speech-to-text", "features/chat/api/speech-to-text.tsx"),
+      route("/text-to-speech", "features/chat/api/text-to-speech.tsx"),
     ]),
     // 베이비릴스 API
     ...prefix("/baby-reels", [
       route("/generate-lyrics", "features/baby-reels/api/generate-lyrics.tsx"),
       route("/generate-music", "features/baby-reels/api/generate-music.tsx"),
+    ]),
+    // 수면 예보 API
+    ...prefix("/sleep-forecast", [
+      route("/get", "features/sleep-forecast/api/forecast.tsx"),
     ]),
   ]),
 
@@ -91,7 +97,7 @@ export default [
       ...prefix("/sleep", [
         index("features/customer/screens/sleep-hub.tsx"),
         route("/analyze", "features/sleep-analysis/screens/analyze-public.tsx"),
-        route("/forecast", "features/sleep-analysis/screens/forecast.tsx"),
+        route("/forecast", "features/sleep-forecast/screens/forecast.tsx"),
         route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "customer-sleep-result" }),
         // 베이비릴스 (수면 분석 → 릴스 생성)
         route("/reels/:analysisId", "features/baby-reels/screens/create-reels.tsx"),
