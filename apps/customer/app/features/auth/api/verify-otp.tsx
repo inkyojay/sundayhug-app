@@ -14,8 +14,10 @@ import makeServerClient from "~/core/lib/supa-client.server";
 
 const requestSchema = z.object({
   phoneNumber: z.string().min(10).max(15),
-  otp: z.string().length(6),
+  otp: z.string().length(6).optional(),
+  otpCode: z.string().length(6).optional(),
   name: z.string().min(1).optional(),
+  verifyOnly: z.boolean().optional(), // 단순 검증만 할지 여부
 });
 
 export async function action({ request }: Route.ActionArgs) {
@@ -25,7 +27,18 @@ export async function action({ request }: Route.ActionArgs) {
 
   try {
     const body = await request.json();
-    const { phoneNumber, otp, name } = requestSchema.parse(body);
+    const parsed = requestSchema.parse(body);
+    const phoneNumber = parsed.phoneNumber;
+    const otp = parsed.otp || parsed.otpCode; // 둘 다 지원
+    const name = parsed.name;
+    const verifyOnly = parsed.verifyOnly;
+
+    if (!otp) {
+      return data(
+        { success: false, error: "인증번호를 입력해주세요." },
+        { status: 400 }
+      );
+    }
 
     // 전화번호 정규화
     const normalizedPhone = phoneNumber.replace(/-/g, "").replace(/\s/g, "");
@@ -69,6 +82,15 @@ export async function action({ request }: Route.ActionArgs) {
       .from("phone_otp_verifications")
       .update({ verified: true, updated_at: new Date().toISOString() })
       .eq("id", otpRecord.id);
+
+    // verifyOnly 모드면 여기서 반환 (이메일 회원가입용)
+    if (verifyOnly) {
+      return data({
+        success: true,
+        message: "전화번호가 인증되었습니다.",
+        verified: true,
+      });
+    }
 
     // 기존 사용자 확인 (전화번호로)
     const { data: existingUsers } = await adminClient.auth.admin.listUsers();

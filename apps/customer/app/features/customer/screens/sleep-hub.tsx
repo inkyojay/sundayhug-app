@@ -2,7 +2,7 @@
  * 수면 분석 허브 페이지
  * 
  * - 수면 환경 분석
- * - 우리 아기 수면 예보 (준비중)
+ * - 우리 아기 수면 예보
  */
 import type { Route } from "./+types/sleep-hub";
 
@@ -13,8 +13,7 @@ import {
   Sparkles,
   ChevronRight,
   Camera,
-  CloudSun,
-  Clock
+  CloudSun
 } from "lucide-react";
 
 export function meta(): Route.MetaDescriptors {
@@ -85,32 +84,32 @@ export default function SleepHubScreen() {
             </div>
           </Link>
 
-          {/* 우리 아기 수면 예보 (준비중) */}
-          <div className="block group cursor-not-allowed">
-            <div className="bg-white/60 rounded-2xl p-6 border border-gray-100">
+          {/* 우리 아기 수면 예보 */}
+          <Link to="/customer/sleep/forecast" className="block group">
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 hover:shadow-lg transition-all">
               <div className="flex items-start gap-4">
-                <div className="w-14 h-14 bg-gray-200 rounded-2xl flex items-center justify-center flex-shrink-0">
-                  <CloudSun className="w-7 h-7 text-gray-400" />
+                <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center flex-shrink-0">
+                  <CloudSun className="w-7 h-7 text-white" />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-bold text-gray-400 text-lg">우리 아기 수면 예보</h3>
-                    <span className="px-2 py-0.5 bg-gray-200 text-gray-500 text-xs font-medium rounded-full">
-                      준비중
+                    <h3 className="font-bold text-gray-900 text-lg">우리 아기 수면 예보</h3>
+                    <span className="px-2 py-0.5 bg-purple-100 text-purple-600 text-xs font-medium rounded-full">
+                      NEW
                     </span>
                   </div>
-                  <p className="text-gray-400 text-sm mb-3">
+                  <p className="text-gray-500 text-sm mb-3">
                     날씨, 계절, 아기 컨디션을 분석하여<br />
                     오늘의 수면 예보를 알려드려요
                   </p>
-                  <div className="flex items-center text-gray-400 text-sm font-medium">
-                    <Clock className="w-4 h-4 mr-1" />
-                    <span>곧 출시됩니다</span>
+                  <div className="flex items-center text-purple-600 text-sm font-medium">
+                    <span>예보 확인하기</span>
+                    <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* Info Card */}

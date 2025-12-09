@@ -34,24 +34,35 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
-    return data({ session: null, messages: [], babyProfile: null, isNew: false });
+    return data({ session: null, messages: [], babyProfile: null, babyProfiles: [], isNew: false });
   }
 
   const sessionId = params.sessionId;
+  const url = new URL(request.url);
+  const selectedBabyId = url.searchParams.get("babyId");
+
+  // 모든 아기 프로필 가져오기 (여러 아이 지원)
+  const { data: babyProfiles } = await supabase
+    .from("baby_profiles")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: true });
 
   // 새 채팅인 경우
   if (sessionId === "new") {
-    // 아기 프로필 가져오기
-    const { data: babyProfile } = await supabase
-      .from("baby_profiles")
-      .select("*")
-      .eq("user_id", user.id)
-      .single();
+    // 선택된 아기 또는 첫 번째 아기
+    let babyProfile = null;
+    if (selectedBabyId && babyProfiles) {
+      babyProfile = babyProfiles.find(b => b.id === selectedBabyId) || null;
+    } else if (babyProfiles && babyProfiles.length > 0) {
+      babyProfile = babyProfiles[0];
+    }
 
     return data({ 
       session: null, 
       messages: [], 
       babyProfile,
+      babyProfiles: babyProfiles || [],
       isNew: true 
     });
   }
@@ -68,7 +79,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     .single();
 
   if (!session) {
-    return data({ session: null, messages: [], babyProfile: null, isNew: false });
+    return data({ session: null, messages: [], babyProfile: null, babyProfiles: babyProfiles || [], isNew: false });
   }
 
   // 메시지 목록
@@ -82,6 +93,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     session, 
     messages: messages || [],
     babyProfile: session.baby_profiles,
+    babyProfiles: babyProfiles || [],
     isNew: false
   });
 }
@@ -146,7 +158,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function ChatRoomScreen() {
-  const { session, messages: initialMessages, babyProfile: initialBabyProfile, isNew } = useLoaderData<typeof loader>();
+  const { session, messages: initialMessages, babyProfile: initialBabyProfile, babyProfiles, isNew } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const chatFetcher = useFetcher();
   const profileFetcher = useFetcher();
@@ -162,6 +174,9 @@ export default function ChatRoomScreen() {
   const [babyName, setBabyName] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [feedingType, setFeedingType] = useState("");
+  
+  // 아이 선택 (여러 아이 지원)
+  const [showBabySelector, setShowBabySelector] = useState(false);
 
   const isLoading = chatFetcher.state !== "idle";
   const babyProfile = localBabyProfile;
@@ -221,7 +236,8 @@ export default function ChatRoomScreen() {
     chatFetcher.submit(
       { 
         message: inputValue,
-        sessionId: currentSessionId || "new"
+        sessionId: currentSessionId || "new",
+        babyProfileId: localBabyProfile?.id || ""
       },
       { method: "post", action: "/api/chat/send" }
     );
@@ -358,9 +374,15 @@ export default function ChatRoomScreen() {
               {session?.title || "새 상담"}
             </h1>
             {babyProfile && (
-              <p className="text-xs text-gray-500">
+              <button 
+                onClick={() => babyProfiles.length > 1 && isNewSession && setShowBabySelector(true)}
+                className={`text-xs text-gray-500 flex items-center gap-1 ${babyProfiles.length > 1 && isNewSession ? 'hover:text-[#FF6B35] cursor-pointer' : ''}`}
+              >
                 {babyProfile.name || "아기"} • {babyMonths}개월
-              </p>
+                {babyProfiles.length > 1 && isNewSession && (
+                  <span className="text-[#FF6B35]">▼</span>
+                )}
+              </button>
             )}
           </div>
           <div className="w-9 h-9 bg-gradient-to-br from-[#FF6B35] to-orange-400 rounded-full flex items-center justify-center">
@@ -549,6 +571,63 @@ export default function ChatRoomScreen() {
           </form>
         </div>
       </div>
+
+      {/* Baby Selector Modal */}
+      {showBabySelector && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 animate-in slide-in-from-bottom duration-300">
+            <div className="text-center mb-6">
+              <h3 className="text-xl font-bold text-gray-900">아이 변경</h3>
+              <p className="text-gray-500 text-sm mt-1">상담할 아이를 선택해주세요</p>
+            </div>
+            
+            <div className="space-y-3 mb-6">
+              {babyProfiles.map((baby) => {
+                const months = Math.floor((Date.now() - new Date(baby.birth_date).getTime()) / (1000 * 60 * 60 * 24 * 30));
+                const isSelected = baby.id === localBabyProfile?.id;
+                return (
+                  <button
+                    key={baby.id}
+                    onClick={() => {
+                      setLocalBabyProfile(baby);
+                      setShowBabySelector(false);
+                    }}
+                    className={`w-full flex items-center gap-4 p-4 rounded-xl border transition-all ${
+                      isSelected 
+                        ? 'border-[#FF6B35] bg-orange-50' 
+                        : 'border-gray-200 hover:border-[#FF6B35] hover:bg-orange-50'
+                    }`}
+                  >
+                    <div className="w-12 h-12 bg-gradient-to-br from-[#FF6B35] to-orange-400 rounded-full flex items-center justify-center">
+                      <User className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="font-bold text-gray-900">
+                        {baby.name || "우리 아기"}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {months < 12 ? `${months}개월` : `${Math.floor(months/12)}살 ${months % 12}개월`}
+                      </p>
+                    </div>
+                    {isSelected && (
+                      <div className="w-6 h-6 bg-[#FF6B35] rounded-full flex items-center justify-center">
+                        <span className="text-white text-sm">✓</span>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={() => setShowBabySelector(false)}
+              className="w-full py-3 text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

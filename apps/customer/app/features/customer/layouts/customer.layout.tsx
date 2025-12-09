@@ -66,7 +66,7 @@ export default function CustomerLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
-    navigate("/logout");
+    navigate("/customer/logout");
   };
   
   const isActive = (href: string) => {
@@ -76,9 +76,13 @@ export default function CustomerLayout() {
     return location.pathname.startsWith(href);
   };
 
+  // 채팅방에서는 하단 네비게이션 숨김
+  const isChatRoom = location.pathname.startsWith("/customer/chat/") && location.pathname !== "/customer/chat/";
+
   return (
     <div className="flex min-h-screen flex-col bg-[#F5F5F0] dark:bg-[#121212] transition-colors duration-300">
-      {/* Header */}
+      {/* Header - 채팅방에서는 숨김 */}
+      {!isChatRoom && (
       <header className="sticky top-0 z-50 w-full bg-[#F5F5F0]/95 dark:bg-[#121212]/95 backdrop-blur supports-[backdrop-filter]:bg-[#F5F5F0]/80 dark:supports-[backdrop-filter]:bg-[#121212]/80">
         <div className="mx-auto max-w-6xl flex h-16 md:h-20 items-center justify-between px-6">
           {/* Logo */}
@@ -204,9 +208,10 @@ export default function CustomerLayout() {
           </div>
         )}
       </header>
+      )}
 
       {/* Main Content */}
-      <main className="flex-1 pb-20 md:pb-0">
+      <main className={cn("flex-1 md:pb-0", isChatRoom ? "pb-0" : "pb-20")}>
         <Outlet />
       </main>
 
@@ -265,29 +270,31 @@ export default function CustomerLayout() {
         </div>
       </footer>
 
-      {/* Bottom Navigation (Mobile) */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 dark:bg-gray-900/95 backdrop-blur border-t border-gray-200 dark:border-gray-800 md:hidden safe-area-bottom">
-        <div className="flex items-center justify-around py-2 px-2">
-          {mobileNavItems.map((item) => (
-            <Link
-              key={item.href}
-              to={item.href}
-              className={cn(
-                "flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all",
-                isActive(item.href)
-                  ? "text-[#FF6B35] bg-orange-50 dark:bg-orange-900/30"
-                  : "text-gray-500 dark:text-gray-400"
-              )}
-            >
-              <item.icon className={cn(
-                "h-5 w-5",
-                isActive(item.href) && "text-[#FF6B35]"
-              )} />
-              <span className="text-xs font-medium">{item.label}</span>
-            </Link>
-          ))}
-        </div>
-      </nav>
+      {/* Bottom Navigation (Mobile) - 채팅방에서는 숨김 */}
+      {!isChatRoom && (
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 dark:bg-gray-900/95 backdrop-blur border-t border-gray-200 dark:border-gray-800 md:hidden safe-area-bottom">
+          <div className="flex items-center justify-around py-2 px-2">
+            {mobileNavItems.map((item) => (
+              <Link
+                key={item.href}
+                to={item.href}
+                className={cn(
+                  "flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all",
+                  isActive(item.href)
+                    ? "text-[#FF6B35] bg-orange-50 dark:bg-orange-900/30"
+                    : "text-gray-500 dark:text-gray-400"
+                )}
+              >
+                <item.icon className={cn(
+                  "h-5 w-5",
+                  isActive(item.href) && "text-[#FF6B35]"
+                )} />
+                <span className="text-xs font-medium">{item.label}</span>
+              </Link>
+            ))}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

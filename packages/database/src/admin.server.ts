@@ -12,3 +12,4 @@ const adminClient = createClient<Database>(
 
 export default adminClient;
 
+

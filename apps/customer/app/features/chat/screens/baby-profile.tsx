@@ -1,22 +1,19 @@
 /**
  * 아기 프로필 등록/수정
+ * 
+ * 월령에 따라 다른 정보 수집:
+ * - 12개월 미만: 수유 방식
+ * - 24개월 미만: 성별, 수면 민감도
  */
 import type { Route } from "./+types/baby-profile";
 
 import { Link, useLoaderData, useNavigate, data, Form, useActionData } from "react-router";
-import { ArrowLeft, Baby, Calendar, Milk } from "lucide-react";
-import { useEffect } from "react";
+import { ArrowLeft, Baby, Calendar, Milk, Moon, User } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "~/core/components/ui/select";
 import { Textarea } from "~/core/components/ui/textarea";
 import makeServerClient from "~/core/lib/supa-client.server";
 
@@ -29,16 +26,27 @@ export async function loader({ request }: Route.LoaderArgs) {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
-    return data({ profile: null });
+    return data({ profile: null, isEdit: false });
   }
 
-  const { data: profile } = await supabase
-    .from("baby_profiles")
-    .select("*")
-    .eq("user_id", user.id)
-    .single();
+  // URL에서 id 파라미터 확인 (수정 모드)
+  const url = new URL(request.url);
+  const profileId = url.searchParams.get("id");
 
-  return data({ profile });
+  if (profileId) {
+    // 특정 아이 프로필 수정
+    const { data: profile } = await supabase
+      .from("baby_profiles")
+      .select("*")
+      .eq("id", profileId)
+      .eq("user_id", user.id)
+      .single();
+
+    return data({ profile, isEdit: true });
+  }
+
+  // 새 아이 등록 (기존 프로필 없음)
+  return data({ profile: null, isEdit: false });
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -50,37 +58,41 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
+  const profileId = formData.get("profileId") as string; // 수정 모드일 때
   const name = formData.get("name") as string;
   const birthDate = formData.get("birthDate") as string;
   const feedingType = formData.get("feedingType") as string;
+  const gender = formData.get("gender") as string;
+  const sleepSensitivity = formData.get("sleepSensitivity") as string;
   const notes = formData.get("notes") as string;
+
+  // 필수값 검증
+  if (!name || name.trim().length < 1) {
+    return data({ error: "아기 이름 또는 별명을 입력해주세요." });
+  }
 
   if (!birthDate) {
     return data({ error: "생년월일은 필수입니다." });
   }
 
-  // 기존 프로필 확인
-  const { data: existing } = await supabase
-    .from("baby_profiles")
-    .select("id")
-    .eq("user_id", user.id)
-    .single();
-
   const profileData = {
     user_id: user.id,
-    name: name || null,
+    name: name.trim(),
     birth_date: birthDate,
     feeding_type: feedingType || null,
+    gender: gender || null,
+    sleep_sensitivity: sleepSensitivity || "normal",
     notes: notes || null,
     updated_at: new Date().toISOString(),
   };
 
-  if (existing) {
-    // 업데이트
+  if (profileId) {
+    // 기존 프로필 업데이트
     const { error } = await supabase
       .from("baby_profiles")
       .update(profileData)
-      .eq("id", existing.id);
+      .eq("id", profileId)
+      .eq("user_id", user.id);
 
     if (error) {
       return data({ error: "저장에 실패했습니다." });
@@ -99,10 +111,36 @@ export async function action({ request }: Route.ActionArgs) {
   return data({ success: true });
 }
 
+// 월령 계산 함수
+function calculateAgeInMonths(birthDate: string): number {
+  const birth = new Date(birthDate);
+  const today = new Date();
+  
+  let months = (today.getFullYear() - birth.getFullYear()) * 12;
+  months += today.getMonth() - birth.getMonth();
+  
+  // 일자 보정
+  if (today.getDate() < birth.getDate()) {
+    months--;
+  }
+  
+  return Math.max(0, months);
+}
+
 export default function BabyProfileScreen() {
-  const { profile } = useLoaderData<typeof loader>();
+  const { profile, isEdit } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
+
+  // 생년월일 상태 관리
+  const [birthDate, setBirthDate] = useState<string>(
+    profile?.birth_date ? new Date(profile.birth_date).toISOString().split("T")[0] : ""
+  );
+
+  // 월령 계산
+  const ageInMonths = birthDate ? calculateAgeInMonths(birthDate) : null;
+  const isUnder12Months = ageInMonths !== null && ageInMonths < 12;
+  const isUnder24Months = ageInMonths !== null && ageInMonths < 24;
 
   useEffect(() => {
     if (actionData?.success) {
@@ -110,28 +148,33 @@ export default function BabyProfileScreen() {
     }
   }, [actionData, navigate]);
 
-  // 날짜 형식 변환 (yyyy-mm-dd)
-  const formatDate = (date: string | null) => {
-    if (!date) return "";
-    return new Date(date).toISOString().split("T")[0];
+  // 월령 표시 텍스트
+  const getAgeText = () => {
+    if (ageInMonths === null) return "";
+    if (ageInMonths < 1) return "신생아";
+    if (ageInMonths < 12) return `${ageInMonths}개월`;
+    const years = Math.floor(ageInMonths / 12);
+    const remainingMonths = ageInMonths % 12;
+    if (remainingMonths === 0) return `${years}살`;
+    return `${years}살 ${remainingMonths}개월`;
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0]">
+    <div className="min-h-screen bg-[#F5F5F0] dark:bg-[#121212]">
       <div className="mx-auto max-w-lg px-6 py-10">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <Link 
             to="/customer/chat"
-            className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors"
+            className="w-10 h-10 rounded-full bg-white dark:bg-gray-800 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
+            <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
               {profile ? "아기 정보 수정" : "아기 정보 등록"}
             </h1>
-            <p className="text-gray-500 text-sm">맞춤형 상담을 위해 정보를 입력해주세요</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">맞춤형 상담을 위해 아기 정보를 알려주세요</p>
           </div>
         </div>
 
@@ -143,66 +186,120 @@ export default function BabyProfileScreen() {
         </div>
 
         {/* Form */}
-        <Form method="post" className="space-y-6">
+        <Form method="post" className="space-y-5">
+          {/* 수정 모드일 때 profileId 전송 */}
+          {profile?.id && (
+            <input type="hidden" name="profileId" value={profile.id} />
+          )}
+          
           {actionData?.error && (
-            <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm">
+            <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl text-sm">
               {actionData.error}
             </div>
           )}
 
-          {/* 이름 */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-100">
-            <Label htmlFor="name" className="text-gray-700 font-medium mb-2 block">
-              아기 이름/별명
+          {/* 이름 (필수) */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700">
+            <Label htmlFor="name" className="text-gray-700 dark:text-gray-200 font-medium mb-2 block">
+              아기 이름 또는 별명 <span className="text-red-500">*</span>
             </Label>
             <Input
               id="name"
               name="name"
+              required
               defaultValue={profile?.name || ""}
               placeholder="예: 콩이, 우리 아기"
-              className="bg-gray-50 border-0"
+              className="bg-gray-50 dark:bg-gray-900 border-0"
             />
-            <p className="text-xs text-gray-400 mt-2">선택사항이에요</p>
           </div>
 
-          {/* 생년월일 */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-100">
-            <Label htmlFor="birthDate" className="text-gray-700 font-medium mb-2 flex items-center gap-2">
+          {/* 생년월일 (필수) */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700">
+            <Label htmlFor="birthDate" className="text-gray-700 dark:text-gray-200 font-medium mb-2 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-[#FF6B35]" />
-              생년월일 *
+              생년월일 <span className="text-red-500">*</span>
             </Label>
             <Input
               id="birthDate"
               name="birthDate"
               type="date"
               required
-              defaultValue={formatDate(profile?.birth_date)}
-              className="bg-gray-50 border-0"
+              value={birthDate}
+              onChange={(e) => setBirthDate(e.target.value)}
+              max={new Date().toISOString().split("T")[0]}
+              className="bg-gray-50 dark:bg-gray-900 border-0"
             />
-            <p className="text-xs text-gray-400 mt-2">월령에 맞는 상담을 제공해드려요</p>
+            {ageInMonths !== null && (
+              <p className="text-sm text-[#FF6B35] font-medium mt-2">
+                현재 {getAgeText()}
+              </p>
+            )}
           </div>
 
-          {/* 수유 방식 */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-100">
-            <Label className="text-gray-700 font-medium mb-2 flex items-center gap-2">
-              <Milk className="w-4 h-4 text-[#FF6B35]" />
-              수유 방식
-            </Label>
-            <Select name="feedingType" defaultValue={profile?.feeding_type || ""}>
-              <SelectTrigger className="bg-gray-50 border-0">
-                <SelectValue placeholder="선택해주세요" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="breast">모유 수유</SelectItem>
-                <SelectItem value="formula">분유 수유</SelectItem>
-                <SelectItem value="mixed">혼합 수유</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* 성별 (24개월 미만) */}
+          {birthDate && isUnder24Months ? (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700 animate-in fade-in slide-in-from-top-2 duration-300">
+              <Label className="text-gray-700 dark:text-gray-200 font-medium mb-2 flex items-center gap-2">
+                <User className="w-4 h-4 text-[#FF6B35]" />
+                성별
+              </Label>
+              <select 
+                name="gender" 
+                defaultValue={profile?.gender || ""}
+                className="w-full h-10 px-3 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+              >
+                <option value="">선택해주세요</option>
+                <option value="male">남아</option>
+                <option value="female">여아</option>
+              </select>
+              <p className="text-xs text-gray-400 mt-2">성별에 따른 발달 정보를 제공해드려요</p>
+            </div>
+          ) : null}
+
+          {/* 수유 방식 (12개월 미만만) */}
+          {birthDate && isUnder12Months ? (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700 animate-in fade-in slide-in-from-top-2 duration-300">
+              <Label className="text-gray-700 dark:text-gray-200 font-medium mb-2 flex items-center gap-2">
+                <Milk className="w-4 h-4 text-[#FF6B35]" />
+                수유 방식
+              </Label>
+              <select 
+                name="feedingType" 
+                defaultValue={profile?.feeding_type || ""}
+                className="w-full h-10 px-3 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+              >
+                <option value="">선택해주세요</option>
+                <option value="breast">모유 수유</option>
+                <option value="formula">분유 수유</option>
+                <option value="mixed">혼합 수유</option>
+              </select>
+              <p className="text-xs text-gray-400 mt-2">수유 방식에 맞는 상담을 제공해드려요</p>
+            </div>
+          ) : null}
+
+          {/* 수면 민감도 (24개월 미만) */}
+          {birthDate && isUnder24Months ? (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700 animate-in fade-in slide-in-from-top-2 duration-300">
+              <Label className="text-gray-700 dark:text-gray-200 font-medium mb-2 flex items-center gap-2">
+                <Moon className="w-4 h-4 text-[#FF6B35]" />
+                수면 민감도
+              </Label>
+              <select 
+                name="sleepSensitivity" 
+                defaultValue={profile?.sleep_sensitivity || "normal"}
+                className="w-full h-10 px-3 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+              >
+                <option value="high">예민한 편 (작은 소리에도 깸)</option>
+                <option value="normal">보통</option>
+                <option value="low">잘 자는 편 (웬만하면 안 깸)</option>
+              </select>
+              <p className="text-xs text-gray-400 mt-2">수면 패턴 분석에 활용돼요</p>
+            </div>
+          ) : null}
 
           {/* 메모 */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-100">
-            <Label htmlFor="notes" className="text-gray-700 font-medium mb-2 block">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700">
+            <Label htmlFor="notes" className="text-gray-700 dark:text-gray-200 font-medium mb-2 block">
               기타 메모
             </Label>
             <Textarea
@@ -210,7 +307,7 @@ export default function BabyProfileScreen() {
               name="notes"
               defaultValue={profile?.notes || ""}
               placeholder="알레르기, 특이사항 등을 적어주세요"
-              className="bg-gray-50 border-0 resize-none"
+              className="bg-gray-50 dark:bg-gray-900 border-0 resize-none"
               rows={3}
             />
           </div>
@@ -218,18 +315,12 @@ export default function BabyProfileScreen() {
           {/* 저장 버튼 */}
           <Button 
             type="submit" 
-            className="w-full h-12 bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-lg font-medium rounded-xl"
+            className="w-full h-14 bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-lg font-medium rounded-2xl"
           >
-            저장하기
+            {profile ? "수정하기" : "상담 시작하기"}
           </Button>
         </Form>
       </div>
     </div>
   );
 }
-
-
-
-
-
-

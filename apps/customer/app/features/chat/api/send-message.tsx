@@ -237,6 +237,7 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const message = formData.get("message") as string;
   const sessionId = formData.get("sessionId") as string;
+  const babyProfileId = formData.get("babyProfileId") as string;
 
   if (!message?.trim()) {
     return data({ error: "메시지를 입력해주세요." }, { status: 400 });
@@ -245,12 +246,29 @@ export async function action({ request }: Route.ActionArgs) {
   try {
     let currentSessionId = sessionId;
 
-    // 아기 프로필 가져오기
-    const { data: babyProfile } = await supabase
-      .from("baby_profiles")
-      .select("*")
-      .eq("user_id", user.id)
-      .single();
+    // 아기 프로필 가져오기 (선택된 아이 또는 첫 번째 아이)
+    let babyProfile = null;
+    if (babyProfileId) {
+      const { data: selectedProfile } = await supabase
+        .from("baby_profiles")
+        .select("*")
+        .eq("id", babyProfileId)
+        .eq("user_id", user.id)
+        .single();
+      babyProfile = selectedProfile;
+    }
+    
+    // 선택된 아이가 없으면 첫 번째 아이 사용
+    if (!babyProfile) {
+      const { data: firstProfile } = await supabase
+        .from("baby_profiles")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .single();
+      babyProfile = firstProfile;
+    }
 
     const babyMonths = babyProfile?.birth_date 
       ? calculateMonths(babyProfile.birth_date) 
