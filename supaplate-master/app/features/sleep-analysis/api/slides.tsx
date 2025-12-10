@@ -96,9 +96,12 @@ export async function action({ request, params }: Route.ActionArgs) {
       return data({ success: false, error: "Analysis report not found" }, { status: 404 });
     }
 
-    // Build analysis report from database data
+    // Build analysis report from database data (새 디자인용)
     const report = {
+      safetyScore: parsedReport.safetyScore || 75,
+      scoreComment: parsedReport.scoreComment || "수면 환경 분석 완료",
       summary: parsedReport.summary || "",
+      momsDiary: parsedReport.momsDiary || "오늘은 뭔가 이상했다\n평소에 잘 자던 우리 아기..\n하루종일 칭얼거려서\n안아주고 그래도 봤지만\n방법을 모르겠다..ㅠㅠ\n그래도 귀엽긴 해..",
       feedbackItems: (parsedReport.feedbackItems || []).map((item: any) => ({
         id: item.id || 1,
         x: item.x || 50,
@@ -110,6 +113,9 @@ export async function action({ request, params }: Route.ActionArgs) {
       references: parsedReport.references || [],
     };
 
+    // 아기 이름 가져오기 (프로필에서)
+    const babyName = result.baby_name || "OO";
+
     // Get image base64
     let imageBase64 = result.image_base64;
 
@@ -120,9 +126,9 @@ export async function action({ request, params }: Route.ActionArgs) {
       imageBase64 = buffer.toString("base64");
     }
 
-    // Generate slides as PNG
+    // Generate slides as PNG (새 디자인 6장)
     console.log(`📊 Generating PNG slides for analysis ${id}...`);
-    const pngBuffers = await generateAllSlidesAsPng(report, imageBase64 ?? undefined);
+    const pngBuffers = await generateAllSlidesAsPng(report, imageBase64 ?? undefined, babyName);
     console.log(`✅ Generated ${pngBuffers.length} PNG slides`);
 
     // Upload to Storage
