@@ -127,9 +127,18 @@ export async function action({ request, params }: Route.ActionArgs) {
     }
 
     // Generate slides as PNG (새 디자인 6장)
-    console.log(`📊 Generating PNG slides for analysis ${id}...`);
-    const pngBuffers = await generateAllSlidesAsPng(report, imageBase64 ?? undefined, babyName);
-    console.log(`✅ Generated ${pngBuffers.length} PNG slides`);
+    console.log(`🎨 [SLIDES v2.0] Generating NEW DESIGN slides for analysis ${id}...`);
+    console.log(`📋 Report: safetyScore=${report.safetyScore}, feedbackItems=${report.feedbackItems.length}, babyName=${babyName}`);
+    console.log(`🖼️ Image: ${imageBase64 ? 'base64 available' : 'NO IMAGE'}`);
+    
+    let pngBuffers: Buffer[];
+    try {
+      pngBuffers = await generateAllSlidesAsPng(report, imageBase64 ?? undefined, babyName);
+      console.log(`✅ Generated ${pngBuffers.length} PNG slides (NEW DESIGN)`);
+    } catch (slideError) {
+      console.error(`❌ Slide generation failed:`, slideError);
+      throw slideError;
+    }
 
     // Upload to Storage
     const slideUrls = await uploadSlidesToStorage(adminClient, pngBuffers, id);
