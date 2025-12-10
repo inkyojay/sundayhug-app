@@ -112,15 +112,22 @@ async function loadFonts(): Promise<{
 }
 
 /**
- * Load icon as base64
+ * Load icon as base64 from URL (Vercel compatible)
  */
 let iconCache: { sheep: string | null; logo: string | null } = { sheep: null, logo: null };
 
-function loadIcons(): { sheep: string; logo: string } {
+// Storage URLs for icons (uploaded to Supabase Storage)
+const ICON_URLS = {
+  sheep: "https://ugzwgegkvxcczwiottej.supabase.co/storage/v1/object/public/sleep-analysis/assets/sheep.png",
+  logo: "https://ugzwgegkvxcczwiottej.supabase.co/storage/v1/object/public/sleep-analysis/assets/logo.png",
+};
+
+async function loadIcons(): Promise<{ sheep: string; logo: string }> {
   if (iconCache.sheep && iconCache.logo) {
     return iconCache as { sheep: string; logo: string };
   }
 
+  // First try local files (for development)
   const assetsPath = join(process.cwd(), "app/features/sleep-analysis/assets/icons");
   
   try {
@@ -128,10 +135,32 @@ function loadIcons(): { sheep: string; logo: string } {
     const logoBuffer = readFileSync(join(assetsPath, "logo.png"));
     iconCache.sheep = `data:image/png;base64,${sheepBuffer.toString("base64")}`;
     iconCache.logo = `data:image/png;base64,${logoBuffer.toString("base64")}`;
+    console.log("✅ Icons loaded from local files");
   } catch (error) {
-    console.error("Icon loading error:", error);
-    iconCache.sheep = "";
-    iconCache.logo = "";
+    console.log("📥 Loading icons from Storage URL...");
+    // Fallback: fetch from Storage URL (for Vercel)
+    try {
+      const [sheepRes, logoRes] = await Promise.all([
+        fetch(ICON_URLS.sheep),
+        fetch(ICON_URLS.logo),
+      ]);
+      
+      if (sheepRes.ok && logoRes.ok) {
+        const sheepBuffer = Buffer.from(await sheepRes.arrayBuffer());
+        const logoBuffer = Buffer.from(await logoRes.arrayBuffer());
+        iconCache.sheep = `data:image/png;base64,${sheepBuffer.toString("base64")}`;
+        iconCache.logo = `data:image/png;base64,${logoBuffer.toString("base64")}`;
+        console.log("✅ Icons loaded from Storage URL");
+      } else {
+        console.error("Icon fetch failed:", sheepRes.status, logoRes.status);
+        iconCache.sheep = "";
+        iconCache.logo = "";
+      }
+    } catch (fetchError) {
+      console.error("Icon fetch error:", fetchError);
+      iconCache.sheep = "";
+      iconCache.logo = "";
+    }
   }
 
   return iconCache as { sheep: string; logo: string };
@@ -248,7 +277,7 @@ export async function generateThumbnailSlide(
   imageBase64: string,
   fonts: { cafe24: ArrayBuffer; pretendardBold: ArrayBuffer; pretendardRegular: ArrayBuffer }
 ): Promise<string> {
-  const icons = loadIcons();
+  const icons = await loadIcons();
   const today = date || new Date().toLocaleDateString("ko-KR", { month: "numeric", day: "numeric", weekday: "short" });
 
   const element = el(
@@ -694,7 +723,7 @@ export async function generateImageWithPinsSlide(
   babyName: string,
   fonts: { cafe24: ArrayBuffer; pretendardBold: ArrayBuffer; pretendardRegular: ArrayBuffer }
 ): Promise<string> {
-  const icons = loadIcons();
+  const icons = await loadIcons();
 
   const element = el(
     "div",
@@ -1109,7 +1138,7 @@ export async function generateGoodSummarySlide(
   imageBase64: string,
   fonts: { cafe24: ArrayBuffer; pretendardBold: ArrayBuffer; pretendardRegular: ArrayBuffer }
 ): Promise<string> {
-  const icons = loadIcons();
+  const icons = await loadIcons();
   // Low/Info 항목만 필터링 (잘한 점)
   const goodItems = feedbackItems.filter((item) => item.riskLevel === "Low" || item.riskLevel === "Info").slice(0, 3);
 
@@ -1325,7 +1354,7 @@ export async function generateGoodSummarySlide(
 export async function generateEndingSlide(
   fonts: { cafe24: ArrayBuffer; pretendardBold: ArrayBuffer; pretendardRegular: ArrayBuffer }
 ): Promise<string> {
-  const icons = loadIcons();
+  const icons = await loadIcons();
 
   const element = el(
     "div",
