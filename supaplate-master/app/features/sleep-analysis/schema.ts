@@ -133,13 +133,14 @@ export type RiskLevel = "High" | "Medium" | "Low" | "Info";
 export interface AnalysisReport {
   safetyScore: number; // 0-100점
   scoreComment: string; // 점수에 대한 한 줄 코멘트
-  summary: string;
+  summary: string; // 60자 이내 총평
+  momsDiary: string; // 엄마의 현실일기 (6줄, 줄당 15자 이내)
   feedbackItems: {
     id: number;
     x: number;
     y: number;
-    title: string;
-    feedback: string;
+    title: string; // 8자 이내
+    feedback: string; // 40자 이내 (3줄)
     riskLevel: RiskLevel;
   }[];
   references: {

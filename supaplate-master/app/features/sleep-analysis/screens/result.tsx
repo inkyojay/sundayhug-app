@@ -101,6 +101,7 @@ function convertToReport(
     safetyScore,
     summary,
     scoreComment,
+    momsDiary: "", // 기존 분석 결과에는 momsDiary가 없음
     feedbackItems: convertedFeedback,
     references,
   };
