@@ -47,7 +47,6 @@ async function loadFontData(): Promise<ArrayBuffer> {
     for (const fontPath of possiblePaths) {
       try {
         const fontBuffer = await fs.readFile(fontPath);
-        console.log("Font loaded from:", fontPath);
         return fontBuffer.buffer.slice(fontBuffer.byteOffset, fontBuffer.byteOffset + fontBuffer.byteLength);
       } catch {
         // Try next path
@@ -55,7 +54,6 @@ async function loadFontData(): Promise<ArrayBuffer> {
     }
     
     // Fallback: Try Google Fonts CDN
-    console.log("Trying Google Fonts CDN...");
     const response = await fetch(
       "https://fonts.gstatic.com/s/notosanskr/v36/PbyxFmXiEBPT4ITbgNA5Cgms3VYcOA-vvnIzzuoyeLTq8H4hfeE.ttf"
     );

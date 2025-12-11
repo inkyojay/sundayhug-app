@@ -4,109 +4,108 @@
 
 ---
 
-## 📅 2025년 12월 8일 (월) - 수면 예보 기능 구현 + AI 채팅 음성 기능
+## 📅 2025년 12월 9일 (월) - AI 육아 상담 대폭 개선, BabyReels MVP, 마이페이지 아이별 활동 내역
 
 ### 🎯 주요 작업 내용
 
-#### 1. 수면 예보 기능 (Sleep Forecast) 완전 구현
+#### 1. AI 육아 상담 채팅 기능 대폭 개선
 
-**핵심 개념**
-- 아기 정보 + 오늘 컨디션 + 날씨 데이터 기반 수면 예측
-- 0~100점 점수 + good/caution/hard 레벨
-- 예보 사유 + 행동 가이드 제공
-- 매일 반복 사용되는 핵심 기능
+**채팅 안정성 개선**
+- 채팅 답변 중복 방지: 메시지 ID로 중복 체크하여 같은 답변 2번 나오는 버그 수정
+- 채팅 "튕김" 현상 해결: `window.history.replaceState` 제거로 페이지 리로드 방지
+- 채팅 메모리 유지: `useEffect` 로직 수정으로 이전 대화 내용 유지
 
-**DB 마이그레이션**
-```sql
--- baby_profiles에 수면 민감도 추가
-ALTER TABLE baby_profiles ADD COLUMN sleep_sensitivity TEXT DEFAULT 'normal' 
-  CHECK (sleep_sensitivity IN ('high', 'normal', 'low'));
+**선택한 아이 정보로 상담**
+- `babyProfileId`를 API로 전달하도록 수정
+- 첫째/둘째 등 여러 아이 중 선택한 아이의 정보로 상담 진행
+- 콘솔 로그 추가로 디버깅 용이하게
 
--- 수면 예보 로그 테이블
-CREATE TABLE forecast_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
-  baby_id UUID NOT NULL,
-  date DATE NOT NULL,
-  input_json JSONB NOT NULL,
-  score INTEGER NOT NULL CHECK (score >= 0 AND score <= 100),
-  level TEXT NOT NULL CHECK (level IN ('good', 'caution', 'hard')),
-  reasons JSONB NOT NULL,
-  actions JSONB NOT NULL,
-  weather_temp NUMERIC,
-  weather_humidity NUMERIC,
-  weather_pressure NUMERIC,
-  actual_sleep_quality TEXT, -- 사후 피드백용
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-```
+**이미지 비전 분석 기능 추가**
+- Gemini Vision API 연동
+- 사진 첨부 시 AI가 이미지 내용 분석 후 답변
+- 수면 환경 사진 분석 → 위험 요소 확인 가능
 
-**예보 로직 (Rule-based v1)**
-- 날씨 영향: 기압 < 1005 → -10점, 습도 > 75% → -5점
-- 원더윅스 시기: 5, 8, 12, 19, 26, 37주 → -10점
-- 오늘 컨디션: 낮잠 많음 -10, 기분 나쁨 -10, 예방접종/감기/이앓이 -12~15
-- 아기 성향: 예민함 -5, 잘 잠 +5
+**후속 질문 품질 개선**
+- `summarizeConversation()` 함수로 대화 요약
+- `isFollowUpQuestion()` 함수로 후속 질문 감지
+- 프롬프트에 대화 요약 + 최근 3턴 내용 포함
 
-**OpenWeather API 연동**
-- 현재 기온, 습도, 기압 실시간 조회
-- API 키 없으면 계절 기반 기본값 사용
+**음성 대화 기능 (ElevenLabs)**
+- STT (Speech-to-Text): 음성 → 텍스트 변환
+- TTS (Text-to-Speech): AI 응답 음성 재생
+- 한국어 여성 음성 (Hanna) 사용
 
-**UI 페이지** (`/customer/sleep/forecast`)
-- 아기 정보 카드 + 현재 날씨 카드
-- 이모지 버튼으로 컨디션 입력 (낮잠, 기분, 외출, 특이사항)
-- 점수 게이지 + 분석 + 행동 가이드 결과 표시
-- 면책 문구 포함
+#### 2. BabyReels - 맞춤형 육아 릴스 생성 서비스 MVP
 
-#### 2. AI 육아 상담 - ElevenLabs 음성 기능
+**수면 분석 결과 → 릴스 자동 생성 플로우**
+- 4단계 UI: 사진 업로드 → 가사 편집 → 음악 선택 → 영상 미리보기
 
-**Text-to-Speech (TTS)**
-- ElevenLabs API 연동 (`eleven_multilingual_v2` 모델)
-- 한국어 음성: "Hanna" (zgDzx5jLLCqEp6Fl7Kl7)
-- AI 답변 옆 🔊 버튼으로 음성 재생
-- 오디오 캐싱으로 재생 시 API 재호출 방지
+**AI 가사 생성 (Claude Text API)**
+- 수면 분석 결과 기반 감성적 가사 자동 생성
+- 아기 이름 포함한 개인화된 가사
 
-**Speech-to-Text (STT)**
-- 마이크 버튼으로 음성 녹음
-- ElevenLabs STT API로 텍스트 변환
-- 변환된 텍스트 입력창에 자동 입력
+**음악 생성 (Suno API)**
+- 6가지 스타일: lullaby, upbeat, emotional, hopeful, dreamy, acoustic
+- API 엔드포인트 수정 및 폴링 로직 구현
+- 에러 핸들링 및 폴백 URL 제공
 
-**음성 설정**
-- stability: 0.5
-- similarity_boost: 0.8
-- style: 0.5
-- use_speaker_boost: true
+**UI/UX 개선**
+- 브랜드 스타일 적용 (크림 배경 #F5F5F0, 오렌지 #FF6B35)
+- 버튼 텍스트 가독성 개선
 
-#### 3. AI 채팅 - 이미지 분석 기능
+#### 3. 회원가입 및 인증 개선
 
-**Gemini Vision 연동**
-- 이미지 업로드 버튼 추가
-- 업로드된 이미지를 base64로 변환
-- Gemini API에 이미지 + 텍스트 함께 전송
-- AI가 이미지 내용 분석 후 답변
+**일반 이메일 회원가입 구현**
+- 이름/닉네임 필수
+- 전화번호 필수 + SMS OTP 인증
+- 전화번호 중복 체크 (카카오/네이버/이메일 계정 통합)
+- 이메일 인증 없이 바로 로그인 가능 (Admin API 사용)
 
-**메시지 저장**
-- `chat_messages.image_url` 컬럼에 이미지 URL 저장
-- 채팅 히스토리에서 이미지 표시
+**비밀번호 찾기 기능**
+- 이메일 입력 → 등록된 전화번호로 OTP 발송
+- OTP 인증 후 새 비밀번호 설정
+- 전화번호 마스킹 표시 (010-****-5837)
 
-#### 4. AI 응답 최적화
+**카카오 로그인 개선**
+- 직접 Kakao REST API 호출 (scope 세부 제어)
+- 전화번호 포함 사용자 정보 수집
 
-**시스템 프롬프트 조정**
-- 간결하고 핵심적인 답변 우선
-- 필요시에만 상세 설명
-- 마크다운 사용 금지, 자연스러운 대화체
+#### 4. 마이페이지 - 우리 아이 섹션 신규
 
-#### 5. UI 개선
+**아이 목록 표시**
+- 등록된 모든 아이 카드로 표시
+- 아이 추가 버튼
 
-**채팅 UI → 썬데이허그 브랜드 스타일 복원**
-- 오렌지 브랜드 컬러 (#FF6B35)
-- 크림색 배경 (#F5F5F0)
-- 말풍선 스타일 메시지
-- 사용자 오른쪽 / AI 왼쪽 배치
-- 원형 아바타 (Bot, User 아이콘)
+**아이별 활동 내역 페이지** (`/customer/mypage/baby-history?id=xxx`)
+- 선택한 아이의 프로필 정보
+- 해당 아이의 채팅 상담 내역 리스트
+- 해당 아이의 수면 분석 내역 리스트
+- 새 상담/분석 시작 바로가기
 
-**수면 허브 페이지 업데이트**
-- "수면 예보" 버튼: "준비중" → "NEW" 활성화
-- `/customer/sleep/forecast`로 연결
+#### 5. 아기 정보 등록 개선
+
+**필수값 강화**
+- "아기 이름 또는 별명" 필수
+- 생년월일 필수
+
+**동적 필드 표시**
+- 12개월 미만: 수유 방식 (모유/분유/혼합)
+- 24개월 미만: 성별, 수면 민감도
+- 24개월 이상: 기본 정보만
+
+#### 6. 기타 UI/UX 개선
+
+**테마 관리**
+- 기본 테마: 라이트 모드
+- 3단계 토글: 시스템 → 라이트 → 다크
+
+**채팅 화면 모바일 최적화**
+- 채팅방 진입 시 헤더/하단 네비게이션 숨김
+- 전체 화면으로 채팅 집중
+
+**수면 예보 페이지 활성화**
+- `/customer/sleep/forecast` 라우트 활성화
+- 수면 허브에서 접근 가능
 
 ---
 
@@ -114,62 +113,91 @@ CREATE TABLE forecast_logs (
 
 ```
 신규 파일:
-app/features/sleep-forecast/
-├── lib/
-│   ├── types.ts              # 타입 정의 (BabyProfile, TodayStatus, WeatherData, SleepForecast)
-│   ├── forecast.server.ts    # 예보 로직 (calcSleepForecast)
-│   └── weather.server.ts     # OpenWeather API 연동
-├── api/
-│   └── forecast.tsx          # POST /api/sleep-forecast
-└── screens/
-    └── forecast.tsx          # 수면 예보 UI 페이지
-
-app/features/chat/api/
-├── text-to-speech.tsx        # ElevenLabs TTS API
-└── speech-to-text.tsx        # ElevenLabs STT API
+app/features/customer/screens/mypage/baby-history.tsx     # 아이별 활동 내역 페이지
+app/features/customer/screens/forgot-password.tsx         # 비밀번호 찾기 페이지
+app/features/auth/screens/logout.tsx                      # 로그아웃 처리
+app/features/auth/api/check-phone.tsx                     # 전화번호 중복 체크 API
+app/features/chat/api/speech-to-text.tsx                  # STT API (ElevenLabs)
+app/features/chat/api/text-to-speech.tsx                  # TTS API (ElevenLabs)
+app/features/baby-reels/screens/create-reels.tsx          # 릴스 생성 페이지
+app/features/baby-reels/api/generate-lyrics.tsx           # 가사 생성 API
+app/features/baby-reels/api/generate-music.tsx            # 음악 생성 API
+app/features/baby-reels/lib/suno.server.ts                # Suno API 클라이언트
+app/features/sleep-forecast/screens/forecast.tsx          # 수면 예보 페이지
 
 수정 파일:
-app/features/chat/screens/chat-room.tsx    # 음성 녹음/재생, 이미지 업로드, UI 복원
-app/features/chat/api/send-message.tsx     # 이미지 분석, 응답 최적화
-app/features/customer/screens/sleep-hub.tsx # 수면 예보 버튼 활성화
-app/routes.ts                              # 신규 라우트 추가
+app/features/chat/screens/chat-room.tsx                   # 채팅 안정성, 음성 대화, 이미지 비전
+app/features/chat/screens/chat-list.tsx                   # 다중 아이 지원
+app/features/chat/screens/baby-profile.tsx                # 동적 필드, 프로필 수정
+app/features/chat/api/send-message.tsx                    # Gemini Vision, 대화 품질 개선
+app/features/customer/screens/register.tsx                # 이메일 회원가입, OTP 인증
+app/features/customer/screens/login.tsx                   # 비밀번호 찾기 링크
+app/features/customer/screens/home.tsx                    # 테마 토글
+app/features/customer/screens/mypage/index.tsx            # 우리 아이 섹션
+app/features/customer/screens/sleep-hub.tsx               # 수면 예보 활성화
+app/features/customer/layouts/customer.layout.tsx         # 채팅방 네비 숨김, 로그아웃 수정
+app/features/sleep-analysis/components/analysis-result.tsx # 릴스 만들기 버튼
+app/features/auth/api/verify-otp.tsx                      # OTP 검증 로직 분리
+app/root.tsx                                              # 기본 테마 라이트
+app/routes.ts                                             # 신규 라우트 추가
 ```
 
 ---
 
-### 🔑 환경변수
+### 🗄️ 데이터베이스 변경
 
-```bash
-# ElevenLabs (음성)
-ELEVENLABS_API_KEY=sk_xxx
+```sql
+-- BabyReels 관련 테이블 (생성 예정 또는 생성됨)
+baby_reels_projects
+baby_reels_photos
+project_lyrics
+project_music
+project_videos
 
-# OpenWeather (날씨) - 선택, 없으면 기본값 사용
-OPENWEATHER_API_KEY=xxx
+-- 기존 테이블 활용
+baby_profiles (gender, sleep_sensitivity 컬럼 활용)
+chat_sessions (baby_id로 아이별 필터링)
+sleep_analyses (baby_id로 아이별 필터링)
+phone_otp_verifications (비밀번호 찾기에도 사용)
+```
+
+---
+
+### 🔑 환경 변수 추가
+
+```
+SUNO_API_KEY=xxx              # Suno 음악 생성 API
+ELEVENLABS_API_KEY=xxx        # ElevenLabs TTS/STT
+SOLAPI_API_KEY=xxx            # SMS OTP 발송
+SOLAPI_API_SECRET=xxx         # SMS OTP 발송
 ```
 
 ---
 
 ### ✅ 완료된 TODO
 
-- [x] 수면 예보 DB 마이그레이션 (forecast_logs, sleep_sensitivity)
-- [x] 예보 로직 함수 구현 (calcSleepForecast)
-- [x] OpenWeather API 연동
-- [x] 수면 예보 API 엔드포인트 (/api/sleep-forecast)
-- [x] 수면 예보 UI 페이지 (/customer/sleep/forecast)
-- [x] 홈/허브 페이지 연동
-- [x] ElevenLabs TTS 연동 (AI 답변 음성 재생)
-- [x] ElevenLabs STT 연동 (음성 입력)
-- [x] Gemini Vision 이미지 분석 연동
-- [x] 채팅 UI 썬데이허그 스타일 복원
+- [x] 채팅 답변 중복 방지
+- [x] 선택한 아이 정보로 상담하기
+- [x] 이미지 비전 분석 (Gemini Vision)
+- [x] 채팅 품질 개선 (대화 요약, 후속 질문)
+- [x] 음성 대화 기능 (ElevenLabs STT/TTS)
+- [x] BabyReels MVP (가사 생성, 음악 생성)
+- [x] 일반 이메일 회원가입 + SMS 인증
+- [x] 비밀번호 찾기 기능
+- [x] 전화번호 중복 체크
+- [x] 마이페이지 우리 아이 섹션
+- [x] 아이별 활동 내역 페이지
+- [x] 아기 정보 동적 필드
+- [x] 기본 테마 라이트 모드
 
 ---
 
 ### 🔜 향후 작업 예정
 
-- [ ] 수면 예보 사후 피드백 기능 (실제 수면 품질 입력)
-- [ ] 예보 정확도 추적 및 ML 모델 개선
-- [ ] 푸시 알림 (저녁에 예보 리마인더)
-- [ ] 주간/월간 수면 리포트
+- [ ] BabyReels 영상 렌더링 (Remotion)
+- [ ] 인스타그램 카드 뉴스 다운로드 개선
+- [ ] 메인 브랜치 배포 준비
+- [ ] AI 썸네일 생성 (Vertex AI Imagen)
 
 ---
 

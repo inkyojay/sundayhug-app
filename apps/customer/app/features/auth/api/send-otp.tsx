@@ -67,7 +67,6 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     // SMS로 인증번호 발송
-    console.log("📱 SMS 발송 시작:", normalizedPhone);
     const sendResult = await sendSmsOTP(normalizedPhone, otp);
 
     if (!sendResult.success) {

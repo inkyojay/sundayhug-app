@@ -180,8 +180,6 @@ async function searchKnowledge(topic: string, ageRange: string, query: string) {
     }
 
     if (vectorMatches && vectorMatches.length > 0) {
-      console.log(`✅ 벡터 검색 성공: ${vectorMatches.length}개 결과 (유사도: ${vectorMatches[0]?.similarity?.toFixed(3)})`);
-      
       // 사용량 카운트 업데이트
       for (const match of vectorMatches.slice(0, 3)) {
         await adminClient.rpc('increment_knowledge_usage', { knowledge_id: match.id });
@@ -207,8 +205,6 @@ async function searchKnowledge(topic: string, ageRange: string, query: string) {
 
 // 폴백: 키워드 기반 검색 (벡터 검색 실패 시)
 async function fallbackKeywordSearch(topic: string, ageRange: string, query: string) {
-  console.log("⚠️ 폴백: 키워드 기반 검색");
-  
   const { data: matches } = await adminClient
     .from("chat_knowledge")
     .select("id, question, answer, source_name, source_url, tags")
@@ -298,7 +294,6 @@ export async function action({ request }: Route.ActionArgs) {
     const arrayBuffer = await imageFile.arrayBuffer();
     imageBase64 = Buffer.from(arrayBuffer).toString("base64");
     imageMimeType = imageFile.type || "image/jpeg";
-    console.log(`📷 이미지 첨부: ${imageFile.name} (${(imageFile.size / 1024).toFixed(1)}KB)`);
   }
 
   try {
@@ -306,27 +301,22 @@ export async function action({ request }: Route.ActionArgs) {
 
     // 아기 프로필 가져오기 (선택된 아이 또는 첫 번째 아이)
     let babyProfile = null;
-    console.log(`👶 전달받은 babyProfileId: ${babyProfileId || "없음"}`);
     
     if (babyProfileId) {
-      const { data: selectedProfile, error } = await supabase
+      const { data: selectedProfile } = await supabase
         .from("baby_profiles")
         .select("*")
         .eq("id", babyProfileId)
         .eq("user_id", user.id)
         .single();
       
-      if (error) {
-        console.log(`⚠️ 아이 프로필 조회 실패: ${error.message}`);
-      } else {
+      if (selectedProfile) {
         babyProfile = selectedProfile;
-        console.log(`✅ 선택된 아이: ${selectedProfile?.name} (${calculateMonths(selectedProfile?.birth_date)}개월)`);
       }
     }
     
     // 선택된 아이가 없으면 첫 번째 아이 사용
     if (!babyProfile) {
-      console.log(`⚠️ 선택된 아이가 없어 첫 번째 아이를 사용합니다.`);
       const { data: firstProfile } = await supabase
         .from("baby_profiles")
         .select("*")
@@ -335,9 +325,6 @@ export async function action({ request }: Route.ActionArgs) {
         .limit(1)
         .single();
       babyProfile = firstProfile;
-      if (firstProfile) {
-        console.log(`✅ 첫 번째 아이 사용: ${firstProfile.name}`);
-      }
     }
 
     const babyMonths = babyProfile?.birth_date 
@@ -419,7 +406,6 @@ export async function action({ request }: Route.ActionArgs) {
 
     // 후속 질문 여부 감지
     const isFollowUp = isFollowUpQuestion(message);
-    console.log(`📝 질문 분석: "${message.slice(0, 30)}..." | 후속질문: ${isFollowUp}`);
     
     // 이전 대화 히스토리 구성 (개선된 버전)
     const conversationHistory = formatConversationHistory(
@@ -441,7 +427,6 @@ ${imageBase64 ? "\n(참고: 사용자가 이미지를 첨부했습니다. 이미
     
     if (imageBase64 && imageMimeType) {
       // 이미지가 있으면 Vision 모델 사용
-      console.log("🖼️ Gemini Vision API 호출 (이미지 분석)");
       const response = await ai.models.generateContent({
         model: "gemini-2.0-flash",
         contents: [

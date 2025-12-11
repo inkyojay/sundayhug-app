@@ -268,8 +268,6 @@ export async function action({ request, params }: Route.ActionArgs) {
   const formData = await request.formData();
   const actionType = formData.get("action") as string;
 
-  console.log("Detail action received:", { id, actionType });
-
   // 주문 검색
   if (actionType === "searchOrders") {
     const searchQuery = formData.get("searchQuery") as string;
@@ -412,8 +410,6 @@ export async function action({ request, params }: Route.ActionArgs) {
       .select("*, customers(name)")
       .single();
 
-    console.log("Detail approve result:", { data, error });
-
     if (error) {
       console.error("승인 오류:", error);
       return { success: false, error: `승인 실패: ${error.message}` };
@@ -470,8 +466,6 @@ export async function action({ request, params }: Route.ActionArgs) {
       .eq("id", id)
       .select("*, customers(name)")
       .single();
-
-    console.log("Detail reject result:", { data, error });
 
     if (error) {
       console.error("거절 오류:", error);

@@ -98,8 +98,6 @@ export async function sendAlimtalkOTP(
   };
 
   try {
-    console.log("📤 알림톡 발송 요청:", JSON.stringify(requestBody, null, 2));
-    
     const response = await fetch("https://api.solapi.com/messages/v4/send-many", {
       method: "POST",
       headers: {
@@ -110,7 +108,6 @@ export async function sendAlimtalkOTP(
     });
 
     const result = await response.json();
-    console.log("📥 알림톡 응답:", JSON.stringify(result, null, 2));
 
     if (!response.ok) {
       console.error("❌ Solapi API Error:", result);
@@ -195,8 +192,6 @@ export async function sendWarrantyApprovalAlimtalk(
   };
 
   try {
-    console.log("📤 보증서 승인 알림톡 발송 요청:", JSON.stringify(requestBody, null, 2));
-    
     const response = await fetch("https://api.solapi.com/messages/v4/send", {
       method: "POST",
       headers: {
@@ -207,7 +202,6 @@ export async function sendWarrantyApprovalAlimtalk(
     });
 
     const result = await response.json();
-    console.log("📥 알림톡 응답:", JSON.stringify(result, null, 2));
 
     if (!response.ok) {
       console.error("❌ Solapi 알림톡 Error:", result);
@@ -282,8 +276,6 @@ export async function sendWarrantyRejectionAlimtalk(
   };
 
   try {
-    console.log("📤 보증서 거절 알림톡 발송 요청:", JSON.stringify(requestBody, null, 2));
-    
     const response = await fetch("https://api.solapi.com/messages/v4/send", {
       method: "POST",
       headers: {
@@ -294,7 +286,6 @@ export async function sendWarrantyRejectionAlimtalk(
     });
 
     const result = await response.json();
-    console.log("📥 알림톡 응답:", JSON.stringify(result, null, 2));
 
     if (!response.ok) {
       console.error("❌ Solapi 알림톡 Error:", result);
@@ -355,10 +346,6 @@ export async function sendSmsOTP(
   };
 
   try {
-    console.log("📤 SMS 발송 요청:", JSON.stringify(requestBody, null, 2));
-    console.log("📤 발신번호:", config.senderNumber);
-    console.log("📤 수신번호:", formattedPhone);
-    
     const response = await fetch("https://api.solapi.com/messages/v4/send", {
       method: "POST",
       headers: {
@@ -369,7 +356,6 @@ export async function sendSmsOTP(
     });
 
     const result = await response.json();
-    console.log("📥 SMS 응답:", JSON.stringify(result, null, 2));
 
     if (!response.ok) {
       console.error("❌ Solapi SMS Error:", result);

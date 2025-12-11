@@ -52,7 +52,6 @@ function getRandomVoice() {
 // Google Cloud TTS API 호출
 async function synthesizeSpeech(text: string, apiKey: string): Promise<{ audio: ArrayBuffer; voice: string }> {
   const selectedVoice = getRandomVoice();
-  console.log(`[TTS] 선택된 목소리: ${selectedVoice.label} (${selectedVoice.name})`);
   
   const response = await fetch(
     `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
@@ -142,9 +141,7 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     // 4. Google TTS API 호출
-    console.log(`[TTS] 오디오 생성 시작: ${post.title}`);
     const { audio: audioBuffer, voice: selectedVoice } = await synthesizeSpeech(plainText, googleTtsApiKey);
-    console.log(`[TTS] 사용된 목소리: ${selectedVoice}`);
 
     // 5. Supabase Storage에 업로드
     const fileName = `${postId}.mp3`;

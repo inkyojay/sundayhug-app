@@ -66,8 +66,6 @@ export async function action({ request }: Route.ActionArgs) {
   const actionType = formData.get("action") as string;
   const rejectionReason = formData.get("rejectionReason") as string;
 
-  console.log("Action received:", { warrantyId, actionType, rejectionReason });
-
   if (actionType === "approve") {
     // 승인 처리
     const today = new Date();
@@ -89,8 +87,6 @@ export async function action({ request }: Route.ActionArgs) {
       .eq("id", warrantyId)
       .select("*, customers(name)")
       .single();
-
-    console.log("Approve result:", { data, error });
 
     if (error) {
       console.error("Approve error:", error);
@@ -143,8 +139,6 @@ export async function action({ request }: Route.ActionArgs) {
       .eq("id", warrantyId)
       .select("*, customers(name)")
       .single();
-
-    console.log("Reject result:", { data, error });
 
     if (error) {
       console.error("Reject error:", error);

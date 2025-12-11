@@ -239,7 +239,6 @@ export default function CreateReelsScreen() {
 
   // 가사 생성
   const generateLyrics = async () => {
-    console.log("🎵 가사 생성 시작", { analysisId: analysis.id, summary: analysis.summary });
     setIsGeneratingLyrics(true);
     
     try {
@@ -253,9 +252,7 @@ export default function CreateReelsScreen() {
         }),
       });
 
-      console.log("📡 API 응답 상태:", response.status);
       const result = await response.json();
-      console.log("📝 API 응답:", result);
       
       if (result.success) {
         setLyricsTitle(result.title);

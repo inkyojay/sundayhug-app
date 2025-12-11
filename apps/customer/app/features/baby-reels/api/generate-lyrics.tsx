@@ -50,8 +50,6 @@ JSON 형식으로 응답해주세요:
 }`;
 
 export async function action({ request }: Route.ActionArgs) {
-  console.log("🎵 가사 생성 API 호출됨");
-  
   if (request.method !== "POST") {
     return data({ success: false, error: "Method not allowed" }, { status: 405 });
   }
@@ -60,14 +58,12 @@ export async function action({ request }: Route.ActionArgs) {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
-    console.log("❌ 로그인 필요");
     return data({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
   }
 
   try {
     const body = await request.json();
     const { analysisId, babyName, feedback } = body;
-    console.log("📝 가사 생성 요청:", { analysisId, babyName, hasFeedback: !!feedback });
 
     if (!analysisId) {
       return data({ success: false, error: "분석 ID가 필요합니다." }, { status: 400 });
@@ -88,8 +84,6 @@ export async function action({ request }: Route.ActionArgs) {
     } else {
       feedbackText = String(feedbackContent);
     }
-    
-    console.log("📄 가사 생성용 피드백:", feedbackText.substring(0, 200) + "...");
 
     // 프롬프트 생성
     const prompt = LYRICS_PROMPT

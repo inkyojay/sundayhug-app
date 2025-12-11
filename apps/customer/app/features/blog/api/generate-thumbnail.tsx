@@ -53,8 +53,6 @@ Style requirements:
 - Korean modern home interior style
 - Safe, warm, comforting atmosphere`;
 
-    console.log("[Thumbnail] Vertex AI Imagen 3.0 호출 시작...");
-
     // Vertex AI REST API 호출 (API Key 방식)
     const endpoint = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:predict?key=${apiKey}`;
 
@@ -97,7 +95,6 @@ Style requirements:
     }
 
     const result = await response.json();
-    console.log("[Thumbnail] Vertex AI 응답 성공");
 
     // 이미지 데이터 추출
     let imageBase64: string | null = null;
