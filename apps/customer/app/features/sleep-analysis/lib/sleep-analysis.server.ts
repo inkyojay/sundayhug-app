@@ -65,8 +65,6 @@ export async function saveSleepAnalysis(
     scoreComment: report.scoreComment,
   });
 
-  console.log("📝 Saving analysis with summary length:", summaryJson.length);
-
   const { data, error } = await supabase
     .from("sleep_analyses")
     .insert({
@@ -87,7 +85,6 @@ export async function saveSleepAnalysis(
     throw new Error(`Failed to save analysis: ${error.message}`);
   }
 
-  console.log("✅ Analysis saved with ID:", data.id);
   return data.id;
 }
 

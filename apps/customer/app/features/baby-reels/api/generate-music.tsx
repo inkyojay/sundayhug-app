@@ -15,7 +15,6 @@ async function waitForMusic(taskId: string, maxAttempts = 12, delayMs = 5000): P
     await new Promise(resolve => setTimeout(resolve, delayMs));
     
     const status = await checkMusicStatus(taskId);
-    console.log(`폴링 ${i + 1}/${maxAttempts}:`, status);
     
     if (status.audioUrl) {
       return { audioUrl: status.audioUrl };
@@ -68,15 +67,12 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     // Suno API로 음악 생성 요청
-    console.log("🎵 음악 생성 요청:", { title, style });
     const result = await generateMusic({
       prompt: title || "우리 아기를 위한 노래",
       lyrics,
       style: style as keyof typeof MUSIC_PRESETS,
       title,
     });
-
-    console.log("🎵 음악 생성 결과:", result);
 
     if (!result.success) {
       // 프로젝트 상태 실패로 업데이트
@@ -118,7 +114,6 @@ export async function action({ request }: Route.ActionArgs) {
 
     // taskId가 있으면 폴링으로 결과 대기 (최대 60초)
     if (result.trackId) {
-      console.log("🎵 폴링 시작:", result.trackId);
       const pollResult = await waitForMusic(result.trackId, 12, 5000);
       
       if (pollResult.audioUrl) {

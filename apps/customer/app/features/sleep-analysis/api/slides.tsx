@@ -119,21 +119,16 @@ export async function action({ request, params }: Route.ActionArgs) {
       imageDataUrl = isDataUrl 
         ? result.image_base64 
         : `data:image/jpeg;base64,${result.image_base64}`;
-      console.log("📷 Using existing base64 image");
     } else if (result.image_url) {
       // Storage에서 다운로드 후 data URL로 변환
-      console.log("📥 Downloading image from Storage:", result.image_url);
       const { buffer, contentType } = await downloadImageFromUrl(result.image_url);
       imageDataUrl = `data:${contentType};base64,${buffer.toString("base64")}`;
-      console.log(`📷 Downloaded image, type: ${contentType}, size: ${buffer.length}`);
     }
 
     // Generate slides as PNG
-    console.log(`📊 Generating PNG slides for analysis ${id}...`);
     let pngBuffers: Buffer[];
     try {
       pngBuffers = await generateAllSlidesAsPng(report, imageDataUrl);
-      console.log(`✅ Generated ${pngBuffers.length} PNG slides`);
     } catch (slideError) {
       console.error("슬라이드 생성 에러:", slideError);
       return data(
@@ -144,7 +139,6 @@ export async function action({ request, params }: Route.ActionArgs) {
 
     // Upload to Storage
     const slideUrls = await uploadSlidesToStorage(adminClient, pngBuffers, id);
-    console.log(`✅ Uploaded ${slideUrls.length} slides to Storage`);
 
     // Update database using adminClient (bypasses RLS)
     const { error: updateError } = await adminClient
@@ -156,7 +150,6 @@ export async function action({ request, params }: Route.ActionArgs) {
       console.error("Failed to update slides in DB:", updateError);
       throw new Error(`DB update failed: ${updateError.message}`);
     }
-    console.log(`✅ Updated slides in database`);
 
     return data({
       success: true,

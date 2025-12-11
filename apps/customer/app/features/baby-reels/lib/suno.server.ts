@@ -107,7 +107,6 @@ export async function generateMusic(request: SunoGenerateRequest): Promise<SunoG
     }
 
     const result = await response.json();
-    console.log("Suno API 응답:", JSON.stringify(result, null, 2));
     
     // 응답 형식: { code: 200, msg: "success", data: { taskId: "xxx" } }
     if (result.code === 200 && result.data?.taskId) {
@@ -154,7 +153,6 @@ export async function checkMusicStatus(taskId: string): Promise<SunoGenerateResp
     }
 
     const result = await response.json();
-    console.log("Suno 상태 확인 응답:", JSON.stringify(result, null, 2));
     
     // 응답 형식: { code: 200, msg: "success", data: { response: { sunoData: [...] }, status: "..." } }
     if (result.code === 200 && result.data?.response?.sunoData) {
@@ -225,7 +223,6 @@ export async function getRemainingCredits(): Promise<{ success: boolean; credits
     }
 
     const result = await response.json();
-    console.log("크레딧 확인 응답:", JSON.stringify(result, null, 2));
     
     if (result.code === 200) {
       return { success: true, credits: result.data?.credits || result.data?.remainingCredits };
