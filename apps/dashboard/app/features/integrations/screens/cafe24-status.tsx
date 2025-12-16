@@ -16,16 +16,12 @@ import {
   XCircle, 
   RefreshCw, 
   Clock, 
-  ExternalLink,
   AlertTriangle,
   ShoppingBag,
   KeyRound,
   Shield,
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { CAFE24_CONFIG, isTokenExpired } from "../lib/cafe24.server";
-
-const MALL_ID = CAFE24_CONFIG.mallId;
 
 interface TokenData {
   mall_id: string;
@@ -39,7 +35,25 @@ interface TokenData {
   updated_at: string;
 }
 
+// loader에서 클라이언트로 전달할 데이터 타입
+interface LoaderData {
+  tokenData: TokenData | null;
+  error: string | null;
+  configValid: boolean;
+  missingConfig: string[];
+  mallId: string;
+  isExpired: boolean;
+  configStatus: {
+    clientId: boolean;
+    clientSecret: boolean;
+    authServer: boolean;
+  };
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
+  // 서버 모듈 동적 import (클라이언트 번들에 포함되지 않음)
+  const { CAFE24_CONFIG, isTokenExpired } = await import("../lib/cafe24.server");
+  
   const [supabase, headers] = makeServerClient(request);
   
   // 인증 확인
@@ -54,7 +68,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   let configValid = true;
   let missingConfig: string[] = [];
 
-  // 설정 확인
+  // 설정 확인 (서버에서만)
   const required = ["clientId", "clientSecret", "authServer"];
   missingConfig = required.filter(
     (key) => !CAFE24_CONFIG[key as keyof typeof CAFE24_CONFIG]
@@ -65,7 +79,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const { data: dbData, error: dbError } = await supabase
     .from("cafe24_tokens")
     .select("*")
-    .eq("mall_id", MALL_ID)
+    .eq("mall_id", CAFE24_CONFIG.mallId)
     .single();
 
   if (dbError && dbError.code !== "PGRST116") {
@@ -74,16 +88,37 @@ export async function loader({ request }: Route.LoaderArgs) {
     tokenData = dbData;
   }
 
-  return data({
+  // 토큰 만료 여부 (서버에서 계산)
+  const expired = tokenData ? isTokenExpired(tokenData.expires_at) : true;
+
+  // 환경 변수 상태 (서버에서 확인)
+  const configStatus = {
+    clientId: !!CAFE24_CONFIG.clientId,
+    clientSecret: !!CAFE24_CONFIG.clientSecret,
+    authServer: !!CAFE24_CONFIG.authServer,
+  };
+
+  return data<LoaderData>({
     tokenData,
     error,
     configValid,
     missingConfig,
+    mallId: CAFE24_CONFIG.mallId,
+    isExpired: expired,
+    configStatus,
   }, { headers });
 }
 
 export default function Cafe24StatusPage({ loaderData }: Route.ComponentProps) {
-  const { tokenData, error, configValid, missingConfig } = loaderData;
+  const { 
+    tokenData, 
+    error, 
+    configValid, 
+    missingConfig, 
+    mallId, 
+    isExpired: expired,
+    configStatus,
+  } = loaderData;
   const [searchParams] = useSearchParams();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -106,10 +141,9 @@ export default function Cafe24StatusPage({ loaderData }: Route.ComponentProps) {
     }
   }, [searchParams]);
 
-  // 토큰 상태 계산
+  // 토큰 상태 계산 (클라이언트에서)
   const now = new Date();
   const expiresAt = tokenData?.expires_at ? new Date(tokenData.expires_at) : null;
-  const expired = tokenData ? isTokenExpired(tokenData.expires_at) : true;
   const remainingSeconds = expiresAt 
     ? Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000)) 
     : 0;
@@ -221,7 +255,7 @@ export default function Cafe24StatusPage({ loaderData }: Route.ComponentProps) {
             API 토큰 상태
           </CardTitle>
           <CardDescription>
-            쇼핑몰 ID: {MALL_ID}
+            쇼핑몰 ID: {mallId}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -379,20 +413,20 @@ export default function Cafe24StatusPage({ loaderData }: Route.ComponentProps) {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between items-center p-2 bg-muted rounded">
               <code>CAFE24_CLIENT_ID</code>
-              <Badge variant={CAFE24_CONFIG.clientId ? "default" : "destructive"}>
-                {CAFE24_CONFIG.clientId ? "설정됨" : "미설정"}
+              <Badge variant={configStatus.clientId ? "default" : "destructive"}>
+                {configStatus.clientId ? "설정됨" : "미설정"}
               </Badge>
             </div>
             <div className="flex justify-between items-center p-2 bg-muted rounded">
               <code>CAFE24_CLIENT_SECRET</code>
-              <Badge variant={CAFE24_CONFIG.clientSecret ? "default" : "destructive"}>
-                {CAFE24_CONFIG.clientSecret ? "설정됨" : "미설정"}
+              <Badge variant={configStatus.clientSecret ? "default" : "destructive"}>
+                {configStatus.clientSecret ? "설정됨" : "미설정"}
               </Badge>
             </div>
             <div className="flex justify-between items-center p-2 bg-muted rounded">
               <code>CAFE24_AUTH_SERVER</code>
-              <Badge variant={CAFE24_CONFIG.authServer ? "default" : "destructive"}>
-                {CAFE24_CONFIG.authServer ? "설정됨" : "미설정"}
+              <Badge variant={configStatus.authServer ? "default" : "destructive"}>
+                {configStatus.authServer ? "설정됨" : "미설정"}
               </Badge>
             </div>
           </div>
