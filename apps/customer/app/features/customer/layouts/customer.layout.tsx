@@ -23,11 +23,14 @@ import { Button } from "~/core/components/ui/button";
 import { cn } from "~/core/lib/utils";
 import makeServerClient from "~/core/lib/supa-client.server";
 
+// Feature Flags - main-ready에서 블로그 미노출
+const SHOW_BLOG = false;
+
 const navItems = [
   { label: "홈", href: "/customer" },
   { label: "수면 분석", href: "/customer/sleep" },
   { label: "정품 인증", href: "/customer/warranty" },
-  { label: "블로그", href: "/customer/blog" },
+  ...(SHOW_BLOG ? [{ label: "블로그", href: "/customer/blog" }] : []),
 ];
 
 const mobileNavItems = [

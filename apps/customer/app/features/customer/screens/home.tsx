@@ -34,10 +34,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
   const { data: { user } } = await supabase.auth.getUser();
   
-  // Feature Flags (환경변수 기반 - Vercel Production에서만 false 설정)
+  // Feature Flags - main-ready에서는 비활성화
   const features = {
-    chatEnabled: process.env.FEATURE_CHAT_ENABLED !== 'false',
-    blogEnabled: process.env.FEATURE_BLOG_ENABLED !== 'false',
+    chatEnabled: false, // 육아상담 비활성화
+    blogEnabled: false, // 블로그 비활성화
   };
   
   if (user) {

@@ -100,6 +100,11 @@ const statusConfig: Record<string, { label: string; color: string; icon: any }> 
   rejected: { label: "반려", color: "bg-red-100 text-red-700", icon: XCircle },
 };
 
+// Feature Flags - main-ready에서 미노출
+const SHOW_REVIEW_CARD = false;
+const SHOW_POINTS_CARD = false;
+const SHOW_REVIEW_HISTORY = false;
+
 export default function CustomerMypageIndexScreen() {
   const { user, reviewSubmissions, reviewCounts } = useLoaderData<typeof loader>();
 
@@ -237,65 +242,69 @@ export default function CustomerMypageIndexScreen() {
           </Link>
 
           {/* 후기 인증 - Small White Card with Gradient */}
-          <Link 
-            to="/customer/mypage/review-submit"
-            className="group"
-          >
-            <div className="h-full min-h-[130px] md:min-h-[170px] bg-gradient-to-br from-pink-500 to-orange-400 rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02]">
-              <div className="flex justify-between items-start">
-                <p className="text-white/80 text-xs font-medium tracking-wider uppercase">
-                  Review
-                </p>
-                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                  <Gift className="w-5 h-5 text-white" />
+          {SHOW_REVIEW_CARD && (
+            <Link 
+              to="/customer/mypage/review-submit"
+              className="group"
+            >
+              <div className="h-full min-h-[130px] md:min-h-[170px] bg-gradient-to-br from-pink-500 to-orange-400 rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02]">
+                <div className="flex justify-between items-start">
+                  <p className="text-white/80 text-xs font-medium tracking-wider uppercase">
+                    Review
+                  </p>
+                  <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                    <Gift className="w-5 h-5 text-white" />
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="text-white text-lg md:text-xl font-bold">
+                    후기 인증
+                  </h3>
+                  {reviewCounts.total > 0 && (
+                    <p className="text-white/80 text-xs mt-1">
+                      {reviewCounts.pending > 0 && `대기 ${reviewCounts.pending}건`}
+                      {reviewCounts.pending > 0 && reviewCounts.approved > 0 && " · "}
+                      {reviewCounts.approved > 0 && `승인 ${reviewCounts.approved}건`}
+                    </p>
+                  )}
                 </div>
               </div>
-              
-              <div>
-                <h3 className="text-white text-lg md:text-xl font-bold">
-                  후기 인증
-                </h3>
-                {reviewCounts.total > 0 && (
-                  <p className="text-white/80 text-xs mt-1">
-                    {reviewCounts.pending > 0 && `대기 ${reviewCounts.pending}건`}
-                    {reviewCounts.pending > 0 && reviewCounts.approved > 0 && " · "}
-                    {reviewCounts.approved > 0 && `승인 ${reviewCounts.approved}건`}
-                  </p>
-                )}
-              </div>
-            </div>
-          </Link>
+            </Link>
+          )}
 
           {/* 포인트 - Small Card with Gold Gradient */}
-          <Link 
-            to="/customer/mypage/points"
-            className="group"
-          >
-            <div className="h-full min-h-[130px] md:min-h-[170px] bg-gradient-to-br from-amber-400 to-yellow-500 rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02]">
-              <div className="flex justify-between items-start">
-                <p className="text-white/90 text-xs font-medium tracking-wider uppercase">
-                  Points
-                </p>
-                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                  <Coins className="w-5 h-5 text-white" />
+          {SHOW_POINTS_CARD && (
+            <Link 
+              to="/customer/mypage/points"
+              className="group"
+            >
+              <div className="h-full min-h-[130px] md:min-h-[170px] bg-gradient-to-br from-amber-400 to-yellow-500 rounded-3xl p-5 md:p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:scale-[1.02]">
+                <div className="flex justify-between items-start">
+                  <p className="text-white/90 text-xs font-medium tracking-wider uppercase">
+                    Points
+                  </p>
+                  <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                    <Coins className="w-5 h-5 text-white" />
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="text-white text-2xl md:text-3xl font-bold">
+                    {user.points.toLocaleString()}
+                    <span className="text-lg ml-1">P</span>
+                  </h3>
+                  <p className="text-white/80 text-xs mt-1">
+                    포인트 내역 보기
+                  </p>
                 </div>
               </div>
-              
-              <div>
-                <h3 className="text-white text-2xl md:text-3xl font-bold">
-                  {user.points.toLocaleString()}
-                  <span className="text-lg ml-1">P</span>
-                </h3>
-                <p className="text-white/80 text-xs mt-1">
-                  포인트 내역 보기
-                </p>
-              </div>
-            </div>
-          </Link>
+            </Link>
+          )}
         </div>
 
         {/* 후기 인증 내역 섹션 */}
-        {reviewSubmissions.length > 0 && (
+        {SHOW_REVIEW_HISTORY && reviewSubmissions.length > 0 && (
           <div className="mt-8">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-900">후기 인증 내역</h2>
