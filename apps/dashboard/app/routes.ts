@@ -52,6 +52,17 @@ export default [
       route("/generate-thumbnail", "features/blog/api/generate-thumbnail.tsx"),
       route("/generate-slug", "features/blog/api/generate-slug.tsx"),
     ]),
+    // 연동 API
+    ...prefix("/integrations", [
+      ...prefix("/cafe24", [
+        route("/token", "features/integrations/api/cafe24-token.tsx"),
+        route("/refresh", "features/integrations/api/cafe24-refresh.tsx"),
+        ...prefix("/auth", [
+          route("/start", "features/integrations/api/cafe24-auth-start.tsx"),
+          route("/callback", "features/integrations/api/cafe24-auth-callback.tsx"),
+        ]),
+      ]),
+    ]),
   ]),
 
   // ========================================
@@ -164,6 +175,11 @@ export default [
           route("/new", "features/review/screens/admin/event-form.tsx", { id: "event-new" }),
           route("/:id", "features/review/screens/admin/event-form.tsx", { id: "event-edit" }),
           route("/:id/submissions", "features/review/screens/admin/event-submissions.tsx"),
+        ]),
+        
+        // 외부 연동 관리
+        ...prefix("/integrations", [
+          route("/cafe24", "features/integrations/screens/cafe24-status.tsx"),
         ]),
       ]),
       

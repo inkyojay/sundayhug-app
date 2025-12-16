@@ -16,6 +16,7 @@ import {
   FolderTreeIcon,
   GiftIcon,
   LayoutDashboardIcon,
+  LinkIcon,
   MegaphoneIcon,
   MessageSquareIcon,
   MoonIcon,
@@ -236,6 +237,21 @@ const data = {
       ],
     },
     {
+      title: "외부 연동",
+      url: "/dashboard/integrations/cafe24",
+      icon: LinkIcon,
+      items: [
+        {
+          title: "Cafe24",
+          url: "/dashboard/integrations/cafe24",
+        },
+        {
+          title: "스마트스토어 (준비중)",
+          url: "#",
+        },
+      ],
+    },
+    {
       title: "설정",
       url: "#",
       icon: Settings2Icon,
@@ -243,10 +259,6 @@ const data = {
         {
           title: "계정 설정",
           url: "/account/edit",
-        },
-        {
-          title: "연동 관리",
-          url: "#",
         },
       ],
     },
