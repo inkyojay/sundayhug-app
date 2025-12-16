@@ -4,6 +4,106 @@
 
 ---
 
+## 📅 2025년 12월 16일 (월) - Cafe24 API 연동 작업
+
+### 🎯 주요 작업 내용
+
+#### 1. Cafe24 OAuth 토큰 관리 시스템 구축
+
+**목표**: 대시보드 내에서 Cafe24 API 토큰 발행/갱신/저장 시스템 구축
+
+**완료된 작업:**
+- ✅ `cafe24_tokens` 테이블 생성 (Supabase)
+- ✅ OAuth 인증 API 구현
+  - `/api/integrations/cafe24/auth/start` - 인증 시작
+  - `/api/integrations/cafe24/auth/callback` - 콜백 처리
+  - `/api/integrations/cafe24/token` - 토큰 조회
+  - `/api/integrations/cafe24/refresh` - 토큰 갱신
+- ✅ 서버 유틸리티: `features/integrations/lib/cafe24.server.ts`
+- ✅ UI 페이지: `features/integrations/screens/cafe24-status.tsx`
+- ✅ 사이드바 메뉴 추가: 설정 > 연동 관리
+
+**Vercel 빌드 에러 수정:**
+- 서버 전용 모듈(`cafe24.server.ts`)이 클라이언트 번들에 포함되는 문제
+- `loader`에서 동적 import로 해결
+
+---
+
+### 🔧 수정/추가된 파일
+
+```
+신규 파일:
+apps/dashboard/app/features/integrations/lib/cafe24.server.ts
+apps/dashboard/app/features/integrations/api/cafe24-auth-start.tsx
+apps/dashboard/app/features/integrations/api/cafe24-auth-callback.tsx
+apps/dashboard/app/features/integrations/api/cafe24-token.tsx
+apps/dashboard/app/features/integrations/api/cafe24-refresh.tsx
+apps/dashboard/app/features/integrations/screens/cafe24-status.tsx
+
+수정 파일:
+apps/dashboard/app/routes.ts                    # Cafe24 API 라우트 추가
+apps/dashboard/app/features/users/components/dashboard-sidebar.tsx  # 연동 관리 메뉴
+```
+
+---
+
+### 🗃️ DB 변경사항
+
+```sql
+-- Cafe24 토큰 저장 테이블
+CREATE TABLE cafe24_tokens (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  mall_id VARCHAR(50) NOT NULL UNIQUE,
+  access_token TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  token_type VARCHAR(20) DEFAULT 'Bearer',
+  expires_in INTEGER DEFAULT 3600,
+  scope TEXT,
+  issued_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  expires_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- RLS 정책
+ALTER TABLE cafe24_tokens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "authenticated_access" ON cafe24_tokens FOR ALL USING (auth.role() = 'authenticated');
+```
+
+---
+
+### 🔑 환경변수 (Vercel에 설정)
+
+```bash
+CAFE24_CLIENT_ID=<카페24 앱 클라이언트 ID>
+CAFE24_CLIENT_SECRET=<카페24 앱 클라이언트 시크릿>
+CAFE24_AUTH_SERVER=https://sundayhugkr.cafe24.com
+```
+
+---
+
+### 🔗 Cafe24 개발자센터 설정
+
+- Redirect URI: `https://sundayhug-app-dashboard.vercel.app/api/integrations/cafe24/auth/callback`
+
+---
+
+### ⏳ 남은 작업
+
+- [ ] 실제 토큰 발행 테스트 (OAuth 인증 플로우)
+- [ ] 토큰 자동 갱신 로직 완성
+- [ ] Cafe24 API 호출 (주문 조회 등)
+
+---
+
+### 🧪 테스트 URL
+
+```
+https://sundayhug-app-dashboard.vercel.app/api/integrations/cafe24/auth/start
+```
+
+---
+
 ## 📅 2025년 12월 4일 (목) - 저녁 작업: main-ready 브랜치 배포, 수면 분석 개선
 
 ### 🎯 주요 작업 내용
@@ -816,5 +916,5 @@ CREATE TABLE referral_logs (...);
 
 ---
 
-*마지막 업데이트: 2025-12-04*
+*마지막 업데이트: 2025-12-16*
 
