@@ -51,62 +51,82 @@ interface LoaderData {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  // 서버 모듈 동적 import (클라이언트 번들에 포함되지 않음)
-  const { CAFE24_CONFIG, isTokenExpired } = await import("../lib/cafe24.server");
-  
-  const [supabase, headers] = makeServerClient(request);
-  
-  // 인증 확인
-  const { data: { user } } = await supabase.auth.getUser();
-  
-  if (!user) {
-    throw new Response("Unauthorized", { status: 401 });
+  try {
+    // 서버 모듈 동적 import (클라이언트 번들에 포함되지 않음)
+    const { CAFE24_CONFIG, isTokenExpired } = await import("../lib/cafe24.server");
+    
+    const [supabase, headers] = makeServerClient(request);
+    
+    // 인증 확인
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Response("Unauthorized", { status: 401 });
+    }
+
+    let tokenData: TokenData | null = null;
+    let error: string | null = null;
+    let configValid = true;
+    let missingConfig: string[] = [];
+
+    // 설정 확인 (서버에서만)
+    const required = ["clientId", "clientSecret", "authServer"];
+    missingConfig = required.filter(
+      (key) => !CAFE24_CONFIG[key as keyof typeof CAFE24_CONFIG]
+    );
+    configValid = missingConfig.length === 0;
+
+    // Supabase에서 토큰 조회
+    const { data: dbData, error: dbError } = await supabase
+      .from("cafe24_tokens")
+      .select("*")
+      .eq("mall_id", CAFE24_CONFIG.mallId)
+      .single();
+
+    if (dbError && dbError.code !== "PGRST116") {
+      error = dbError.message;
+    } else if (dbData) {
+      tokenData = dbData;
+    }
+
+    // 토큰 만료 여부 (서버에서 계산)
+    const expired = tokenData ? isTokenExpired(tokenData.expires_at) : true;
+
+    // 환경 변수 상태 (서버에서 확인)
+    const configStatus = {
+      clientId: !!CAFE24_CONFIG.clientId,
+      clientSecret: !!CAFE24_CONFIG.clientSecret,
+      authServer: !!CAFE24_CONFIG.authServer,
+    };
+
+    return data<LoaderData>({
+      tokenData,
+      error,
+      configValid,
+      missingConfig,
+      mallId: CAFE24_CONFIG.mallId,
+      isExpired: expired,
+      configStatus,
+    }, { headers });
+    
+  } catch (err) {
+    console.error("Cafe24 연동 페이지 로드 에러:", err);
+    
+    // 에러 발생 시 기본값 반환
+    return data<LoaderData>({
+      tokenData: null,
+      error: err instanceof Error ? err.message : "페이지 로드 중 오류가 발생했습니다.",
+      configValid: false,
+      missingConfig: [],
+      mallId: "sundayhugkr",
+      isExpired: true,
+      configStatus: {
+        clientId: false,
+        clientSecret: false,
+        authServer: false,
+      },
+    });
   }
-
-  let tokenData: TokenData | null = null;
-  let error: string | null = null;
-  let configValid = true;
-  let missingConfig: string[] = [];
-
-  // 설정 확인 (서버에서만)
-  const required = ["clientId", "clientSecret", "authServer"];
-  missingConfig = required.filter(
-    (key) => !CAFE24_CONFIG[key as keyof typeof CAFE24_CONFIG]
-  );
-  configValid = missingConfig.length === 0;
-
-  // Supabase에서 토큰 조회
-  const { data: dbData, error: dbError } = await supabase
-    .from("cafe24_tokens")
-    .select("*")
-    .eq("mall_id", CAFE24_CONFIG.mallId)
-    .single();
-
-  if (dbError && dbError.code !== "PGRST116") {
-    error = dbError.message;
-  } else if (dbData) {
-    tokenData = dbData;
-  }
-
-  // 토큰 만료 여부 (서버에서 계산)
-  const expired = tokenData ? isTokenExpired(tokenData.expires_at) : true;
-
-  // 환경 변수 상태 (서버에서 확인)
-  const configStatus = {
-    clientId: !!CAFE24_CONFIG.clientId,
-    clientSecret: !!CAFE24_CONFIG.clientSecret,
-    authServer: !!CAFE24_CONFIG.authServer,
-  };
-
-  return data<LoaderData>({
-    tokenData,
-    error,
-    configValid,
-    missingConfig,
-    mallId: CAFE24_CONFIG.mallId,
-    isExpired: expired,
-    configStatus,
-  }, { headers });
 }
 
 export default function Cafe24StatusPage({ loaderData }: Route.ComponentProps) {
