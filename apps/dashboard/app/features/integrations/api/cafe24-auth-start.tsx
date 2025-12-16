@@ -7,7 +7,6 @@
 import type { Route } from "./+types/cafe24-auth-start";
 
 import { redirect } from "react-router";
-import makeServerClient from "~/core/lib/supa-client.server";
 import {
   buildAuthorizationUrl,
   generateState,
@@ -16,15 +15,8 @@ import {
 } from "../lib/cafe24.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const [supabase] = makeServerClient(request);
-
-  // 인증 확인
-  const { data: { user } } = await supabase.auth.getUser();
+  // 인증 체크 제거 - OAuth 시작점은 공개 접근 허용
   
-  if (!user) {
-    return redirect("/login?error=unauthorized");
-  }
-
   // 설정 유효성 검증
   const config = validateConfig();
   if (!config.valid) {
