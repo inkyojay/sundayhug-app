@@ -1,23 +1,24 @@
 import type { Route } from "./+types/private.layout";
 
-import { Outlet } from "react-router";
+import { Outlet, redirect } from "react-router";
+import makeServerClient from "../lib/supa-client.server";
 
-// ============================================
-// 🔓 인증 체크 임시 비활성화 (내부 개발용)
-// 나중에 SaaS화 할 때 아래 주석 해제하면 됨
-// ============================================
-// import makeServerClient from "../lib/supa-client.server";
-
+/**
+ * 인증 필수 레이아웃
+ * - 로그인 체크
+ * - Admin 권한 체크는 dashboard.layout.tsx에서 수행
+ */
 export async function loader({ request }: Route.LoaderArgs) {
-  // const [client] = makeServerClient(request);
-  // const {
-  //   data: { user },
-  // } = await client.auth.getUser();
-  // if (!user) {
-  //   throw redirect("/login");
-  // }
+  const [client, headers] = makeServerClient(request);
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  
+  if (!user) {
+    throw redirect("/login");
+  }
 
-  return {};
+  return { user, headers };
 }
 
 export default function PrivateLayout() {

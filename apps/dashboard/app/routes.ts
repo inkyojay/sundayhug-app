@@ -69,6 +69,7 @@ export default [
     // 비로그인 사용자용 라우트
     layout("core/layouts/public.layout.tsx", [
       route("/login", "features/auth/screens/login.tsx"),
+      route("/register", "features/auth/screens/register.tsx"),
       route("/join", "features/auth/screens/join.tsx"),
       ...prefix("/auth", [
         route("/api/resend", "features/auth/api/resend.tsx"),
@@ -163,6 +164,12 @@ export default [
           route("/new", "features/review/screens/admin/event-form.tsx", { id: "event-new" }),
           route("/:id", "features/review/screens/admin/event-form.tsx", { id: "event-edit" }),
           route("/:id/submissions", "features/review/screens/admin/event-submissions.tsx"),
+        ]),
+        
+        // 회원 관리 (관리자용)
+        ...prefix("/members", [
+          index("features/members/screens/member-list.tsx"),
+          route("/:id", "features/members/screens/member-detail.tsx"),
         ]),
       ]),
       
