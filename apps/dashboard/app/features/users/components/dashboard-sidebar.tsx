@@ -13,20 +13,14 @@
 import {
   BookOpenIcon,
   BoxIcon,
-  FolderTreeIcon,
-  GiftIcon,
   LayoutDashboardIcon,
-  LinkIcon,
   MegaphoneIcon,
-  MessageSquareIcon,
-  MoonIcon,
-  PackageIcon,
   Settings2Icon,
   ShieldCheckIcon,
   ShoppingCartIcon,
   StarIcon,
   StoreIcon,
-  TruckIcon,
+  UsersIcon,
 } from "lucide-react";
 
 import {
@@ -52,8 +46,9 @@ const data = {
     },
   ],
 
-  // 메인 네비게이션
+  // 메인 네비게이션 (논리적 순서로 정렬)
   navMain: [
+    // ===== 핵심 =====
     {
       title: "대시보드",
       url: "/dashboard",
@@ -66,36 +61,16 @@ const data = {
         },
       ],
     },
+    
+    // ===== 고객/주문 관리 =====
     {
-      title: "제품 분류",
-      url: "/dashboard/parent-products",
-      icon: FolderTreeIcon,
+      title: "회원 관리",
+      url: "/dashboard/members",
+      icon: UsersIcon,
       items: [
         {
-          title: "분류별 제품",
-          url: "/dashboard/parent-products",
-        },
-      ],
-    },
-    {
-      title: "제품 관리",
-      url: "/dashboard/products",
-      icon: BoxIcon,
-      items: [
-        {
-          title: "제품 목록",
-          url: "/dashboard/products",
-        },
-      ],
-    },
-    {
-      title: "재고 관리",
-      url: "/dashboard/inventory",
-      icon: PackageIcon,
-      items: [
-        {
-          title: "재고 현황",
-          url: "/dashboard/inventory",
+          title: "회원 목록",
+          url: "/dashboard/members",
         },
       ],
     },
@@ -129,58 +104,19 @@ const data = {
         },
       ],
     },
+    
+    // ===== 후기/이벤트 =====
     {
-      title: "블로그 관리",
-      url: "/dashboard/blog",
-      icon: BookOpenIcon,
+      title: "후기 관리",
+      url: "/dashboard/reviews",
+      icon: StarIcon,
       items: [
         {
-          title: "글 목록",
-          url: "/dashboard/blog",
+          title: "후기 인증",
+          url: "/dashboard/reviews",
         },
         {
-          title: "새 글 작성",
-          url: "/dashboard/blog/new",
-        },
-      ],
-    },
-    {
-      title: "AI 상담 관리",
-      url: "/dashboard/chat/knowledge",
-      icon: MessageSquareIcon,
-      items: [
-        {
-          title: "상담 지식",
-          url: "/dashboard/chat/knowledge",
-        },
-      ],
-    },
-    {
-      title: "수면 분석",
-      url: "/dashboard/sleep",
-      icon: MoonIcon,
-      items: [
-        {
-          title: "분석하기",
-          url: "/dashboard/sleep",
-        },
-        {
-          title: "분석 이력",
-          url: "/dashboard/sleep/history",
-        },
-        {
-          title: "추천 제품 관리",
-          url: "/dashboard/sleep/products",
-        },
-      ],
-    },
-    {
-      title: "후기 이벤트",
-      url: "/dashboard/events",
-      icon: GiftIcon,
-      items: [
-        {
-          title: "이벤트 관리",
+          title: "이벤트 목록",
           url: "/dashboard/events",
         },
         {
@@ -189,68 +125,67 @@ const data = {
         },
       ],
     },
+    
+    // ===== 제품/재고 =====
     {
-      title: "후기 인증",
-      url: "/dashboard/reviews",
-      icon: StarIcon,
+      title: "제품 관리",
+      url: "/dashboard/products",
+      icon: BoxIcon,
       items: [
         {
-          title: "인증 관리",
-          url: "/dashboard/reviews",
+          title: "제품 목록",
+          url: "/dashboard/products",
+        },
+        {
+          title: "제품 분류",
+          url: "/dashboard/parent-products",
+        },
+        {
+          title: "재고 현황",
+          url: "/dashboard/inventory",
         },
       ],
     },
+    
+    // ===== 콘텐츠 =====
     {
-      title: "광고 분석",
+      title: "콘텐츠 관리",
+      url: "/dashboard/blog",
+      icon: BookOpenIcon,
+      items: [
+        {
+          title: "블로그 글",
+          url: "/dashboard/blog",
+        },
+        {
+          title: "새 글 작성",
+          url: "/dashboard/blog/new",
+        },
+        {
+          title: "AI 상담 지식",
+          url: "/dashboard/chat/knowledge",
+        },
+      ],
+    },
+    
+    // ===== 분석 (준비중) =====
+    {
+      title: "분석",
       url: "#",
       icon: MegaphoneIcon,
       items: [
         {
-          title: "광고 대시보드",
-          url: "#",
-          // url: "/dashboard/advertising",
-        },
-        {
-          title: "ROAS 분석",
+          title: "광고 분석",
           url: "#",
         },
         {
-          title: "키워드 성과",
+          title: "출고/배송",
           url: "#",
         },
       ],
     },
-    {
-      title: "출고 분석",
-      url: "#",
-      icon: TruckIcon,
-      items: [
-        {
-          title: "출고 현황",
-          url: "#",
-          // url: "/dashboard/shipping",
-        },
-        {
-          title: "배송 추적",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "외부 연동",
-      url: "/dashboard/integrations/cafe24",
-      icon: LinkIcon,
-      items: [
-        {
-          title: "Cafe24",
-          url: "/dashboard/integrations/cafe24",
-        },
-        {
-          title: "스마트스토어 (준비중)",
-          url: "#",
-        },
-      ],
-    },
+    
+    // ===== 설정 =====
     {
       title: "설정",
       url: "#",
@@ -259,6 +194,10 @@ const data = {
         {
           title: "계정 설정",
           url: "/account/edit",
+        },
+        {
+          title: "연동 관리",
+          url: "#",
         },
       ],
     },

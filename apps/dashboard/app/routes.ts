@@ -52,17 +52,6 @@ export default [
       route("/generate-thumbnail", "features/blog/api/generate-thumbnail.tsx"),
       route("/generate-slug", "features/blog/api/generate-slug.tsx"),
     ]),
-    // 연동 API
-    ...prefix("/integrations", [
-      ...prefix("/cafe24", [
-        route("/token", "features/integrations/api/cafe24-token.tsx"),
-        route("/refresh", "features/integrations/api/cafe24-refresh.tsx"),
-        ...prefix("/auth", [
-          route("/start", "features/integrations/api/cafe24-auth-start.tsx"),
-          route("/callback", "features/integrations/api/cafe24-auth-callback.tsx"),
-        ]),
-      ]),
-    ]),
   ]),
 
   // ========================================
@@ -80,6 +69,7 @@ export default [
     // 비로그인 사용자용 라우트
     layout("core/layouts/public.layout.tsx", [
       route("/login", "features/auth/screens/login.tsx"),
+      route("/register", "features/auth/screens/register.tsx"),
       route("/join", "features/auth/screens/join.tsx"),
       ...prefix("/auth", [
         route("/api/resend", "features/auth/api/resend.tsx"),
@@ -149,7 +139,6 @@ export default [
           index("features/sleep-analysis/screens/analyze.tsx"),
           route("/history", "features/sleep-analysis/screens/history.tsx"),
           route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "dashboard-sleep-result" }),
-          route("/products", "features/sleep-analysis/screens/product-manage.tsx"),
         ]),
         
         // 블로그 관리 (관리자용)
@@ -177,9 +166,10 @@ export default [
           route("/:id/submissions", "features/review/screens/admin/event-submissions.tsx"),
         ]),
         
-        // 외부 연동 관리
-        ...prefix("/integrations", [
-          route("/cafe24", "features/integrations/screens/cafe24-status.tsx"),
+        // 회원 관리 (관리자용)
+        ...prefix("/members", [
+          index("features/members/screens/member-list.tsx"),
+          route("/:id", "features/members/screens/member-detail.tsx"),
         ]),
       ]),
       

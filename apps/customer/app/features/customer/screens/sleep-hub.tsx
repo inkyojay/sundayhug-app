@@ -6,7 +6,7 @@
  */
 import type { Route } from "./+types/sleep-hub";
 
-import { Link } from "react-router";
+import { Link, redirect } from "react-router";
 import { 
   ArrowLeft, 
   Moon, 
@@ -16,11 +16,24 @@ import {
   CloudSun
 } from "lucide-react";
 
+import makeServerClient from "~/core/lib/supa-client.server";
+
 export function meta(): Route.MetaDescriptors {
   return [
     { title: "수면 분석 | 썬데이허그" },
     { name: "description", content: "AI 수면 환경 분석과 수면 예보 서비스" },
   ];
+}
+
+export async function loader({ request }: Route.LoaderArgs) {
+  const [supabase] = makeServerClient(request);
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw redirect("/customer/login?redirect=/customer/sleep");
+  }
+
+  return null;
 }
 
 export default function SleepHubScreen() {

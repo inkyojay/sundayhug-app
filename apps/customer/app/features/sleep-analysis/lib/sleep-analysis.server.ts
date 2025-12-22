@@ -56,13 +56,14 @@ export async function saveSleepAnalysis(
   }
 
   // Save analysis record
-  // summary에 전체 결과를 JSON으로 저장 (Gemini 반환 형식: summary, feedbackItems, references, safetyScore, scoreComment)
+  // summary에 전체 결과를 JSON으로 저장 (Gemini 반환 형식: summary, feedbackItems, references, safetyScore, scoreComment, cardNews)
   const summaryJson = JSON.stringify({
     summary: report.summary,
     feedbackItems: report.feedbackItems,
     references: report.references,
     safetyScore: report.safetyScore,
     scoreComment: report.scoreComment,
+    cardNews: report.cardNews, // 카드뉴스용 텍스트 추가
   });
 
   const { data, error } = await supabase

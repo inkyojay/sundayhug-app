@@ -700,6 +700,11 @@ export function AnalysisResult({
           </div>
         </div>
 
+        {/* 추천 제품 */}
+        {productRecommendations.length > 0 && (
+          <ProductRecommendations recommendations={productRecommendations} />
+        )}
+
         {/* References */}
         {report.references && report.references.length > 0 && (
           <div className="bg-white rounded-2xl p-5 border border-gray-100">

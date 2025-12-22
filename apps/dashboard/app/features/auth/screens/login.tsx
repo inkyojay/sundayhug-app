@@ -86,6 +86,35 @@ export async function action({ request }: Route.ActionArgs) {
     return data({ error: errorMessage }, { status: 400 });
   }
 
+  // 로그인 후 승인 상태 확인
+  const { data: { user } } = await client.auth.getUser();
+  if (user) {
+    const { data: profile } = await client
+      .from("profiles")
+      .select("role, approval_status")
+      .eq("id", user.id)
+      .single();
+
+    // 승인 대기 중인 경우
+    if (profile?.approval_status === "pending") {
+      await client.auth.signOut();
+      return data({ error: "가입 승인 대기 중입니다. 관리자 승인 후 로그인 가능합니다." }, { status: 400 });
+    }
+
+    // 승인 거절된 경우
+    if (profile?.approval_status === "rejected") {
+      await client.auth.signOut();
+      return data({ error: "가입이 거절되었습니다. 관리자에게 문의하세요." }, { status: 400 });
+    }
+
+    // 관리자 또는 최고관리자가 아닌 경우 (대시보드 접근 불가)
+    const allowedRoles = ["admin", "super_admin"];
+    if (!profile?.role || !allowedRoles.includes(profile.role)) {
+      await client.auth.signOut();
+      return data({ error: "관리자 권한이 없습니다. 승인 후 다시 시도해주세요." }, { status: 400 });
+    }
+  }
+
   return redirect("/dashboard", { headers });
 }
 
@@ -190,13 +219,34 @@ export default function Login({ actionData }: Route.ComponentProps) {
               )
             ) : null}
           </Form>
-          {/* 소셜 로그인 (필요시 활성화) */}
-          {/* <SignInButtons /> */}
+          {/* 소셜 로그인 - 카카오 */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-4">
+              <span className="bg-input h-px w-full"></span>
+              <span className="text-muted-foreground text-xs">또는</span>
+              <span className="bg-input h-px w-full"></span>
+            </div>
+            <Link
+              to="/auth/social/start/kakao"
+              className="flex items-center justify-center gap-2 rounded-md bg-[#FEE500] px-4 py-2.5 text-[#191919] font-medium hover:bg-[#FDD800] transition-colors"
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path fillRule="evenodd" clipRule="evenodd" d="M9 0.6C4.029 0.6 0 3.713 0 7.539C0 9.877 1.558 11.939 3.931 13.153L2.933 16.844C2.845 17.163 3.213 17.416 3.489 17.23L7.873 14.295C8.241 14.337 8.617 14.358 9 14.358C13.971 14.358 18 11.245 18 7.419C18 3.593 13.971 0.6 9 0.6Z" fill="#191919"/>
+              </svg>
+              <span>카카오로 시작하기</span>
+            </Link>
+          </div>
         </CardContent>
       </Card>
-      {/* 내부 시스템이므로 회원가입 링크 제거 */}
+      {/* 가입하기 링크 */}
       <p className="text-muted-foreground text-sm">
-        계정이 필요하신가요? 관리자에게 문의하세요
+        계정이 없으신가요?{" "}
+        <Link
+          to="/register"
+          className="text-primary hover:underline font-medium"
+        >
+          가입하기
+        </Link>
       </p>
     </div>
   );

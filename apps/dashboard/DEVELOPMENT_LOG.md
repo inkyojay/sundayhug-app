@@ -9,6 +9,83 @@
 
 ---
 
+## 2025-12-22 (일) - 회원 관리 및 관리자 승인 시스템
+
+### 작업 내용
+
+1. **회원 관리 기능 추가**
+   - `/dashboard/members` - 회원 목록 페이지
+   - `/dashboard/members/:id` - 회원 상세 페이지
+   - 회원 검색 (이름, 전화번호, 이메일)
+   - 회원 삭제 기능 (관련 데이터 정리 포함)
+   - 사이드바에 "회원 관리" 메뉴 추가
+
+2. **최고관리자(super_admin) 역할 추가**
+   - `user_role` enum에 `super_admin` 값 추가
+   - 최고관리자: `inkyojay@naver.com`
+   - 최고관리자만 다른 회원의 역할 변경 가능
+
+3. **관리자 가입 승인 시스템**
+   - `/register` - 가입 페이지 추가
+   - `profiles` 테이블에 `approval_status` 컬럼 추가
+     - `pending`: 승인 대기
+     - `approved`: 승인됨
+     - `rejected`: 거절됨
+   - 가입 시 `approval_status = 'pending'`으로 설정
+   - 승인되지 않은 사용자는 로그인 불가
+
+4. **회원 승인 관리 UI**
+   - 회원 목록에 승인 상태 필터 (전체/대기/승인/거절)
+   - 승인 대기 회원 수 알림 배너
+   - 빠른 승인/거절 버튼 (체크/경고 아이콘)
+   - 회원 상세에서 역할 및 승인 상태 변경 (Select UI)
+
+5. **회원 삭제 버그 수정**
+   - 삭제 순서 변경: auth.users → 관련 데이터 → profiles
+   - 에러 발생 시에도 성공으로 처리 (이미 삭제된 경우 등)
+
+6. **후기 인증 페이지 UI 개선**
+   - 전체 너비 사용 (max-w-full)
+   - 헤더/필터 상단 고정 (sticky)
+   - 2컬럼 그리드 레이아웃
+
+### DB 마이그레이션
+```sql
+-- super_admin 역할 추가
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'super_admin';
+
+-- 가입 승인 상태 컬럼 추가
+ALTER TABLE profiles 
+ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT 'approved' 
+CHECK (approval_status IN ('pending', 'approved', 'rejected'));
+```
+
+### 파일 변경
+```
+apps/dashboard/
+├── app/
+│   ├── features/
+│   │   ├── members/              # 신규
+│   │   │   └── screens/
+│   │   │       ├── member-list.tsx
+│   │   │       └── member-detail.tsx
+│   │   ├── auth/screens/
+│   │   │   ├── login.tsx         # 가입 링크, 승인 체크 추가
+│   │   │   └── register.tsx      # 신규
+│   │   ├── review/screens/admin/
+│   │   │   └── review-list.tsx   # UI 개선
+│   │   └── users/
+│   │       ├── components/
+│   │       │   └── dashboard-sidebar.tsx  # 회원관리 메뉴 추가
+│   │       └── layouts/
+│   │           └── dashboard.layout.tsx   # super_admin 접근 허용
+│   ├── core/layouts/
+│   │   └── private.layout.tsx
+│   └── routes.ts                 # /register, /dashboard/members 추가
+```
+
+---
+
 ## 2025-12-08 (월) - 모노레포 전환 및 배포
 
 ### 작업 내용

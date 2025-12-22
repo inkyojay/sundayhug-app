@@ -1,5 +1,61 @@
 # 썬데이허그 고객 앱 (Customer App) 개발 일지
 
+## 2025-12-22 (일) - Placid 카드뉴스 연동
+
+### 작업 내용
+
+1. **Placid API 카드뉴스 생성 기능**
+   - 수면 분석 결과를 인스타그램 카드뉴스 6장으로 자동 생성
+   - Placid.app 템플릿 기반 이미지 생성
+   - HCTI (htmlcsstoimage.com)로 피드백 카드 이미지 변환
+
+2. **카드뉴스 6장 구성**
+   - 1번: 썸네일 (아기이름, 사진, 목표)
+   - 2번: 엄마의 현실일기 (날짜, 사진, 122자 일기)
+   - 3번: 이미지+핀+점수 (위험요소 표시된 사진, 점수)
+   - 4번: Bad 피드백 + 추천제품 (위험/주의 항목 3개, 제품 3개)
+   - 5번: Good 피드백 + 양총평 (잘한점 3개, 50자 총평)
+   - 6번: CTA 고정 이미지
+
+3. **AI 프롬프트 확장**
+   - Gemini AI가 `cardNews` 객체 생성하도록 프롬프트 추가
+   - 카드뉴스용 텍스트: goal, momsDiary, badItems, goodItems, summary
+   - 친근한 어투, 글자수 제한 적용
+
+4. **신규 파일**
+   - `lib/placid.server.ts` - Placid API 연동 모듈
+   - `lib/card-image.server.ts` - HCTI 연동 (HTML→이미지)
+   - `api/cardnews.tsx` - 카드뉴스 생성 API 엔드포인트
+
+5. **수정된 파일**
+   - `gemini.server.ts` - cardNews 생성 프롬프트 추가
+   - `sleep-analysis.server.ts` - cardNews DB 저장 추가
+   - `schema.ts` - CardNewsText 인터페이스 추가
+   - `analyze-public.tsx`, `analyze.tsx`, `result.tsx` - /cardnews API 호출로 변경
+
+### 환경변수 (추가)
+```
+PLACID_API_TOKEN=placid-ggzjvfrflt9yhiwh-zfrubcofjutsfpqi
+HCTI_USER_ID=01KD2D75FEJSEXV489N6NFJK2T
+HCTI_API_KEY=019b44d3-95ee-7328-a334-9d26cb9c19b9
+```
+
+### Placid 템플릿 UUID
+- 1번 썸네일: `n98pmokubncg8`
+- 2번 엄마일기: `lwq9uwrizrxht`
+- 3번 이미지+핀: `tifs0gpwsoynn`
+- 4번 Bad피드백: `q1mdgdcdymxnz`
+- 5번 Good피드백: `wl2vnbyjwl425`
+- 6번 CTA: 고정 이미지 URL
+
+### 테스트 방법
+1. 수면 분석 페이지에서 새 분석 진행
+2. 분석 완료 후 "이미지로 저장하기" 버튼 클릭
+3. Placid API가 6장 카드뉴스 생성
+4. 이미지 다운로드
+
+---
+
 ## 프로젝트 정보
 - **앱 이름**: @sundayhug/customer
 - **도메인**: app.sundayhug.com

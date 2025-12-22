@@ -1269,53 +1269,55 @@ export default function EventReviewScreen() {
                     </div>
                   )}
 
-                  {/* 쇼핑몰 후기 스크린샷 */}
-                  <div className="bg-white rounded-2xl p-5 border border-gray-100">
-                    <Label className="text-gray-700 font-medium mb-2 block">
-                      공식몰 또는 스마트스토어 후기 *
-                    </Label>
-                    <p className="text-sm text-gray-500 mb-4">
-                      후기 작성한 사진을 캡쳐해서 올려주세요.
-                    </p>
-                    
-                    <input
-                      ref={mallFileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handlePhotoSelect(e, "mall")}
-                      className="hidden"
-                    />
+                  {/* 쇼핑몰 후기 스크린샷 - 맘카페 이벤트가 아닌 경우만 표시 */}
+                  {!selectedEvent?.name?.includes("맘카페") && (
+                    <div className="bg-white rounded-2xl p-5 border border-gray-100">
+                      <Label className="text-gray-700 font-medium mb-2 block">
+                        공식몰 또는 스마트스토어 후기 *
+                      </Label>
+                      <p className="text-sm text-gray-500 mb-4">
+                        후기 작성한 사진을 캡쳐해서 올려주세요.
+                      </p>
+                      
+                      <input
+                        ref={mallFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handlePhotoSelect(e, "mall")}
+                        className="hidden"
+                      />
 
-                    <div className="flex flex-wrap gap-3">
-                      {mallPhotos.map((photo, index) => (
-                        <div key={index} className="relative w-20 h-20">
-                          <img 
-                            src={photo.preview} 
-                            alt={`스크린샷 ${index + 1}`}
-                            className="w-full h-full object-cover rounded-xl"
-                          />
+                      <div className="flex flex-wrap gap-3">
+                        {mallPhotos.map((photo, index) => (
+                          <div key={index} className="relative w-20 h-20">
+                            <img 
+                              src={photo.preview} 
+                              alt={`스크린샷 ${index + 1}`}
+                              className="w-full h-full object-cover rounded-xl"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removePhoto(index, "mall")}
+                              className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-white hover:bg-red-600"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+
+                        {mallPhotos.length < 3 && (
                           <button
                             type="button"
-                            onClick={() => removePhoto(index, "mall")}
-                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-white hover:bg-red-600"
+                            onClick={() => mallFileInputRef.current?.click()}
+                            className="w-20 h-20 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center text-gray-400 hover:border-[#FF6B35] hover:text-[#FF6B35] transition-colors"
                           >
-                            <X className="w-4 h-4" />
+                            <ImagePlus className="w-5 h-5 mb-1" />
+                            <span className="text-xs">{mallPhotos.length}/3</span>
                           </button>
-                        </div>
-                      ))}
-
-                      {mallPhotos.length < 3 && (
-                        <button
-                          type="button"
-                          onClick={() => mallFileInputRef.current?.click()}
-                          className="w-20 h-20 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center text-gray-400 hover:border-[#FF6B35] hover:text-[#FF6B35] transition-colors"
-                        >
-                          <ImagePlus className="w-5 h-5 mb-1" />
-                          <span className="text-xs">{mallPhotos.length}/3</span>
-                        </button>
-                      )}
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* 맘카페 후기 URL */}
                   <div className="bg-white rounded-2xl p-5 border border-gray-100">
