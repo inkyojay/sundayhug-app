@@ -121,20 +121,32 @@ export default function ResultPage() {
   // DB 데이터를 AnalysisReport로 변환
   const report = convertToReport(analysis, feedbackItems);
 
-  // 이미지 다운로드 (모바일 사진첩 저장 지원)
+  // 카드뉴스 이미지 다운로드 (Placid API 사용)
   const handleDownloadSlides = async () => {
     if (!analysisId) return;
     
     setIsDownloading(true);
     try {
-      const response = await fetch(`/api/sleep/${analysisId}/slides`, {
+      // 아기 이름 (DB에서 가져오거나 기본값)
+      const babyName = (analysis as any).name || "우리 아기";
+      
+      // 새 카드뉴스 API 호출 (Placid)
+      const response = await fetch(`/api/sleep/${analysisId}/cardnews`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ babyName }),
       });
       
       const responseData = await response.json();
       
       if (!responseData.success || !responseData.data?.slideUrls) {
-        throw new Error(responseData.error || "이미지 생성에 실패했습니다.");
+        if (responseData.error?.includes("Card news text not generated")) {
+          alert("이 분석 결과는 카드뉴스 생성을 지원하지 않습니다.\n새로 분석을 진행해주세요.");
+          return;
+        }
+        throw new Error(responseData.error || "카드뉴스 이미지 생성에 실패했습니다.");
       }
       
       const slideUrls = responseData.data.slideUrls as string[];
@@ -144,7 +156,7 @@ export default function ResultPage() {
         const slideUrl = slideUrls[i];
         const imgResponse = await fetch(slideUrl);
         const blob = await imgResponse.blob();
-        const fileName = `수면분석-${i + 1}.png`;
+        const fileName = `카드뉴스-${i + 1}.png`;
         
         // 모바일: Web Share API 시도
         if (isMobile && navigator.share && navigator.canShare) {
@@ -171,10 +183,10 @@ export default function ResultPage() {
       }
       
       if (!isMobile) {
-        alert(`${slideUrls.length}장의 이미지가 저장되었습니다!`);
+        alert(`📸 ${slideUrls.length}장의 카드뉴스가 저장되었습니다!`);
       }
     } catch (err) {
-      console.error("Download error:", err);
+      console.error("Card news download error:", err);
       alert(err instanceof Error ? err.message : "다운로드 중 오류가 발생했습니다.");
     } finally {
       setIsDownloading(false);

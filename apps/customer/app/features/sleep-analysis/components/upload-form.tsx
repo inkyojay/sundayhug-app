@@ -1,9 +1,9 @@
 /**
- * Upload Form Component
+ * Upload Form Component - 모바일 최적화 버전
  *
- * Handles image upload with drag and drop support and baby information input.
+ * 스텝 기반 UI로 직관적인 사용자 경험 제공
  */
-import { Baby, Upload, Check, Camera, AlertCircle, ChevronDown, Plus } from "lucide-react";
+import { Baby, Camera, AlertCircle, Check, Plus, Phone, Instagram, ChevronRight, Sparkles } from "lucide-react";
 import { useCallback, useRef, useState, useEffect } from "react";
 
 import { Button } from "~/core/components/ui/button";
@@ -54,28 +54,6 @@ async function toBase64(file: File): Promise<string> {
   });
 }
 
-// 예시 이미지 가이드
-const photoGuides = [
-  {
-    emoji: "✅",
-    title: "좋은 예시",
-    items: [
-      "아기 침대 전체가 보이는 사진",
-      "아기가 자고 있는 모습",
-      "수면 공간이 보이는 사진",
-    ],
-  },
-  {
-    emoji: "❌",
-    title: "분석 불가",
-    items: [
-      "수면 환경이 아닌 사진",
-      "너무 어둡거나 흐린 사진",
-      "스크린샷, 문서 사진",
-    ],
-  },
-];
-
 export function UploadForm({ 
   onSubmit, 
   isLoading = false, 
@@ -98,7 +76,6 @@ export function UploadForm({
   const [instagramId, setInstagramId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
-  const [showGuide, setShowGuide] = useState(true);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const today = new Date().toISOString().split("T")[0];
@@ -137,7 +114,6 @@ export function UploadForm({
     }
 
     setError(null);
-    setShowGuide(false);
     setImagePreview(URL.createObjectURL(file));
     setImageMimeType(file.type);
 
@@ -221,7 +197,6 @@ export function UploadForm({
     setImagePreview(null);
     setImageBase64(null);
     setImageMimeType(null);
-    setShowGuide(true);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -242,40 +217,23 @@ export function UploadForm({
     return `${years}세 ${remainingMonths}개월`;
   };
 
-  return (
-    <div className="space-y-6">
-      {/* 사진 가이드 */}
-      {showGuide && !imagePreview && (
-        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Camera className="w-5 h-5 text-blue-600" />
-            <h3 className="font-semibold text-blue-900 text-sm">어떤 사진을 올려야 하나요?</h3>
-          </div>
-          <div className="flex gap-4">
-            {photoGuides.map((guide) => (
-              <div key={guide.title} className="flex-1 space-y-1.5">
-                <p className={`font-medium text-xs ${guide.emoji === "✅" ? "text-green-700" : "text-red-700"}`}>
-                  {guide.emoji} {guide.title}
-                </p>
-                <ul className="text-xs text-gray-600 space-y-0.5">
-                  {guide.items.map((item, i) => (
-                    <li key={i} className="leading-tight">• {item}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+  // 폼 완성도 체크
+  const isPhotoReady = !!imageBase64;
+  const isBabyInfoReady = isAddingNewBaby 
+    ? (!!newBabyName && !!newBabyBirthDate) 
+    : !!selectedBabyId;
+  const isPhoneReady = !!phoneNumber && phoneNumber.replace(/-/g, "").length >= 10;
 
-      {/* Image Upload Area */}
-      <div>
+  return (
+    <div className="space-y-4">
+      {/* ===== STEP 1: 사진 업로드 ===== */}
+      <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm overflow-hidden">
+        {/* 사진 업로드 영역 */}
         <label
           htmlFor="image-upload"
           className={cn(
-            "block cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-colors",
-            "border-gray-300 hover:border-[#FF6B35] hover:bg-orange-50/50",
-            imagePreview && "border-[#FF6B35] bg-orange-50/30"
+            "block cursor-pointer transition-all relative",
+            !imagePreview && "min-h-[280px]"
           )}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
@@ -284,6 +242,7 @@ export function UploadForm({
             type="file"
             id="image-upload"
             accept="image/*"
+            capture="environment"
             ref={fileInputRef}
             onChange={handleFileChange}
             className="sr-only"
@@ -293,297 +252,325 @@ export function UploadForm({
             <div className="relative">
               <img
                 src={imagePreview}
-                alt="Preview"
-                className="mx-auto max-h-60 rounded-xl pointer-events-none"
+                alt="업로드된 사진"
+                className="w-full aspect-[4/3] object-cover"
               />
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  resetImage();
-                }}
-                className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-colors"
-              >
-                ✕
-              </button>
+              {/* 오버레이 */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              
+              {/* 하단 정보 */}
+              <div className="absolute bottom-0 left-0 right-0 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                      <Check className="w-5 h-5 text-white" />
+                    </div>
+                    <span className="text-white font-medium">사진 준비 완료</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      resetImage();
+                    }}
+                    className="px-4 py-2 bg-white/20 backdrop-blur-sm text-white rounded-full text-sm font-medium hover:bg-white/30 transition-colors"
+                  >
+                    다시 선택
+                  </button>
+                </div>
+              </div>
             </div>
           ) : (
-            <div className="text-gray-500 flex flex-col items-center pointer-events-none">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                <Camera className="h-8 w-8 text-gray-400" />
+            <div className="flex flex-col items-center justify-center p-8 min-h-[280px] bg-gradient-to-br from-orange-50 to-amber-50 dark:from-gray-800 dark:to-gray-700">
+              {/* 아이콘 */}
+              <div className="w-20 h-20 bg-gradient-to-br from-[#FF6B35] to-[#FF8F65] rounded-3xl flex items-center justify-center mb-5 shadow-lg shadow-orange-200 dark:shadow-none">
+                <Camera className="h-10 w-10 text-white" />
               </div>
-              <p className="font-semibold text-gray-900 mb-1">
-                📷 사진 촬영 또는 앨범에서 선택
+              
+              {/* 텍스트 */}
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                수면 환경 사진 올리기
+              </h3>
+              <p className="text-gray-500 dark:text-gray-400 text-center text-sm mb-6 max-w-[240px]">
+                아기가 자는 공간 전체가 보이는 사진을 올려주세요
               </p>
-              <p className="text-sm text-gray-500">
-                탭하여 아기 수면 환경 사진을 올려주세요
-              </p>
+              
+              {/* CTA 버튼 */}
+              <div className="flex items-center gap-2 px-6 py-3 bg-[#FF6B35] text-white rounded-2xl font-semibold shadow-lg shadow-orange-200 dark:shadow-none">
+                <Camera className="w-5 h-5" />
+                <span>사진 선택하기</span>
+              </div>
+
+              {/* 가이드 힌트 */}
+              <div className="mt-6 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                <span className="flex items-center gap-1">
+                  <span className="text-green-500">✓</span> 침대 전체
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="text-green-500">✓</span> 밝은 조명
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="text-green-500">✓</span> 선명한 사진
+                </span>
+              </div>
             </div>
           )}
         </label>
       </div>
 
-      {/* 아이 정보 섹션 */}
-      <div className="space-y-4">
-        <Label className="flex items-center gap-2 text-gray-700 font-medium">
-          <Baby className="text-[#FF6B35] h-5 w-5" />
-          아이 정보 <span className="text-red-500">*</span>
-        </Label>
+      {/* ===== STEP 2: 아이 정보 ===== */}
+      <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className={cn(
+            "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold",
+            isBabyInfoReady 
+              ? "bg-green-500 text-white" 
+              : "bg-gray-100 dark:bg-gray-700 text-gray-500"
+          )}>
+            {isBabyInfoReady ? <Check className="w-4 h-4" /> : "1"}
+          </div>
+          <h3 className="font-bold text-gray-900 dark:text-white">아이 정보</h3>
+        </div>
         
-        {/* 등록된 아이가 있는 경우 - 선택 또는 새로 추가 */}
-        {babies.length > 0 && (
-          <div className="space-y-3">
-            {/* 아이 선택 */}
-            {!isAddingNewBaby && (
-              <div className="space-y-2">
-                {babies.map((baby) => (
-                  <button
-                    key={baby.id}
-                    type="button"
-                    onClick={() => setSelectedBabyId(baby.id)}
-                    className={cn(
-                      "w-full p-4 rounded-xl border-2 text-left transition-all",
-                      selectedBabyId === baby.id
-                        ? "border-[#FF6B35] bg-orange-50"
-                        : "border-gray-200 hover:border-gray-300"
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-pink-100 rounded-full flex items-center justify-center">
-                        <span className="text-lg">
-                          {baby.gender === "male" ? "👦" : baby.gender === "female" ? "👧" : "👶"}
-                        </span>
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-900">{baby.name}</p>
-                        <p className="text-sm text-gray-500">
-                          {baby.gender === "male" ? "남아" : baby.gender === "female" ? "여아" : ""} 
-                          {baby.birth_date && ` · ${calculateAge(baby.birth_date)}`}
-                        </p>
-                      </div>
-                      {selectedBabyId === baby.id && (
-                        <Check className="w-5 h-5 text-[#FF6B35]" />
-                      )}
+        {/* 등록된 아이가 있는 경우 */}
+        {babies.length > 0 && !isAddingNewBaby && (
+          <div className="space-y-2">
+            {babies.map((baby) => (
+              <button
+                key={baby.id}
+                type="button"
+                onClick={() => setSelectedBabyId(baby.id)}
+                className={cn(
+                  "w-full p-4 rounded-2xl border-2 text-left transition-all",
+                  selectedBabyId === baby.id
+                    ? "border-[#FF6B35] bg-orange-50 dark:bg-orange-900/20"
+                    : "border-gray-100 dark:border-gray-700 hover:border-gray-200"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-pink-100 to-pink-200 dark:from-pink-900/30 dark:to-pink-800/30 rounded-2xl flex items-center justify-center">
+                    <span className="text-2xl">
+                      {baby.gender === "male" ? "👦" : baby.gender === "female" ? "👧" : "👶"}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-gray-900 dark:text-white truncate">{baby.name}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {baby.gender === "male" ? "남아" : baby.gender === "female" ? "여아" : ""} 
+                      {baby.birth_date && ` · ${calculateAge(baby.birth_date)}`}
+                    </p>
+                  </div>
+                  {selectedBabyId === baby.id && (
+                    <div className="w-6 h-6 bg-[#FF6B35] rounded-full flex items-center justify-center">
+                      <Check className="w-4 h-4 text-white" />
                     </div>
-                  </button>
-                ))}
-                
-                {/* 새 아이 추가 버튼 */}
+                  )}
+                </div>
+              </button>
+            ))}
+            
+            {/* 새 아이 추가 버튼 */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsAddingNewBaby(true);
+                setSelectedBabyId("");
+              }}
+              className="w-full p-4 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700 text-gray-500 hover:border-[#FF6B35] hover:text-[#FF6B35] transition-colors flex items-center justify-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              <span className="font-medium">새 아이로 분석하기</span>
+            </button>
+          </div>
+        )}
+        
+        {/* 새 아이 입력 폼 */}
+        {(isAddingNewBaby || babies.length === 0) && (
+          <div className="space-y-4">
+            {babies.length > 0 && (
+              <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-500">새 아이 정보</span>
                 <button
                   type="button"
                   onClick={() => {
-                    setIsAddingNewBaby(true);
-                    setSelectedBabyId("");
+                    setIsAddingNewBaby(false);
+                    setNewBabyName("");
+                    setNewBabyBirthDate("");
+                    setNewBabyGender("");
                   }}
-                  className="w-full p-4 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 hover:border-[#FF6B35] hover:text-[#FF6B35] transition-colors flex items-center justify-center gap-2"
+                  className="text-sm text-[#FF6B35] font-medium"
                 >
-                  <Plus className="w-5 h-5" />
-                  새 아이 정보로 분석
+                  취소
                 </button>
               </div>
             )}
             
-            {/* 새 아이 입력 모드 (기존 아이가 있는 경우) */}
-            {isAddingNewBaby && (
-              <div className="space-y-4 bg-gray-50 rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                  <p className="font-medium text-gray-900">새 아이 정보 입력</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAddingNewBaby(false);
-                      setNewBabyName("");
-                      setNewBabyBirthDate("");
-                      setNewBabyGender("");
-                    }}
-                    className="text-sm text-gray-500 hover:text-gray-700"
-                  >
-                    취소
-                  </button>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm text-gray-700">아이 이름 또는 별명 <span className="text-red-500">*</span></Label>
-                  <Input
-                    placeholder="예: 콩이, 서준이"
-                    value={newBabyName}
-                    onChange={(e) => setNewBabyName(e.target.value)}
-                    className="h-12 rounded-xl border-gray-200 text-gray-900 bg-white"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm text-gray-700">생년월일 <span className="text-red-500">*</span></Label>
-                  <Input
-                    type="date"
-                    value={newBabyBirthDate}
-                    onChange={(e) => setNewBabyBirthDate(e.target.value)}
-                    max={today}
-                    className="h-12 rounded-xl border-gray-200 text-gray-900 bg-white"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm text-gray-700">성별 (선택)</Label>
-                  <RadioGroup
-                    value={newBabyGender}
-                    onValueChange={setNewBabyGender}
-                    className="flex gap-4"
-                  >
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <RadioGroupItem value="male" className="border-gray-800 text-gray-900 data-[state=checked]:border-[#FF6B35] data-[state=checked]:text-[#FF6B35]" />
-                      <span className="text-gray-900">남아</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <RadioGroupItem value="female" className="border-gray-800 text-gray-900 data-[state=checked]:border-[#FF6B35] data-[state=checked]:text-[#FF6B35]" />
-                      <span className="text-gray-900">여아</span>
-                    </label>
-                  </RadioGroup>
-                </div>
-                
-                {isLoggedIn && (
-                  <p className="text-xs text-gray-500">
-                    💡 입력한 정보는 내 프로필에 저장됩니다
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-        
-        {/* 등록된 아이가 없는 경우 - 바로 입력 폼 */}
-        {babies.length === 0 && (
-          <div className="space-y-4 bg-pink-50 rounded-xl p-4 border border-pink-200">
-            <div className="flex items-center gap-2">
-              <Baby className="w-5 h-5 text-pink-600" />
-              <p className="font-medium text-gray-900">아이 정보 입력</p>
-            </div>
-            
-            <div className="space-y-2">
-              <Label className="text-sm text-gray-700">아이 이름 또는 별명 <span className="text-red-500">*</span></Label>
+            {/* 이름 */}
+            <div>
+              <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                이름 또는 별명 <span className="text-red-500">*</span>
+              </Label>
               <Input
                 placeholder="예: 콩이, 서준이"
                 value={newBabyName}
                 onChange={(e) => setNewBabyName(e.target.value)}
-                className="h-12 rounded-xl border-gray-200 text-gray-900 bg-white"
+                className="h-14 rounded-2xl border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 text-base px-4"
               />
             </div>
             
-            <div className="space-y-2">
-              <Label className="text-sm text-gray-700">생년월일 <span className="text-red-500">*</span></Label>
+            {/* 생년월일 */}
+            <div>
+              <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                생년월일 <span className="text-red-500">*</span>
+              </Label>
               <Input
                 type="date"
                 value={newBabyBirthDate}
                 onChange={(e) => setNewBabyBirthDate(e.target.value)}
                 max={today}
-                className="h-12 rounded-xl border-gray-200 text-gray-900 bg-white"
+                className="h-14 rounded-2xl border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 text-base px-4"
               />
             </div>
             
-            <div className="space-y-2">
-              <Label className="text-sm text-gray-700">성별 (선택)</Label>
-              <RadioGroup
-                value={newBabyGender}
-                onValueChange={setNewBabyGender}
-                className="flex gap-4"
-              >
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <RadioGroupItem value="male" className="border-gray-800 text-gray-900 data-[state=checked]:border-[#FF6B35] data-[state=checked]:text-[#FF6B35]" />
-                  <span className="text-gray-900">남아</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <RadioGroupItem value="female" className="border-gray-800 text-gray-900 data-[state=checked]:border-[#FF6B35] data-[state=checked]:text-[#FF6B35]" />
-                  <span className="text-gray-900">여아</span>
-                </label>
-              </RadioGroup>
+            {/* 성별 */}
+            <div>
+              <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 block">
+                성별 <span className="text-gray-400">(선택)</span>
+              </Label>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setNewBabyGender("male")}
+                  className={cn(
+                    "flex-1 h-14 rounded-2xl border-2 font-medium transition-all flex items-center justify-center gap-2",
+                    newBabyGender === "male"
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600"
+                      : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"
+                  )}
+                >
+                  <span className="text-xl">👦</span>
+                  <span>남아</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewBabyGender("female")}
+                  className={cn(
+                    "flex-1 h-14 rounded-2xl border-2 font-medium transition-all flex items-center justify-center gap-2",
+                    newBabyGender === "female"
+                      ? "border-pink-500 bg-pink-50 dark:bg-pink-900/20 text-pink-600"
+                      : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"
+                  )}
+                >
+                  <span className="text-xl">👧</span>
+                  <span>여아</span>
+                </button>
+              </div>
             </div>
-            
-            {isLoggedIn && (
-              <p className="text-xs text-gray-500">
-                💡 입력한 정보는 내 프로필에 저장되어 다음에도 사용할 수 있어요
-              </p>
-            )}
           </div>
         )}
       </div>
 
-      {/* Phone Number (Required) */}
-      <div>
-        <Label htmlFor="phone" className="flex items-center gap-2 text-gray-700 font-medium">
-          📞 전화번호 <span className="text-red-500">*</span>
-        </Label>
-        <Input
-          type="tel"
-          id="phone"
-          placeholder="010-1234-5678"
-          value={phoneNumber}
-          onChange={(e) => setPhoneNumber(formatPhone(e.target.value))}
-          maxLength={13}
-          className="mt-2 h-12 rounded-xl border-gray-200 text-gray-900 bg-white"
-          required
-        />
-        <p className="text-xs text-gray-500 mt-1">분석 결과 안내를 위해 필요합니다</p>
+      {/* ===== STEP 3: 연락처 ===== */}
+      <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className={cn(
+            "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold",
+            isPhoneReady 
+              ? "bg-green-500 text-white" 
+              : "bg-gray-100 dark:bg-gray-700 text-gray-500"
+          )}>
+            {isPhoneReady ? <Check className="w-4 h-4" /> : "2"}
+          </div>
+          <h3 className="font-bold text-gray-900 dark:text-white">연락처</h3>
+        </div>
+        
+        <div className="space-y-4">
+          {/* 전화번호 */}
+          <div>
+            <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+              <Phone className="w-4 h-4 text-[#FF6B35]" />
+              전화번호 <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              type="tel"
+              placeholder="010-0000-0000"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(formatPhone(e.target.value))}
+              maxLength={13}
+              className="h-14 rounded-2xl border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 text-base px-4"
+            />
+            <p className="text-xs text-gray-500 mt-2">📱 분석 결과 안내를 위해 필요합니다</p>
+          </div>
+
+          {/* 인스타그램 ID */}
+          <div>
+            <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+              <Instagram className="w-4 h-4 text-pink-500" />
+              인스타그램 <span className="text-gray-400">(선택)</span>
+            </Label>
+            <Input
+              type="text"
+              placeholder="@instagram_id"
+              value={instagramId}
+              onChange={(e) => setInstagramId(e.target.value)}
+              className="h-14 rounded-2xl border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 text-base px-4"
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Instagram ID (Optional) */}
-      <div>
-        <Label htmlFor="instagram" className="flex items-center gap-2 text-gray-700 font-medium">
-          📸 인스타그램 ID (선택)
-        </Label>
-        <Input
-          type="text"
-          id="instagram"
-          placeholder="@your_instagram_id"
-          value={instagramId}
-          onChange={(e) => setInstagramId(e.target.value)}
-          className="mt-2 h-12 rounded-xl border-gray-200 text-gray-900 bg-white"
-        />
-      </div>
-
-      {/* Error Message */}
+      {/* ===== Error Message ===== */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 flex items-center gap-2">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-2xl px-4 py-3 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          {error}
+          <span className="text-sm font-medium">{error}</span>
         </div>
       )}
 
-      {/* Submit Button */}
-      <Button
-        onClick={handleSubmit}
-        disabled={!imageBase64 || !privacyAgreed || isLoading}
-        className="w-full h-14 rounded-xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white font-medium text-lg disabled:opacity-50"
-        size="lg"
-      >
-        {isLoading ? (
-          <>
-            <span className="mr-2 h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-            분석 중...
-          </>
-        ) : (
-          "수면 환경 분석하기"
-        )}
-      </Button>
-
-      {/* Privacy Agreement */}
-      <div className="bg-gray-100 dark:bg-gray-700/50 rounded-xl p-4 border border-gray-300 dark:border-gray-600">
-        <div className="flex items-start gap-3">
+      {/* ===== Privacy Agreement ===== */}
+      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-4">
+        <label className="flex items-start gap-3 cursor-pointer">
           <Checkbox 
             id="privacy-agree" 
             checked={privacyAgreed}
             onCheckedChange={(checked) => setPrivacyAgreed(checked === true)}
-            className="mt-0.5 border-gray-400 dark:border-gray-500 data-[state=checked]:bg-[#FF6B35] data-[state=checked]:border-[#FF6B35]"
+            className="mt-0.5 w-5 h-5 rounded-md border-gray-300 dark:border-gray-600 data-[state=checked]:bg-[#FF6B35] data-[state=checked]:border-[#FF6B35]"
           />
-          <label htmlFor="privacy-agree" className="text-sm text-gray-700 dark:text-gray-300 cursor-pointer leading-relaxed">
-            <span className="font-semibold text-gray-900 dark:text-white">개인정보 수집 및 이용 동의</span>
+          <div className="text-sm">
+            <span className="font-semibold text-gray-900 dark:text-white">개인정보 수집 동의</span>
             <span className="text-red-500 ml-1">*</span>
-            <ul className="mt-2 space-y-1 text-xs text-gray-600 dark:text-gray-400">
-              <li>• 업로드된 사진은 <strong className="text-[#FF6B35] font-semibold">분석 사용 용도로만 이용됩니다</strong></li>
-              <li>• 수집된 전화번호로 분석 결과를 안내해드립니다</li>
-              <li>• 아이 정보와 전화번호는 내 프로필에 저장됩니다</li>
-            </ul>
-          </label>
-        </div>
+            <p className="text-gray-500 dark:text-gray-400 mt-1 text-xs leading-relaxed">
+              업로드된 사진은 분석 용도로만 사용되며, 연락처로 결과를 안내해드립니다.
+            </p>
+          </div>
+        </label>
+      </div>
+
+      {/* ===== Submit Button ===== */}
+      <div className="pt-2 pb-4">
+        <Button
+          onClick={handleSubmit}
+          disabled={!imageBase64 || !privacyAgreed || isLoading}
+          className={cn(
+            "w-full h-14 rounded-2xl font-bold text-lg transition-all",
+            imageBase64 && privacyAgreed
+              ? "bg-gradient-to-r from-[#FF6B35] to-[#FF8F65] hover:from-[#FF5722] hover:to-[#FF6B35] text-white shadow-lg shadow-orange-200 dark:shadow-none"
+              : "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500"
+          )}
+          size="lg"
+        >
+          {isLoading ? (
+            <span className="flex items-center gap-2">
+              <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              AI 분석 중...
+            </span>
+          ) : (
+            <span className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5" />
+              수면 환경 분석하기
+            </span>
+          )}
+        </Button>
       </div>
     </div>
   );

@@ -49,11 +49,19 @@ export async function loader({ request }: Route.LoaderArgs) {
     babies = babyProfiles || [];
   }
   
+  // 추천 제품 목록 가져오기
+  const { data: recommendedProducts } = await supabase
+    .from("sleep_recommended_products")
+    .select("*")
+    .eq("is_active", true)
+    .order("display_order", { ascending: true });
+  
   return data({ 
     isLoggedIn: !!user,
     userId: user?.id || null,
     defaultPhoneNumber,
     babies,
+    products: recommendedProducts || [],
   });
 }
 
@@ -126,10 +134,14 @@ export async function action({ request }: Route.ActionArgs) {
       console.warn("Failed to save to database (continuing):", dbError);
     }
 
+    // 생년월일로 월령 계산
+    const ageInMonthsForResult = calculateAgeInMonths(birthDate);
+    
     return data({
       success: true,
       report,
       analysisId,
+      babyAgeMonths: ageInMonthsForResult,
     });
   } catch (error) {
     console.error("Analysis error:", error);
@@ -270,11 +282,13 @@ export default function AnalyzePublicPage() {
   const defaultPhoneNumber = loaderData?.defaultPhoneNumber || "";
   const babies = loaderData?.babies || [];
   const isLoggedIn = loaderData?.isLoggedIn || false;
+  const products = loaderData?.products || [];
 
   const isLoading = fetcher.state === "submitting";
   const result = fetcher.data;
   const report = result && "report" in result ? result.report as AnalysisReport : null;
   const analysisId = result && "analysisId" in result ? result.analysisId as string : undefined;
+  const babyAgeMonths = result && "babyAgeMonths" in result ? result.babyAgeMonths as number : undefined;
   const error = result && "error" in result ? result.error as string : null;
 
   const handleSubmit = (data: UploadFormData) => {
@@ -296,7 +310,7 @@ export default function AnalyzePublicPage() {
     setFormData(null);
   };
 
-  // 이미지 다운로드 (모바일 사진첩 저장 지원)
+  // 카드뉴스 이미지 다운로드 (Placid API 사용)
   const handleDownloadSlides = async () => {
     if (!analysisId) {
       alert("분석 ID가 없어 이미지를 생성할 수 없습니다.");
@@ -305,24 +319,38 @@ export default function AnalyzePublicPage() {
     
     setIsDownloading(true);
     try {
-      const response = await fetch(`/api/sleep/${analysisId}/slides`, {
+      // 아기 이름 가져오기
+      const babyName = formData?.newBabyName || "우리 아기";
+      
+      // 새 카드뉴스 API 호출 (Placid)
+      const response = await fetch(`/api/sleep/${analysisId}/cardnews`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ babyName }),
       });
       
       const responseData = await response.json();
       
       if (!responseData.success || !responseData.data?.slideUrls) {
-        throw new Error(responseData.error || "이미지 생성에 실패했습니다.");
+        // cardNews 텍스트가 없는 경우 (이전 분석 결과)
+        if (responseData.error?.includes("Card news text not generated")) {
+          alert("이 분석 결과는 카드뉴스 생성을 지원하지 않습니다.\n새로 분석을 진행해주세요.");
+          return;
+        }
+        throw new Error(responseData.error || "카드뉴스 이미지 생성에 실패했습니다.");
       }
       
       const slideUrls = responseData.data.slideUrls as string[];
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       
+      // 이미지 다운로드
       for (let i = 0; i < slideUrls.length; i++) {
         const slideUrl = slideUrls[i];
         const imgResponse = await fetch(slideUrl);
         const blob = await imgResponse.blob();
-        const fileName = `수면분석-${i + 1}.png`;
+        const fileName = `카드뉴스-${i + 1}.png`;
         
         // 모바일: Web Share API 시도
         if (isMobile && navigator.share && navigator.canShare) {
@@ -349,36 +377,31 @@ export default function AnalyzePublicPage() {
       }
       
       if (!isMobile) {
-        alert(`${slideUrls.length}장의 이미지가 저장되었습니다!`);
+        alert(`📸 ${slideUrls.length}장의 카드뉴스가 저장되었습니다!`);
       }
     } catch (err) {
-      console.error("Download error:", err);
-      alert(err instanceof Error ? err.message : "다운로드 중 오류가 발생했습니다.");
+      console.error("Card news download error:", err);
+      alert(err instanceof Error ? err.message : "카드뉴스 생성 중 오류가 발생했습니다.");
     } finally {
       setIsDownloading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0] dark:bg-[#121212] transition-colors duration-300">
-      <div className="mx-auto max-w-2xl px-4 md:px-6 py-8 md:py-10">
-        {/* Header */}
-        <div className="text-center mb-10">
+    <div className="min-h-screen bg-gradient-to-b from-amber-50 via-orange-50/30 to-white dark:from-[#0f0f0f] dark:via-[#121212] dark:to-[#1a1a1a]">
+      <div className="mx-auto max-w-lg px-4 py-6 pb-24">
+        {/* Compact Header */}
+        <div className="flex items-center gap-3 mb-6">
           <Link 
             to="/customer/sleep"
-            className="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-6"
+            className="w-10 h-10 flex items-center justify-center rounded-full bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-shadow"
           >
-            <ArrowLeft className="w-5 h-5" />
-            <span className="text-sm font-medium">수면 분석</span>
+            <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </Link>
-          
-          <div className="w-16 h-16 bg-[#1A1A1A] dark:bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Moon className="w-8 h-8 text-white" />
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">AI 수면 환경 분석</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">아기 수면 공간을 분석해드려요</p>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">AI 수면 환경 분석</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-2">
-            아기의 수면 공간 사진을 올려주세요
-          </p>
         </div>
 
         <main>
@@ -387,9 +410,12 @@ export default function AnalyzePublicPage() {
 
           {/* Error State */}
           {error && !isLoading && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl px-5 py-4 mb-6">
-              <strong className="font-bold">오류 발생: </strong>
-              <span>{error}</span>
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl px-4 py-3 mb-4 flex items-start gap-2">
+              <span className="text-lg">⚠️</span>
+              <div>
+                <strong className="font-semibold">오류 발생</strong>
+                <p className="text-sm mt-0.5">{error}</p>
+              </div>
             </div>
           )}
 
@@ -400,20 +426,20 @@ export default function AnalyzePublicPage() {
                 report={report}
                 imagePreview={formData.imagePreview}
                 analysisId={analysisId}
+                babyAgeMonths={babyAgeMonths}
+                products={products}
                 onReset={handleReset}
                 onDownloadSlides={handleDownloadSlides}
                 isDownloading={isDownloading}
               />
             ) : (
-              <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 md:p-6 border border-gray-100 dark:border-gray-700">
-                <UploadForm 
-                  onSubmit={handleSubmit} 
-                  isLoading={isLoading} 
-                  defaultPhoneNumber={defaultPhoneNumber}
-                  babies={babies}
-                  isLoggedIn={isLoggedIn}
-                />
-              </div>
+              <UploadForm 
+                onSubmit={handleSubmit} 
+                isLoading={isLoading} 
+                defaultPhoneNumber={defaultPhoneNumber}
+                babies={babies}
+                isLoggedIn={isLoggedIn}
+              />
             )
           )}
         </main>

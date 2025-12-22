@@ -21,6 +21,8 @@ import { Button } from "~/core/components/ui/button";
 import { cn } from "~/core/lib/utils";
 
 import type { AnalysisReport, RiskLevel } from "../schema";
+import { getProductRecommendationsFromDB, type FeedbackItem, type Product } from "../lib/product-recommendations";
+import { ProductRecommendations } from "./product-recommendations";
 
 // 점수에 따른 색상 반환
 function getScoreColor(score: number): string {
@@ -70,6 +72,8 @@ interface AnalysisResultProps {
   report: AnalysisReport;
   imagePreview: string;
   analysisId?: string;
+  babyAgeMonths?: number;
+  products?: Product[];  // DB에서 가져온 추천 제품 목록
   onReset: () => void;
   onDownloadSlides?: () => void;
   isDownloading?: boolean;
@@ -119,6 +123,8 @@ export function AnalysisResult({
   report,
   imagePreview,
   analysisId,
+  babyAgeMonths,
+  products = [],
   onReset,
   onDownloadSlides,
   isDownloading = false,
@@ -126,6 +132,13 @@ export function AnalysisResult({
   const [activeFeedbackId, setActiveFeedbackId] = useState<number | null>(null);
   const [showShareOptions, setShowShareOptions] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
+
+  // 제품 추천 생성 (DB 데이터 사용)
+  const productRecommendations = getProductRecommendationsFromDB(
+    products,
+    report.feedbackItems as FeedbackItem[],
+    babyAgeMonths
+  );
 
   // 카카오톡 공유
   const handleKakaoShare = async () => {
@@ -506,6 +519,11 @@ export function AnalysisResult({
             </div>
           </div>
         </div>
+
+        {/* 추천 제품 */}
+        {productRecommendations.length > 0 && (
+          <ProductRecommendations recommendations={productRecommendations} />
+        )}
 
         {/* References */}
         {report.references && report.references.length > 0 && (

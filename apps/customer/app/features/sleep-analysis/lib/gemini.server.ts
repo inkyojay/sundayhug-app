@@ -6,7 +6,7 @@
  */
 import { GoogleGenAI, Type } from "@google/genai";
 
-import type { AnalysisReport, RiskLevel } from "../schema";
+import type { AnalysisReport, RiskLevel, CardNewsText } from "../schema";
 import { getRelevantReferences } from "./rag.server";
 import { calculateAgeInMonths, parseDataUrl } from "./utils";
 
@@ -279,6 +279,39 @@ ${ragReferences}
 - analysisRejected: true
 - rejectionReason: 분석을 거부하는 이유 설명 (예: "이 이미지는 아기 수면 환경이 아닌 배송 조회 화면입니다. 아기 침대나 수면 공간이 보이는 사진을 올려주세요.")
 - summary, feedbackItems, references, safetyScore, scoreComment는 빈/기본 값으로 반환
+
+## 📱 카드뉴스용 텍스트 (cardNews 객체)
+
+인스타그램 카드뉴스에 사용할 텍스트를 별도로 생성해주세요.
+**어투**: 친근하고 따뜻하게 (~해요, ~있어요), 이모지 적절히 사용
+
+### 1. goal (목표 한 문장)
+- 30자 이내
+- 예: "콩이가 더 안전하게 꿀잠 잘 수 있도록 분석했어요 💤"
+
+### 2. momsDiary (엄마의 현실일기)
+- **정확히 100~122자** 내외
+- 엄마 입장에서 쓴 사진에 대한 일기
+- 반말체, 감정 담아서
+- 예: "오늘도 우리 콩이 재우고 사진 찍어봤어요. 침대 정리한다고 했는데 아직 천 조각이 남아있었네요😅 그래도 슬리핑백 입히고 반듯하게 눕혀놓으니 평화롭게 자는 모습이 너무 예뻐요💕"
+
+### 3. badItems (위험/주의 항목)
+- High, Medium 위험도만 선택 (최대 3개)
+- title: 20자 이내, 친근하게
+- content: 60자 이내, 구체적 해결책 포함
+- badge: "위험" (High) 또는 "주의" (Medium)
+- 예: { title: "이불이 얼굴 가까이 있어요", content: "아기 얼굴 근처의 이불은 질식 위험이 있어요. 슬리핑백으로 바꿔주세요!", badge: "위험" }
+
+### 4. goodItems (잘한 점)
+- Low, Info 위험도에서 선택 (최대 3개)
+- title: 20자 이내
+- content: 60자 이내
+- 예: { title: "등 대고 자는 자세 최고!", content: "아기가 바르게 누워있어요. SIDS 예방에 가장 중요한 자세랍니다 👍" }
+
+### 5. summary (양 캐릭터 총평)
+- **정확히 40~50자**
+- 전체 평가를 한 문장으로
+- 예: "전체적으로 안전해요! 작은 것만 개선하면 완벽해요 ✨"
 `;
 
   const imagePart = fileToGenerativePart(imageBase64, imageMimeType);
@@ -319,6 +352,36 @@ ${ragReferences}
                   title: { type: Type.STRING },
                   uri: { type: Type.STRING },
                 },
+              },
+            },
+            // 카드뉴스용 텍스트
+            cardNews: {
+              type: Type.OBJECT,
+              properties: {
+                goal: { type: Type.STRING },
+                momsDiary: { type: Type.STRING },
+                badItems: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      title: { type: Type.STRING },
+                      content: { type: Type.STRING },
+                      badge: { type: Type.STRING },
+                    },
+                  },
+                },
+                goodItems: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      title: { type: Type.STRING },
+                      content: { type: Type.STRING },
+                    },
+                  },
+                },
+                summary: { type: Type.STRING },
               },
             },
           },

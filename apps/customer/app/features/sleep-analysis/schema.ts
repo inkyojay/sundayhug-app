@@ -146,6 +146,29 @@ export interface AnalysisReport {
     title: string;
     uri: string;
   }[];
+  // 카드뉴스용 텍스트 (AI가 각색)
+  cardNews?: CardNewsText;
+}
+
+// 카드뉴스용 텍스트 인터페이스
+export interface CardNewsText {
+  // 1번 슬라이드: 목표 한 문장 (예: "콩이가 더 안전하게 꿀잠 잘 수 있도록 분석했어요")
+  goal: string;
+  // 2번 슬라이드: 엄마 입장 일기 (122자 내외, 친근한 어투)
+  momsDiary: string;
+  // 4번 슬라이드: Bad 피드백 (위험/주의 항목, 짧고 친근하게)
+  badItems: {
+    title: string;   // 20자 이내
+    content: string; // 60자 이내
+    badge: "위험" | "주의";
+  }[];
+  // 5번 슬라이드: Good 피드백 (잘한 점, 짧고 친근하게)
+  goodItems: {
+    title: string;   // 20자 이내
+    content: string; // 60자 이내
+  }[];
+  // 5번 슬라이드: 양 캐릭터 총평 (50자 이내)
+  summary: string;
 }
 
 
