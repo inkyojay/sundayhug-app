@@ -58,6 +58,13 @@ export default [
       route("/auth/callback", "features/integrations/api/cafe24-auth-callback.tsx"),
       route("/sync-orders", "features/integrations/api/cafe24-sync-orders.tsx"),
     ]),
+    // 네이버 커머스 연동 API
+    ...prefix("/integrations/naver", [
+      route("/auth/start", "features/integrations/api/naver-auth-start.tsx"),
+      route("/disconnect", "features/integrations/api/naver-disconnect.tsx"),
+      route("/sync-orders", "features/integrations/api/naver-sync-orders.tsx"),
+      route("/sync-products", "features/integrations/api/naver-sync-products.tsx"),
+    ]),
   ]),
 
   // ========================================
@@ -181,6 +188,7 @@ export default [
         // 외부 연동 관리
         ...prefix("/integrations", [
           route("/cafe24", "features/integrations/screens/cafe24-status.tsx"),
+          route("/naver", "features/integrations/screens/naver-status.tsx"),
         ]),
       ]),
       
