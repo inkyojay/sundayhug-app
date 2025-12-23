@@ -85,7 +85,7 @@ export async function action({ request }: Route.ActionArgs): Promise<SyncResult>
           .upsert(orderData, {
             onConflict: "uniq",
           })
-          .select("id, to_name, to_tel, to_htel, sale_price, ord_time, shop_cd")
+          .select("id, to_name, to_tel, to_htel, pay_amt, ord_time, shop_cd")
           .single();
 
         if (upsertError) {
@@ -102,7 +102,7 @@ export async function action({ request }: Route.ActionArgs): Promise<SyncResult>
                 to_name: upsertedOrder.to_name,
                 to_tel: upsertedOrder.to_tel,
                 to_htel: upsertedOrder.to_htel,
-                sale_price: upsertedOrder.sale_price,
+                sale_price: upsertedOrder.pay_amt, // pay_amt를 sale_price로 전달
                 ord_time: upsertedOrder.ord_time,
                 shop_cd: upsertedOrder.shop_cd,
               });
