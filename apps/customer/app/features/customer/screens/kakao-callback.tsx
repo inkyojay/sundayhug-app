@@ -185,25 +185,25 @@ export async function loader({ request }: Route.LoaderArgs) {
     console.log("[Kakao Callback] profiles 업데이트...");
     
     // 기존 프로필 확인
-    const { data: existingProfile } = await adminClient
+    const { data: profileData } = await adminClient
       .from("profiles")
       .select("*")
       .eq("id", userId)
       .single();
     
-    if (existingProfile) {
+    if (profileData) {
       // 기존 프로필 업데이트
       await adminClient
         .from("profiles")
         .update({
-          name: kakaoName || existingProfile.name,
+          name: kakaoName || profileData.name,
           email: kakaoEmail,
-          phone: kakaoPhone || existingProfile.phone,
+          phone: kakaoPhone || profileData.phone,
           kakao_id: kakaoId,
           kakao_nickname: kakaoNickname,
           kakao_profile_image: kakaoProfileImage,
-          gender: kakaoGender || existingProfile.gender,
-          age_range: kakaoAgeRange || existingProfile.age_range,
+          gender: kakaoGender || profileData.gender,
+          age_range: kakaoAgeRange || profileData.age_range,
           last_login_at: new Date().toISOString(),
         })
         .eq("id", userId);
