@@ -8,7 +8,7 @@
  * - 평균 구매 주기
  * - 코호트 분석 (첫 구매월 기준)
  */
-import type { Route } from "./+types/customer-analytics";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 
 import {
   BarChart3Icon,
@@ -47,11 +47,11 @@ import {
   TabsTrigger,
 } from "~/core/components/ui/tabs";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: MetaFunction = () => {
   return [{ title: "고객 분석 | 관리자 대시보드" }];
 };
 
-export async function loader({ request }: Route.LoaderArgs) {
+export async function loader({ request }: LoaderFunctionArgs) {
   const { createAdminClient } = await import("~/core/lib/supa-admin.server");
   const adminClient = createAdminClient();
 

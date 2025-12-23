@@ -337,3 +337,4 @@ export async function uploadImageToStorage(
   return `data:${mimeType};base64,${base64Data}`;
 }
 
+

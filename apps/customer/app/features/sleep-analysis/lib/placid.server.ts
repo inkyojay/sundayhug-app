@@ -302,3 +302,4 @@ export function formatDateForCardNews(date: Date = new Date()): string {
   return `${year}.${month}.${day}`;
 }
 
+

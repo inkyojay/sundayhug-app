@@ -4,7 +4,7 @@
  * 플레이오토 제외한 직접 연동(카페24, 네이버) 주문만 표시
  * 향후 플레이오토 제거 대비용
  */
-import type { Route } from "./+types/orders-direct";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 
 import {
   ShoppingCartIcon,
@@ -25,7 +25,7 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { useFetcher, useRevalidator } from "react-router";
+import { useFetcher, useRevalidator, useLoaderData } from "react-router";
 
 import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
@@ -50,11 +50,11 @@ import {
   CollapsibleTrigger,
 } from "~/core/components/ui/collapsible";
 
-export const meta: Route.MetaFunction = () => {
+export const meta: MetaFunction = () => {
   return [{ title: "주문 관리 (직접연동) | 관리자 대시보드" }];
 };
 
-export async function loader({ request }: Route.LoaderArgs) {
+export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const page = parseInt(url.searchParams.get("page") || "1");
   const limit = 50;
@@ -65,12 +65,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const { createAdminClient } = await import("~/core/lib/supa-admin.server");
   const adminClient = createAdminClient();
 
-  // 통계 조회 (플레이오토 제외)
+  // 통계 조회 (카페24/네이버만)
   const [statusStats, shopStats] = await Promise.all([
     adminClient
       .from("orders")
       .select("ord_status")
-      .neq("shop_cd", "playauto")
+      .in("shop_cd", ["cafe24", "naver"])
       .then(({ data }) => {
         const stats: Record<string, number> = {};
         data?.forEach((order: any) => {
@@ -81,7 +81,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     adminClient
       .from("orders")
       .select("shop_cd")
-      .neq("shop_cd", "playauto")
+      .in("shop_cd", ["cafe24", "naver"])
       .then(({ data }) => {
         const shops: Record<string, number> = {};
         data?.forEach((order: any) => {
@@ -93,7 +93,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       }),
   ]);
 
-  // 주문 목록 조회 (플레이오토 제외)
+  // 주문 목록 조회 (카페24/네이버만)
   let query = adminClient
     .from("orders")
     .select(`
@@ -116,7 +116,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       deli_name,
       customer_id
     `)
-    .neq("shop_cd", "playauto")
+    .in("shop_cd", ["cafe24", "naver"])
     .order("ord_time", { ascending: false });
 
   if (statusFilter !== "all") {
@@ -140,7 +140,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   let countQuery = adminClient
     .from("orders")
     .select("id", { count: "exact", head: true })
-    .neq("shop_cd", "playauto");
+    .in("shop_cd", ["cafe24", "naver"]);
   
   if (statusFilter !== "all") {
     countQuery = countQuery.eq("ord_status", statusFilter);
@@ -197,7 +197,7 @@ function getShopBadge(shopCd: string) {
 }
 
 export default function OrdersDirectPage() {
-  const loaderData = Route.useLoaderData();
+  const loaderData = useLoaderData<typeof loader>();
   const revalidator = useRevalidator();
   const cafe24Fetcher = useFetcher();
   const naverFetcher = useFetcher();
