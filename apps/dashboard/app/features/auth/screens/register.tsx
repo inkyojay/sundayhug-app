@@ -60,6 +60,8 @@ const registerSchema = z.object({
 
 /**
  * 회원가입 액션
+ * - Admin API 사용으로 이메일 인증 불필요
+ * - 가입 후 관리자 승인 필요 (approval_status = pending)
  */
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
@@ -75,20 +77,22 @@ export async function action({ request }: Route.ActionArgs) {
 
   const [client, headers] = makeServerClient(request);
   
-  // Supabase Auth에 사용자 생성
-  const { data: authData, error: signUpError } = await client.auth.signUp({
+  // Admin API로 사용자 생성 (이메일 인증 건너뛰기)
+  const { createAdminClient } = await import("~/core/lib/supa-admin.server");
+  const adminClient = createAdminClient();
+  
+  const { data: authData, error: createError } = await adminClient.auth.admin.createUser({
     email: validData.email,
     password: validData.password,
-    options: {
-      data: {
-        name: validData.name,
-      },
+    email_confirm: true, // 이메일 인증 건너뛰기
+    user_metadata: {
+      name: validData.name,
     },
   });
 
-  if (signUpError) {
-    let errorMessage = signUpError.message;
-    if (errorMessage === "User already registered") {
+  if (createError) {
+    let errorMessage = createError.message;
+    if (errorMessage.includes("already been registered") || errorMessage.includes("already exists")) {
       errorMessage = "이미 가입된 이메일입니다";
     }
     return data({ error: errorMessage }, { status: 400 });
@@ -96,9 +100,6 @@ export async function action({ request }: Route.ActionArgs) {
 
   // profiles 테이블에 사용자 정보 저장 (approval_status = pending)
   if (authData.user) {
-    const { createAdminClient } = await import("~/core/lib/supa-admin.server");
-    const adminClient = createAdminClient();
-    
     await adminClient.from("profiles").upsert({
       id: authData.user.id,
       email: validData.email,
@@ -107,9 +108,6 @@ export async function action({ request }: Route.ActionArgs) {
       approval_status: "pending", // 승인 대기
     });
   }
-
-  // 가입 완료 후 로그아웃 (승인 전까지 로그인 불가)
-  await client.auth.signOut();
 
   return data({ success: true }, { headers });
 }
