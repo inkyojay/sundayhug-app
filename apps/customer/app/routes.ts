@@ -32,6 +32,7 @@ export default [
     ...prefix("/auth/phone", [
       route("/send-otp", "features/auth/api/send-otp.tsx"),
       route("/verify-otp", "features/auth/api/verify-otp.tsx"),
+      route("/verify-otp-only", "features/auth/api/verify-otp-only.tsx"),
     ]),
     // 네이버 로그인 API
     route("/auth/naver/token", "features/auth/api/naver-token.tsx"),

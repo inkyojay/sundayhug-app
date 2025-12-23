@@ -285,7 +285,7 @@ export default function CustomerRegisterScreen() {
     }
   };
 
-  // SMS 인증번호 확인
+  // SMS 인증번호 확인 (OTP 검증만, 회원가입 없음)
   const handleVerifyOtp = async () => {
     setError(null);
     
@@ -297,13 +297,13 @@ export default function CustomerRegisterScreen() {
     setOtpLoading(true);
     
     try {
-      const response = await fetch("/api/auth/phone/verify-otp", {
+      // verify-otp-only: OTP 검증만 수행, 회원가입/로그인 처리 없음
+      const response = await fetch("/api/auth/phone/verify-otp-only", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           phoneNumber: phoneNumber.replace(/-/g, ""),
           otp: otpCode,
-          name: name,
         }),
       });
       
