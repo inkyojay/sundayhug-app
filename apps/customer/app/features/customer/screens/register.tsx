@@ -2,12 +2,13 @@
  * 고객 회원가입 페이지 (새로운 디자인)
  * 
  * - 카카오 로그인 (Supabase OAuth)
- * - 이메일 가입 (Supabase Auth) + 전화번호 SMS 인증 필수
+ * - 이메일 가입 (Supabase Auth)
+ * - SMS 인증 (전화번호 필수)
  */
 import type { Route } from "./+types/register";
 
-import { useState, useEffect } from "react";
-import { data, useNavigate, useActionData, Form, useLoaderData, Link } from "react-router";
+import { useState, useEffect, useRef } from "react";
+import { data, useNavigate, useActionData, Form, useLoaderData, Link, useFetcher } from "react-router";
 import { ArrowLeft, Mail, CheckCircle, ChevronRight, Loader2 } from "lucide-react";
 
 import { Button } from "~/core/components/ui/button";
@@ -16,7 +17,11 @@ import { Label } from "~/core/components/ui/label";
 import FormErrors from "~/core/components/form-error";
 import FormSuccess from "~/core/components/form-success";
 import makeServerClient from "~/core/lib/supa-client.server";
-import adminClient from "~/core/lib/supa-admin-client.server";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "~/core/components/ui/input-otp";
 
 export function meta(): Route.MetaDescriptors {
   return [
@@ -42,77 +47,95 @@ export async function action({ request }: Route.ActionArgs) {
   
   const [supabase, headers] = makeServerClient(request);
 
+  // 전화번호 중복 체크
+  if (step === "check-phone") {
+    const phone = formData.get("phone") as string;
+    const normalizedPhone = phone.replace(/-/g, "");
+    
+    // profiles 테이블에서 전화번호 중복 확인
+    const { data: existingProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("phone", normalizedPhone)
+      .single();
+    
+    if (existingProfile) {
+      return data({ 
+        success: false, 
+        error: "이미 가입된 전화번호입니다. 다른 전화번호를 사용해주세요." 
+      });
+    }
+    
+    return data({ success: true, phoneAvailable: true });
+  }
+
   if (step === "register") {
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
     const name = formData.get("name") as string;
     const phone = formData.get("phone") as string;
+    const phoneVerified = formData.get("phoneVerified") as string;
 
     if (!email || !password) {
       return data({ success: false, error: "이메일과 비밀번호를 입력해주세요." });
     }
 
     if (!name || name.trim().length < 2) {
-      return data({ success: false, error: "이름을 2자 이상 입력해주세요." });
+      return data({ success: false, error: "이름 또는 별명을 2자 이상 입력해주세요." });
     }
 
     if (!phone) {
       return data({ success: false, error: "전화번호를 입력해주세요." });
     }
 
-    const normalizedPhone = phone.replace(/-/g, "");
-
-    // 전화번호 중복 체크 (서버에서 한번 더)
-    const { data: existingProfile } = await adminClient
-      .from("profiles")
-      .select("id, phone")
-      .eq("phone", normalizedPhone)
-      .maybeSingle();
-
-    if (existingProfile) {
-      return data({ success: false, error: "이미 가입된 전화번호입니다." });
+    if (phoneVerified !== "true") {
+      return data({ success: false, error: "전화번호 인증이 필요합니다." });
     }
 
-    // adminClient로 사용자 생성 (이메일 인증 없이 바로 가입)
-    const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
+    const normalizedPhone = phone.replace(/-/g, "");
+
+    // 전화번호 중복 재확인
+    const { data: existingProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("phone", normalizedPhone)
+      .single();
+    
+    if (existingProfile) {
+      return data({ 
+        success: false, 
+        error: "이미 가입된 전화번호입니다." 
+      });
+    }
+
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
-      email_confirm: true, // 이메일 인증 자동 완료
-      user_metadata: {
-        name: name.trim(),
-        phone: normalizedPhone,
+      options: {
+        data: {
+          name: name,
+          phone: normalizedPhone,
+        },
       },
     });
 
-    if (createError) {
-      console.error("회원가입 오류:", createError);
-      if (createError.message.includes("already been registered")) {
+    if (authError) {
+      console.error("회원가입 오류:", authError);
+      if (authError.message.includes("already registered")) {
         return data({ success: false, error: "이미 가입된 이메일입니다." });
       }
-      return data({ success: false, error: `회원가입 실패: ${createError.message}` });
+      return data({ success: false, error: `회원가입 실패: ${authError.message}` });
     }
 
-    if (newUser.user) {
-      // profiles 테이블에 저장
-      await adminClient
+    if (authData.user) {
+      await supabase
         .from("profiles")
-        .upsert({
-          id: newUser.user.id,
-          name: name.trim(),
+        .update({
+          name: name,
           phone: normalizedPhone,
-          email: email,
-        });
-      
-      // 바로 로그인 처리
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      
-      if (signInError) {
-        console.error("자동 로그인 오류:", signInError);
-        // 로그인 실패해도 가입은 성공이므로 success 반환
-      }
+          phone_verified: true,
+        })
+        .eq("id", authData.user.id);
     }
 
     return data({ success: true }, { headers });
@@ -125,8 +148,9 @@ export default function CustomerRegisterScreen() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
+  const otpFetcher = useFetcher();
   
-  const [step, setStep] = useState<"select" | "email" | "phone" | "complete">("select");
+  const [step, setStep] = useState<"select" | "email" | "phone" | "verify" | "complete">("select");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -137,15 +161,13 @@ export default function CustomerRegisterScreen() {
   const [name, setName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   
-  // SMS 인증
+  // 전화번호 인증 상태
   const [otpCode, setOtpCode] = useState("");
-  const [isOtpSent, setIsOtpSent] = useState(false);
-  const [isOtpVerified, setIsOtpVerified] = useState(false);
-  const [isCheckingPhone, setIsCheckingPhone] = useState(false);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
-  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
-  const [otpTimer, setOtpTimer] = useState(0);
-  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const countdownRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (loaderData?.isLoggedIn) {
@@ -161,16 +183,19 @@ export default function CustomerRegisterScreen() {
     }
   }, [actionData]);
 
-  // OTP 타이머
+  // 카운트다운 타이머
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (otpTimer > 0) {
-      interval = setInterval(() => {
-        setOtpTimer((prev) => prev - 1);
+    if (countdown > 0) {
+      countdownRef.current = setTimeout(() => {
+        setCountdown(countdown - 1);
       }, 1000);
     }
-    return () => clearInterval(interval);
-  }, [otpTimer]);
+    return () => {
+      if (countdownRef.current) {
+        clearTimeout(countdownRef.current);
+      }
+    };
+  }, [countdown]);
 
   const formatPhoneNumber = (value: string) => {
     const numbers = value.replace(/[^\d]/g, "");
@@ -179,44 +204,13 @@ export default function CustomerRegisterScreen() {
     return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7, 11)}`;
   };
 
-  const formatTime = (seconds: number) => {
-    const min = Math.floor(seconds / 60);
-    const sec = seconds % 60;
-    return `${min}:${sec.toString().padStart(2, '0')}`;
-  };
-
   const handleKakaoLogin = async () => {
-    // 카카오 REST API 키
-    const KAKAO_CLIENT_ID = "2737860d151daba73e31d3df6213a012";
-    const REDIRECT_URI = `${window.location.origin}/customer/kakao/callback`;
-    
-    // 카카오 동의 항목 (scope)
-    const scopes = [
-      "profile_nickname",
-      "profile_image", 
-      "account_email",
-      "phone_number",
-      "name",
-      "gender",
-      "age_range"
-    ].join(",");
-    
-    // CSRF 방지를 위한 state 생성
-    const state = Math.random().toString(36).substring(7);
-    sessionStorage.setItem("kakao_oauth_state", state);
-    
-    // 카카오 인가 URL로 직접 리다이렉트
-    const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${KAKAO_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${scopes}&state=${state}`;
-    
-    window.location.href = kakaoAuthUrl;
+    const redirectUrl = `${window.location.origin}/customer/auth/callback`;
+    window.location.href = `/auth/social/start/kakao?redirectTo=${encodeURIComponent(redirectUrl)}`;
   };
 
   const validateAndNext = () => {
     setError(null);
-    if (!name || name.trim().length < 2) {
-      setError("이름을 2자 이상 입력해주세요.");
-      return;
-    }
     if (!email || !email.includes("@")) {
       setError("올바른 이메일을 입력해주세요.");
       return;
@@ -229,126 +223,83 @@ export default function CustomerRegisterScreen() {
       setError("비밀번호가 일치하지 않습니다.");
       return;
     }
-    setStep("phone");
-  };
-
-  // 전화번호 중복 체크
-  const checkPhoneDuplicate = async (phone: string) => {
-    const normalizedPhone = phone.replace(/-/g, "");
-    if (normalizedPhone.length < 10) return;
-
-    setIsCheckingPhone(true);
-    setPhoneError(null);
-
-    try {
-      const response = await fetch("/api/auth/phone/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: normalizedPhone }),
-      });
-
-      const result = await response.json();
-
-      if (result.exists) {
-        setPhoneError(result.message);
-        setIsOtpSent(false);
-        setIsOtpVerified(false);
-      }
-    } catch (err) {
-      console.error("Phone check error:", err);
-    } finally {
-      setIsCheckingPhone(false);
+    if (!name || name.trim().length < 2) {
+      setError("이름 또는 별명을 2자 이상 입력해주세요.");
+      return;
     }
+    setStep("phone");
   };
 
   // SMS 인증번호 발송
   const handleSendOtp = async () => {
-    const normalizedPhone = phoneNumber.replace(/-/g, "");
-    if (normalizedPhone.length < 10) {
-      setPhoneError("올바른 전화번호를 입력해주세요.");
+    setError(null);
+    
+    if (!phoneNumber || phoneNumber.replace(/-/g, "").length < 10) {
+      setError("올바른 전화번호를 입력해주세요.");
       return;
     }
 
-    // 먼저 중복 체크
-    setIsSendingOtp(true);
-    setPhoneError(null);
-
+    setOtpLoading(true);
+    
     try {
-      // 중복 체크
-      const checkResponse = await fetch("/api/auth/phone/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: normalizedPhone }),
-      });
-
-      const checkResult = await checkResponse.json();
-
-      if (checkResult.exists) {
-        setPhoneError(checkResult.message);
-        setIsSendingOtp(false);
-        return;
-      }
-
-      // OTP 발송
       const response = await fetch("/api/auth/phone/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: normalizedPhone }),
+        body: JSON.stringify({ phoneNumber: phoneNumber.replace(/-/g, "") }),
       });
-
+      
       const result = await response.json();
-
+      
       if (result.success) {
-        setIsOtpSent(true);
-        setOtpTimer(300); // 5분
+        setOtpSent(true);
+        setCountdown(60);
         setSuccess("인증번호가 발송되었습니다.");
         setTimeout(() => setSuccess(null), 3000);
       } else {
-        setPhoneError(result.error || "인증번호 발송에 실패했습니다.");
+        setError(result.error || "인증번호 발송에 실패했습니다.");
       }
-    } catch (err) {
-      console.error("Send OTP error:", err);
-      setPhoneError("인증번호 발송에 실패했습니다.");
+    } catch (e) {
+      setError("인증번호 발송 중 오류가 발생했습니다.");
     } finally {
-      setIsSendingOtp(false);
+      setOtpLoading(false);
     }
   };
 
   // SMS 인증번호 확인
   const handleVerifyOtp = async () => {
+    setError(null);
+    
     if (otpCode.length !== 6) {
-      setPhoneError("6자리 인증번호를 입력해주세요.");
+      setError("인증번호 6자리를 입력해주세요.");
       return;
     }
 
-    setIsVerifyingOtp(true);
-    setPhoneError(null);
-
+    setOtpLoading(true);
+    
     try {
       const response = await fetch("/api/auth/phone/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           phoneNumber: phoneNumber.replace(/-/g, ""),
-          otpCode,
-          verifyOnly: true, // 단순 검증만 (회원가입은 별도 처리)
+          otp: otpCode,
+          name: name,
         }),
       });
-
+      
       const result = await response.json();
-
+      
       if (result.success) {
-        setIsOtpVerified(true);
-        setSuccess("전화번호가 인증되었습니다!");
-        setTimeout(() => setSuccess(null), 3000);
+        setPhoneVerified(true);
+        setSuccess("전화번호 인증이 완료되었습니다!");
+        setStep("verify"); // 인증 완료 → 가입 버튼 단계로
       } else {
-        setPhoneError(result.error || "인증번호가 일치하지 않습니다.");
+        setError(result.error || "인증번호가 일치하지 않습니다.");
       }
-    } catch (err) {
-      console.error("Verify OTP error:", err);
-      setPhoneError("인증 확인에 실패했습니다.");
+    } catch (e) {
+      setError("인증 확인 중 오류가 발생했습니다.");
     } finally {
-      setIsVerifyingOtp(false);
+      setOtpLoading(false);
     }
   };
 
@@ -356,6 +307,7 @@ export default function CustomerRegisterScreen() {
     if (step === "select") navigate("/customer");
     else if (step === "email") setStep("select");
     else if (step === "phone") setStep("email");
+    else if (step === "verify") setStep("phone");
   };
 
   // Progress indicator
@@ -363,7 +315,8 @@ export default function CustomerRegisterScreen() {
     if (step === "select") return 0;
     if (step === "email") return 1;
     if (step === "phone") return 2;
-    return 3;
+    if (step === "verify") return 3;
+    return 4;
   };
 
   return (
@@ -385,7 +338,7 @@ export default function CustomerRegisterScreen() {
         {/* Progress Steps */}
         {step !== "select" && step !== "complete" && (
           <div className="flex items-center gap-2 mb-8">
-            {[1, 2].map((s) => (
+            {[1, 2, 3].map((s) => (
               <div
                 key={s}
                 className={`h-1 flex-1 rounded-full transition-colors ${
@@ -404,7 +357,8 @@ export default function CustomerRegisterScreen() {
           <p className="text-gray-500">
             {step === "select" && "가입 방법을 선택해주세요"}
             {step === "email" && "기본 정보를 입력해주세요"}
-            {step === "phone" && "전화번호 인증을 완료해주세요"}
+            {step === "phone" && "전화번호를 입력해주세요"}
+            {step === "verify" && "가입을 완료해주세요"}
             {step === "complete" && "썬데이허그에 오신 것을 환영합니다"}
           </p>
         </div>
@@ -454,9 +408,9 @@ export default function CustomerRegisterScreen() {
 
             <p className="text-center text-xs text-gray-400 mt-6">
               가입 시{" "}
-              <Link to="/terms" className="underline">이용약관</Link>
+              <Link to="/customer/terms" className="underline">이용약관</Link>
               {" "}및{" "}
-              <Link to="/privacy" className="underline">개인정보처리방침</Link>
+              <Link to="/customer/privacy" className="underline">개인정보처리방침</Link>
               에 동의합니다.
             </p>
           </div>
@@ -466,22 +420,8 @@ export default function CustomerRegisterScreen() {
         {step === "email" && (
           <div className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="name" className="text-sm font-medium text-gray-700">
-                이름 또는 닉네임 <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="name"
-                type="text"
-                placeholder="2자 이상 입력"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="h-14 rounded-2xl border-gray-200 bg-white px-4 text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
-              />
-            </div>
-            
-            <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium text-gray-700">
-                이메일 <span className="text-red-500">*</span>
+                이메일 *
               </Label>
               <Input
                 id="email"
@@ -495,7 +435,7 @@ export default function CustomerRegisterScreen() {
             
             <div className="space-y-2">
               <Label htmlFor="password" className="text-sm font-medium text-gray-700">
-                비밀번호 <span className="text-red-500">*</span>
+                비밀번호 *
               </Label>
               <Input
                 id="password"
@@ -509,7 +449,7 @@ export default function CustomerRegisterScreen() {
             
             <div className="space-y-2">
               <Label htmlFor="passwordConfirm" className="text-sm font-medium text-gray-700">
-                비밀번호 확인 <span className="text-red-500">*</span>
+                비밀번호 확인 *
               </Label>
               <Input
                 id="passwordConfirm"
@@ -517,6 +457,21 @@ export default function CustomerRegisterScreen() {
                 placeholder="비밀번호 재입력"
                 value={passwordConfirm}
                 onChange={(e) => setPasswordConfirm(e.target.value)}
+                className="h-14 rounded-2xl border-gray-200 bg-white px-4 text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="name" className="text-sm font-medium text-gray-700">
+                이름 또는 별명 *
+              </Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="이름 또는 별명을 입력해주세요"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
                 className="h-14 rounded-2xl border-gray-200 bg-white px-4 text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
               />
             </div>
@@ -531,12 +486,12 @@ export default function CustomerRegisterScreen() {
           </div>
         )}
 
-        {/* Step 3: 전화번호 인증 (필수) */}
+        {/* Step 3: 전화번호 입력 및 인증 */}
         {step === "phone" && (
           <div className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="phone" className="text-sm font-medium text-gray-700">
-                전화번호 <span className="text-red-500">*</span>
+                전화번호 *
               </Label>
               <div className="flex gap-2">
                 <Input
@@ -545,81 +500,111 @@ export default function CustomerRegisterScreen() {
                   placeholder="010-1234-5678"
                   value={phoneNumber}
                   onChange={(e) => {
-                    const formatted = formatPhoneNumber(e.target.value);
-                    setPhoneNumber(formatted);
-                    setPhoneError(null);
-                    setIsOtpSent(false);
-                    setIsOtpVerified(false);
+                    setPhoneNumber(formatPhoneNumber(e.target.value));
+                    setPhoneVerified(false);
+                    setOtpSent(false);
                     setOtpCode("");
                   }}
                   maxLength={13}
-                  disabled={isOtpVerified}
+                  disabled={phoneVerified}
                   className="flex-1 h-14 rounded-2xl border-gray-200 bg-white px-4 text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35] disabled:bg-gray-100"
                 />
                 <Button
                   type="button"
                   onClick={handleSendOtp}
-                  disabled={phoneNumber.replace(/-/g, "").length < 10 || isSendingOtp || isOtpVerified}
-                  className="h-14 px-4 rounded-2xl bg-gray-800 hover:bg-gray-700 text-white font-medium disabled:opacity-50 whitespace-nowrap"
+                  disabled={otpLoading || phoneVerified || countdown > 0 || phoneNumber.replace(/-/g, "").length < 10}
+                  className="h-14 px-4 rounded-2xl bg-gray-800 hover:bg-gray-700 text-white font-medium text-sm whitespace-nowrap disabled:opacity-50"
                 >
-                  {isSendingOtp ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : isOtpSent ? (
+                  {otpLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : countdown > 0 ? (
+                    `${countdown}초`
+                  ) : otpSent ? (
                     "재발송"
                   ) : (
-                    "인증요청"
+                    "인증번호 발송"
                   )}
                 </Button>
               </div>
-              {phoneError && (
-                <p className="text-sm text-red-500 mt-1">{phoneError}</p>
-              )}
+              <p className="text-xs text-gray-400 mt-2">
+                전화번호는 A/S 신청, 알림톡 발송 등에 사용됩니다.
+              </p>
             </div>
 
-            {/* OTP 입력 */}
-            {isOtpSent && !isOtpVerified && (
-              <div className="space-y-2">
-                <Label htmlFor="otp" className="text-sm font-medium text-gray-700">
+            {/* 인증번호 입력 */}
+            {otpSent && !phoneVerified && (
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-gray-700">
                   인증번호 입력
-                  {otpTimer > 0 && (
-                    <span className="ml-2 text-[#FF6B35] font-medium">
-                      {formatTime(otpTimer)}
-                    </span>
-                  )}
                 </Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="otp"
-                    type="text"
-                    placeholder="6자리 숫자"
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                <div className="flex flex-col items-center gap-4">
+                  <InputOTP
                     maxLength={6}
-                    className="flex-1 h-14 rounded-2xl border-gray-200 bg-white px-4 text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35] text-center text-xl tracking-widest"
-                  />
+                    value={otpCode}
+                    onChange={(value) => setOtpCode(value)}
+                  >
+                    <InputOTPGroup className="gap-2">
+                      {[0, 1, 2, 3, 4, 5].map((index) => (
+                        <InputOTPSlot
+                          key={index}
+                          index={index}
+                          className="h-14 w-12 rounded-xl border-gray-200 bg-white text-xl"
+                        />
+                      ))}
+                    </InputOTPGroup>
+                  </InputOTP>
                   <Button
                     type="button"
                     onClick={handleVerifyOtp}
-                    disabled={otpCode.length !== 6 || isVerifyingOtp}
-                    className="h-14 px-6 rounded-2xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white font-medium disabled:opacity-50"
+                    disabled={otpLoading || otpCode.length !== 6}
+                    className="w-full h-14 rounded-2xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white font-medium text-base disabled:opacity-50"
                   >
-                    {isVerifyingOtp ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
+                    {otpLoading ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
                     ) : (
-                      "확인"
+                      "인증번호 확인"
                     )}
                   </Button>
                 </div>
+                <p className="text-xs text-gray-400 text-center">
+                  인증번호가 오지 않았나요? {countdown === 0 && "재발송 버튼을 눌러주세요."}
+                </p>
               </div>
             )}
 
-            {/* 인증 완료 표시 */}
-            {isOtpVerified && (
-              <div className="flex items-center gap-2 p-4 bg-green-50 rounded-2xl border border-green-200">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-                <span className="text-green-700 font-medium">전화번호 인증이 완료되었습니다</span>
+            {/* 인증 완료 상태 */}
+            {phoneVerified && (
+              <div className="p-4 bg-green-50 rounded-2xl flex items-center gap-3">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <span className="text-green-700 font-medium">전화번호 인증 완료</span>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Step 4: 가입 완료 버튼 */}
+        {step === "verify" && phoneVerified && (
+          <div className="space-y-5">
+            <div className="p-4 bg-gray-50 rounded-2xl space-y-3">
+              <h3 className="font-medium text-gray-900">가입 정보 확인</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">이메일</span>
+                  <span className="text-gray-900">{email}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">이름/별명</span>
+                  <span className="text-gray-900">{name}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">전화번호</span>
+                  <span className="text-gray-900 flex items-center gap-2">
+                    {phoneNumber}
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                  </span>
+                </div>
+              </div>
+            </div>
 
             <Form method="post">
               <input type="hidden" name="step" value="register" />
@@ -627,19 +612,15 @@ export default function CustomerRegisterScreen() {
               <input type="hidden" name="password" value={password} />
               <input type="hidden" name="name" value={name} />
               <input type="hidden" name="phone" value={phoneNumber} />
+              <input type="hidden" name="phoneVerified" value={phoneVerified ? "true" : "false"} />
               
               <Button 
                 type="submit" 
-                disabled={!isOtpVerified}
-                className="w-full h-14 rounded-2xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white font-medium text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full h-14 rounded-2xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white font-medium text-base"
               >
-                {isOtpVerified ? "가입 완료" : "전화번호 인증을 완료해주세요"}
+                가입 완료
               </Button>
             </Form>
-
-            <p className="text-xs text-gray-400 mt-2">
-              전화번호는 보증서 등록, A/S 신청 등에 사용됩니다.
-            </p>
           </div>
         )}
 
