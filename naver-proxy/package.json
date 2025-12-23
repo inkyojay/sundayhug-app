@@ -1,0 +1,18 @@
+{
+  "name": "naver-commerce-proxy",
+  "version": "1.0.0",
+  "description": "네이버 커머스 API 프록시 서버 (고정 IP용)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
+
