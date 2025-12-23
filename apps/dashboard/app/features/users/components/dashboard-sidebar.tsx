@@ -14,6 +14,7 @@ import {
   BookOpenIcon,
   BoxIcon,
   LayoutDashboardIcon,
+  LinkIcon,
   MegaphoneIcon,
   Settings2Icon,
   ShieldCheckIcon,
@@ -185,6 +186,23 @@ const data = {
       ],
     },
     
+    // ===== 외부 연동 =====
+    {
+      title: "외부 연동",
+      url: "/dashboard/integrations/cafe24",
+      icon: LinkIcon,
+      items: [
+        {
+          title: "Cafe24",
+          url: "/dashboard/integrations/cafe24",
+        },
+        {
+          title: "스마트스토어 (준비중)",
+          url: "#",
+        },
+      ],
+    },
+    
     // ===== 설정 =====
     {
       title: "설정",
@@ -194,10 +212,6 @@ const data = {
         {
           title: "계정 설정",
           url: "/account/edit",
-        },
-        {
-          title: "연동 관리",
-          url: "#",
         },
       ],
     },

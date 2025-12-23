@@ -104,6 +104,7 @@ export default [
       // 통합 로그인/회원가입 (Supabase Auth)
       route("/login", "features/customer/screens/login.tsx"),
       route("/register", "features/customer/screens/register.tsx"),
+      route("/logout", "features/auth/screens/logout.tsx"),
       route("/auth/callback", "features/customer/screens/auth-callback.tsx"),
       // 카카오 로그인 (REST API + Supabase Auth 하이브리드)
       route("/kakao/callback", "features/customer/screens/kakao-callback.tsx", { id: "customer-kakao-callback" }),
