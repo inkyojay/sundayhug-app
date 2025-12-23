@@ -108,6 +108,8 @@ export async function action({ request }: Route.ActionArgs) {
       });
     }
 
+    console.log("[회원가입] signUp 시도:", { email, name, phone: normalizedPhone });
+    
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -119,23 +121,41 @@ export async function action({ request }: Route.ActionArgs) {
       },
     });
 
+    console.log("[회원가입] signUp 결과:", { authData, authError });
+
     if (authError) {
-      console.error("회원가입 오류:", authError);
+      console.error("[회원가입] 오류:", authError);
       if (authError.message.includes("already registered")) {
         return data({ success: false, error: "이미 가입된 이메일입니다." });
       }
+      if (authError.message.includes("rate limit")) {
+        return data({ success: false, error: "너무 많은 요청입니다. 잠시 후 다시 시도해주세요." });
+      }
       return data({ success: false, error: `회원가입 실패: ${authError.message}` });
     }
+    
+    if (!authData.user) {
+      console.error("[회원가입] user 객체 없음");
+      return data({ success: false, error: "회원가입 처리 중 오류가 발생했습니다." });
+    }
 
-    if (authData.user) {
-      await supabase
-        .from("profiles")
-        .update({
-          name: name,
-          phone: normalizedPhone,
-          phone_verified: true,
-        })
-        .eq("id", authData.user.id);
+    // profiles 테이블 업데이트
+    console.log("[회원가입] profiles 업데이트 시도:", authData.user.id);
+    
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({
+        name: name,
+        phone: normalizedPhone,
+        phone_verified: true,
+      })
+      .eq("id", authData.user.id);
+    
+    if (profileError) {
+      console.error("[회원가입] profiles 업데이트 오류:", profileError);
+      // profiles 업데이트 실패해도 회원가입은 성공으로 처리
+    } else {
+      console.log("[회원가입] profiles 업데이트 완료");
     }
 
     return data({ success: true }, { headers });
@@ -548,7 +568,7 @@ export default function CustomerRegisterScreen() {
                         <InputOTPSlot
                           key={index}
                           index={index}
-                          className="h-14 w-12 rounded-xl border-gray-200 bg-white text-xl"
+                          className="h-14 w-12 rounded-xl border-gray-200 bg-white text-xl text-gray-900"
                         />
                       ))}
                     </InputOTPGroup>
@@ -566,9 +586,19 @@ export default function CustomerRegisterScreen() {
                     )}
                   </Button>
                 </div>
-                <p className="text-xs text-gray-400 text-center">
-                  인증번호가 오지 않았나요? {countdown === 0 && "재발송 버튼을 눌러주세요."}
-                </p>
+                <div className="text-center">
+                  <p className="text-xs text-gray-400 mb-2">
+                    인증번호가 오지 않았나요?
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={otpLoading || countdown > 0}
+                    className="text-sm text-[#FF6B35] font-medium hover:underline disabled:text-gray-400 disabled:no-underline"
+                  >
+                    {countdown > 0 ? `${countdown}초 후 재발송 가능` : "인증번호 다시 보내기"}
+                  </button>
+                </div>
               </div>
             )}
 
