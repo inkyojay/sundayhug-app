@@ -255,8 +255,8 @@ app.post("/api/proxy", verifyApiKey, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 네이버 커머스 API 프록시 서버 시작: http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 네이버 커머스 API 프록시 서버 시작 (v1.1): http://0.0.0.0:${PORT}`);
   console.log(`📌 환경변수 설정 상태:`);
   console.log(`   - NAVER_CLIENT_ID: ${NAVER_CLIENT_ID ? "✅ 설정됨" : "❌ 미설정"}`);
   console.log(`   - NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET ? "✅ 설정됨" : "❌ 미설정"}`);
