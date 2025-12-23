@@ -11,6 +11,7 @@ import { Button } from "~/core/components/ui/button";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { UploadForm } from "../components/upload-form";
 import { AnalysisResult } from "../components/analysis-result";
+import { StoryCardModal } from "../components/story-card-modal";
 import { analyzeSleepEnvironment } from "../lib/gemini.server";
 import { saveSleepAnalysis, calculateAgeInMonths } from "../lib/sleep-analysis.server";
 import type { AnalysisReport } from "../schema";
@@ -278,6 +279,7 @@ export default function AnalyzePublicPage() {
   const fetcher = useFetcher<typeof action>();
   const [formData, setFormData] = useState<UploadFormData | null>(null);
   const [isGeneratingCard, setIsGeneratingCard] = useState(false);
+  const [storyCardData, setStoryCardData] = useState<{ url: string; score: number } | null>(null);
   
   const defaultPhoneNumber = loaderData?.defaultPhoneNumber || "";
   const babies = loaderData?.babies || [];
@@ -334,41 +336,11 @@ export default function AnalyzePublicPage() {
       }
       
       const storyCardUrl = responseData.data.storyCardUrl as string;
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const score = responseData.data.score as number;
       
-      // 이미지 다운로드
-      const imgResponse = await fetch(storyCardUrl);
-      const blob = await imgResponse.blob();
-      const fileName = `수면분석-${responseData.data.score}점.png`;
+      // 모달로 이미지 표시 (모바일에서 길게 눌러서 저장)
+      setStoryCardData({ url: storyCardUrl, score });
       
-      // 모바일: Web Share API 시도
-      if (isMobile && navigator.share && navigator.canShare) {
-        const file = new File([blob], fileName, { type: "image/png" });
-        const shareData = { files: [file] };
-        
-        if (navigator.canShare(shareData)) {
-          try {
-            await navigator.share(shareData);
-            return; // 공유 성공
-          } catch {
-            // 공유 취소 시 일반 다운로드로 진행
-          }
-        }
-      }
-      
-      // 일반 다운로드 (PC 또는 Web Share 미지원 시)
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
-      
-      if (!isMobile) {
-        alert("📸 스토리 카드가 저장되었습니다!\n인스타그램 스토리에 공유해보세요!");
-      }
     } catch (err) {
       console.error("Story card error:", err);
       alert(err instanceof Error ? err.message : "카드 생성 중 오류가 발생했습니다.");
@@ -434,6 +406,15 @@ export default function AnalyzePublicPage() {
           )}
         </main>
       </div>
+
+      {/* 스토리 카드 모달 */}
+      {storyCardData && (
+        <StoryCardModal
+          imageUrl={storyCardData.url}
+          score={storyCardData.score}
+          onClose={() => setStoryCardData(null)}
+        />
+      )}
     </div>
   );
 }

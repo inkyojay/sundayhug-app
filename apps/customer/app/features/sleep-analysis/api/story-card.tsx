@@ -55,12 +55,12 @@ export async function action({ request, params }: Route.ActionArgs) {
       );
     }
 
-    // 2. 점수와 코멘트 추출 (0점도 유효한 값이므로 ?? 사용)
+    // 2. 점수와 코멘트 추출 (0점도 유효한 값이므로 typeof 체크)
     const score = typeof report.safetyScore === 'number' ? report.safetyScore : 70;
-    const comment =
-      report.scoreComment || report.summary?.substring(0, 80) || getDefaultComment(score);
+    const comment = report.scoreComment || getDefaultComment(score);
+    const summary = report.summary || "";
     
-    console.log(`[StoryCard] Extracted - score: ${score}, comment: ${comment?.substring(0, 30)}...`);
+    console.log(`[StoryCard] Extracted - score: ${score}, comment: ${comment?.substring(0, 30)}..., summary: ${summary?.substring(0, 30)}...`);
 
     // 3. 이미지 URL (선택적)
     const imageUrl = result.image_url || undefined;
@@ -70,6 +70,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     const storyCardUrl = await generateStoryCardImage({
       score,
       comment,
+      summary,
       imageUrl,
     });
 
