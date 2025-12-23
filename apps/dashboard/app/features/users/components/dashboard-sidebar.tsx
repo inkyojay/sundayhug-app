@@ -197,8 +197,8 @@ const data = {
           url: "/dashboard/integrations/cafe24",
         },
         {
-          title: "스마트스토어 (준비중)",
-          url: "#",
+          title: "스마트스토어 (네이버)",
+          url: "/dashboard/integrations/naver",
         },
       ],
     },
@@ -225,12 +225,17 @@ const data = {
       icon: BoxIcon,
     },
     {
-      name: "쿠팡 (준비중)",
-      url: "#",
+      name: "Cafe24",
+      url: "/dashboard/integrations/cafe24",
       icon: StoreIcon,
     },
     {
-      name: "스마트스토어 (준비중)",
+      name: "스마트스토어",
+      url: "/dashboard/integrations/naver",
+      icon: StoreIcon,
+    },
+    {
+      name: "쿠팡 (준비중)",
       url: "#",
       icon: StoreIcon,
     },
