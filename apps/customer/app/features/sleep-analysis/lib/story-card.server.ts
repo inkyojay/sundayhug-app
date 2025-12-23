@@ -67,6 +67,9 @@ async function htmlToImage(html: string): Promise<string> {
     body: JSON.stringify({
       html,
       google_fonts: "Noto Sans KR",
+      viewport_width: 1080,
+      viewport_height: 1080,
+      device_scale: 1,
     }),
   });
 
