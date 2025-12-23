@@ -68,6 +68,23 @@ app.get("/health", (req, res) => {
 });
 
 /**
+ * 실제 외부 IP 확인
+ */
+app.get("/my-ip", async (req, res) => {
+  try {
+    const response = await fetch("https://api.ipify.org?format=json");
+    const data = await response.json();
+    res.json({ 
+      outbound_ip: data.ip,
+      message: "이 IP를 네이버 커머스 API 센터에 등록하세요!",
+      railway_static_ip: "208.77.246.15"
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * 토큰 발급 API
  * POST /api/token
  */
