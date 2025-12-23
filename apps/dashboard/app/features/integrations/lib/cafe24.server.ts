@@ -233,7 +233,7 @@ async function cafe24Fetch<T>(
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token.access_token}`,
-        "X-Cafe24-Api-Version": "2024-03-01",
+        "X-Cafe24-Api-Version": "2024-09-01",
       },
       body: body ? JSON.stringify(body) : undefined,
     });
