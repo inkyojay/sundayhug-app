@@ -151,7 +151,6 @@ export async function action({ request }: Route.ActionArgs) {
         email: email,
         name: name,
         phone: normalizedPhone,
-        phone_verified: true,
       }, { onConflict: "id" });
     
     if (profileError) {
