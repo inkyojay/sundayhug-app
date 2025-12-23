@@ -8,7 +8,7 @@
 import type { Route } from "./+types/register";
 
 import { useState, useEffect, useRef } from "react";
-import { data, useNavigate, useActionData, Form, useLoaderData, Link, useFetcher } from "react-router";
+import { data, useNavigate, useActionData, Form, useLoaderData, Link, useFetcher, useNavigation } from "react-router";
 import { ArrowLeft, Mail, CheckCircle, ChevronRight, Loader2 } from "lucide-react";
 
 import { Button } from "~/core/components/ui/button";
@@ -168,7 +168,10 @@ export default function CustomerRegisterScreen() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
+  const navigation = useNavigation();
   const otpFetcher = useFetcher();
+  
+  const isSubmitting = navigation.state === "submitting";
   
   const [step, setStep] = useState<"select" | "email" | "phone" | "verify" | "complete">("select");
   const [error, setError] = useState<string | null>(null);
@@ -646,9 +649,14 @@ export default function CustomerRegisterScreen() {
               
               <Button 
                 type="submit" 
-                className="w-full h-14 rounded-2xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white font-medium text-base"
+                disabled={isSubmitting}
+                className="w-full h-14 rounded-2xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white font-medium text-base disabled:opacity-50"
               >
-                가입 완료
+                {isSubmitting ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  "가입 완료"
+                )}
               </Button>
             </Form>
           </div>
