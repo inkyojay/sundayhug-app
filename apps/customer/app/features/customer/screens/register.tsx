@@ -139,10 +139,12 @@ export async function action({ request }: Route.ActionArgs) {
       return data({ success: false, error: "회원가입 처리 중 오류가 발생했습니다." });
     }
 
-    // profiles 테이블 업데이트 (upsert 사용 - 없으면 생성, 있으면 업데이트)
+    // profiles 테이블 업데이트 (Admin Client 사용 - RLS 우회)
     console.log("[회원가입] profiles upsert 시도:", authData.user.id);
     
-    const { error: profileError } = await supabase
+    const adminClient = (await import("~/core/lib/supa-admin-client.server")).default;
+    
+    const { error: profileError } = await adminClient
       .from("profiles")
       .upsert({
         id: authData.user.id,
