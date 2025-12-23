@@ -204,6 +204,17 @@ export default function OrdersDirectPage() {
   
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [searchInput, setSearchInput] = useState(loaderData.searchQuery);
+  
+  // 날짜 범위 상태 (기본: 최근 7일)
+  const [syncStartDate, setSyncStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split("T")[0];
+  });
+  const [syncEndDate, setSyncEndDate] = useState(() => {
+    return new Date().toISOString().split("T")[0];
+  });
+  const [showSyncOptions, setShowSyncOptions] = useState(false);
 
   const isSyncingCafe24 = cafe24Fetcher.state === "submitting";
   const isSyncingNaver = naverFetcher.state === "submitting";
@@ -223,7 +234,11 @@ export default function OrdersDirectPage() {
 
   // 카페24 동기화
   const handleSyncCafe24 = () => {
-    cafe24Fetcher.submit(null, {
+    const formData = new FormData();
+    formData.append("startDate", syncStartDate);
+    formData.append("endDate", syncEndDate);
+    
+    cafe24Fetcher.submit(formData, {
       method: "POST",
       action: "/api/integrations/cafe24/sync-orders",
     });
@@ -231,7 +246,11 @@ export default function OrdersDirectPage() {
 
   // 네이버 동기화
   const handleSyncNaver = () => {
-    naverFetcher.submit(null, {
+    const formData = new FormData();
+    formData.append("startDate", syncStartDate);
+    formData.append("endDate", syncEndDate);
+    
+    naverFetcher.submit(formData, {
       method: "POST",
       action: "/api/integrations/naver/sync-orders",
     });
@@ -263,7 +282,15 @@ export default function OrdersDirectPage() {
             카페24, 네이버 스마트스토어에서 직접 수집한 주문
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowSyncOptions(!showSyncOptions)}
+          >
+            <CalendarIcon className="h-4 w-4 mr-2" />
+            {syncStartDate} ~ {syncEndDate}
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -292,6 +319,75 @@ export default function OrdersDirectPage() {
           </Button>
         </div>
       </div>
+
+      {/* 날짜 범위 선택 패널 */}
+      {showSyncOptions && (
+        <Card className="bg-muted/50">
+          <CardContent className="pt-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">시작일:</label>
+                <Input
+                  type="date"
+                  value={syncStartDate}
+                  onChange={(e) => setSyncStartDate(e.target.value)}
+                  className="w-40"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">종료일:</label>
+                <Input
+                  type="date"
+                  value={syncEndDate}
+                  onChange={(e) => setSyncEndDate(e.target.value)}
+                  className="w-40"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() - 7);
+                    setSyncStartDate(d.toISOString().split("T")[0]);
+                    setSyncEndDate(new Date().toISOString().split("T")[0]);
+                  }}
+                >
+                  최근 7일
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() - 30);
+                    setSyncStartDate(d.toISOString().split("T")[0]);
+                    setSyncEndDate(new Date().toISOString().split("T")[0]);
+                  }}
+                >
+                  최근 30일
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() - 90);
+                    setSyncStartDate(d.toISOString().split("T")[0]);
+                    setSyncEndDate(new Date().toISOString().split("T")[0]);
+                  }}
+                >
+                  최근 90일
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              💡 이미 저장된 주문은 자동으로 건너뜁니다 (중복 방지)
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 동기화 결과 메시지 */}
       {cafe24Fetcher.data && (
