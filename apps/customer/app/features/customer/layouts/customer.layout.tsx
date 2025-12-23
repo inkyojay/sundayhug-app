@@ -69,7 +69,7 @@ export default function CustomerLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
-    navigate("/logout");
+    navigate("/customer/logout");
   };
   
   const isActive = (href: string) => {

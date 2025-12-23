@@ -123,6 +123,9 @@ export default [
       
       // A/S 신청
       route("/as/:warrantyId", "features/customer/screens/as-request.tsx"),
+      
+      // 로그아웃
+      route("/logout", "features/auth/screens/logout.tsx"),
     ]),
   ]),
   
