@@ -17,6 +17,7 @@ const PORT = process.env.PORT || 3000;
 // 환경변수에서 인증 정보 가져오기
 const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID;
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET;
+const NAVER_ACCOUNT_ID = process.env.NAVER_ACCOUNT_ID; // 스마트스토어 계정 ID
 const PROXY_API_KEY = process.env.PROXY_API_KEY; // 프록시 보안용 키
 
 /**
@@ -76,6 +77,7 @@ app.post("/api/token", verifyApiKey, async (req, res) => {
     
     const clientId = client_id || NAVER_CLIENT_ID;
     const clientSecret = client_secret || NAVER_CLIENT_SECRET;
+    const accountId = account_id || NAVER_ACCOUNT_ID;
     
     if (!clientId || !clientSecret) {
       return res.status(400).json({ 
@@ -83,10 +85,16 @@ app.post("/api/token", verifyApiKey, async (req, res) => {
       });
     }
     
+    if (!accountId) {
+      return res.status(400).json({ 
+        error: "account_id가 필요합니다 (환경변수 NAVER_ACCOUNT_ID 설정 필요)" 
+      });
+    }
+    
     const timestamp = Date.now();
     const signature = generateSignature(clientId, clientSecret, timestamp);
     
-    console.log(`[토큰 발급] client_id: ${clientId}, timestamp: ${timestamp}`);
+    console.log(`[토큰 발급] client_id: ${clientId}, account_id: ${accountId}, timestamp: ${timestamp}`);
     
     const tokenUrl = "https://api.commerce.naver.com/external/v1/oauth2/token";
     
@@ -96,10 +104,7 @@ app.post("/api/token", verifyApiKey, async (req, res) => {
     params.append("client_secret_sign", signature);
     params.append("grant_type", "client_credentials");
     params.append("type", "SELLER");
-    
-    if (account_id) {
-      params.append("account_id", account_id);
-    }
+    params.append("account_id", accountId);
     
     const response = await fetch(tokenUrl, {
       method: "POST",
@@ -256,10 +261,11 @@ app.post("/api/proxy", verifyApiKey, async (req, res) => {
 });
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 네이버 커머스 API 프록시 서버 시작 (v1.1): http://0.0.0.0:${PORT}`);
+  console.log(`🚀 네이버 커머스 API 프록시 서버 시작 (v1.2): http://0.0.0.0:${PORT}`);
   console.log(`📌 환경변수 설정 상태:`);
   console.log(`   - NAVER_CLIENT_ID: ${NAVER_CLIENT_ID ? "✅ 설정됨" : "❌ 미설정"}`);
   console.log(`   - NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET ? "✅ 설정됨" : "❌ 미설정"}`);
+  console.log(`   - NAVER_ACCOUNT_ID: ${NAVER_ACCOUNT_ID ? "✅ 설정됨 (" + NAVER_ACCOUNT_ID + ")" : "❌ 미설정"}`);
   console.log(`   - PROXY_API_KEY: ${PROXY_API_KEY ? "✅ 설정됨" : "⚠️ 미설정 (개발 모드)"}`);
 });
 
