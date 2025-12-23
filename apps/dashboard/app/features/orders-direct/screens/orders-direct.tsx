@@ -109,6 +109,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       shop_name,
       shop_sale_name,
       shop_opt_name,
+      shop_sku_cd,
       pay_amt,
       sale_cnt,
       to_name,
@@ -122,7 +123,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       customer_id
     `)
     .in("shop_cd", ["cafe24", "naver"])
-    .order("ord_time", { ascending: false });
+    .order("ord_time", { ascending: false })
+    .order("shop_ord_no", { ascending: false });
 
   if (statusFilter !== "all") {
     query = query.eq("ord_status", statusFilter);
@@ -146,39 +148,84 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const to = from + limit - 1;
   query = query.range(from, to);
 
-  const { data: orders, error } = await query;
+  const { data: rawOrders, error } = await query;
 
-  // 전체 개수 조회
-  let countQuery = adminClient
-    .from("orders")
-    .select("id", { count: "exact", head: true })
-    .in("shop_cd", ["cafe24", "naver"]);
-  
-  if (statusFilter !== "all") {
-    countQuery = countQuery.eq("ord_status", statusFilter);
-  }
-  if (shopFilter !== "all") {
-    countQuery = countQuery.eq("shop_cd", shopFilter);
-  }
-  if (searchQuery) {
-    countQuery = countQuery.or(`to_name.ilike.%${searchQuery}%,shop_ord_no.ilike.%${searchQuery}%,to_tel.ilike.%${searchQuery}%`);
-  }
-  if (dateFrom) {
-    countQuery = countQuery.gte("ord_time", `${dateFrom}T00:00:00`);
-  }
-  if (dateTo) {
-    countQuery = countQuery.lte("ord_time", `${dateTo}T23:59:59`);
+  // 주문번호별로 그룹핑
+  const ordersMap = new Map<string, {
+    orderNo: string;
+    shopCd: string;
+    ordStatus: string;
+    toName: string;
+    toTel: string;
+    toHtel: string;
+    toAddr1: string;
+    toAddr2: string;
+    ordTime: string;
+    invoiceNo: string;
+    carrName: string;
+    customerId: string | null;
+    totalAmount: number;
+    totalQty: number;
+    items: Array<{
+      id: string;
+      saleName: string;
+      optName: string;
+      skuCd: string;
+      qty: number;
+      amt: number;
+    }>;
+  }>();
+
+  for (const row of rawOrders || []) {
+    const key = `${row.shop_cd}_${row.shop_ord_no}`;
+    
+    if (!ordersMap.has(key)) {
+      ordersMap.set(key, {
+        orderNo: row.shop_ord_no,
+        shopCd: row.shop_cd,
+        ordStatus: row.ord_status,
+        toName: row.to_name,
+        toTel: row.to_tel,
+        toHtel: row.to_htel,
+        toAddr1: row.to_addr1,
+        toAddr2: row.to_addr2,
+        ordTime: row.ord_time,
+        invoiceNo: row.invoice_no,
+        carrName: row.carr_name,
+        customerId: row.customer_id,
+        totalAmount: 0,
+        totalQty: 0,
+        items: [],
+      });
+    }
+    
+    const order = ordersMap.get(key)!;
+    order.totalAmount += row.pay_amt || 0;
+    order.totalQty += row.sale_cnt || 0;
+    order.items.push({
+      id: row.id,
+      saleName: row.shop_sale_name,
+      optName: row.shop_opt_name,
+      skuCd: row.shop_sku_cd,
+      qty: row.sale_cnt,
+      amt: row.pay_amt,
+    });
   }
 
-  const { count } = await countQuery;
+  const orders = Array.from(ordersMap.values());
+
+  // 전체 고유 주문 수 계산
+  const uniqueOrderCount = orders.length;
+  const totalItemCount = rawOrders?.length || 0;
 
   return {
-    orders: orders || [],
-    totalCount: count || 0,
+    orders,
+    totalCount: uniqueOrderCount,
+    totalItemCount,
     statusStats,
     shopStats,
     currentPage: page,
-    totalPages: Math.ceil((count || 0) / limit),
+    totalPages: Math.ceil(uniqueOrderCount / limit),
     statusFilter,
     shopFilter,
     searchQuery,
@@ -613,7 +660,7 @@ export default function OrdersDirectPage() {
         <CardHeader>
           <CardTitle>주문 목록</CardTitle>
           <CardDescription>
-            {loaderData.totalCount}건 중 {loaderData.orders.length}건 표시
+            {loaderData.totalCount}개 주문 ({loaderData.totalItemCount}개 상품)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -625,85 +672,112 @@ export default function OrdersDirectPage() {
             ) : (
               loaderData.orders.map((order: any) => (
                 <Collapsible
-                  key={order.id}
-                  open={expandedOrders.has(order.id)}
-                  onOpenChange={() => toggleOrder(order.id)}
+                  key={`${order.shopCd}_${order.orderNo}`}
+                  open={expandedOrders.has(order.orderNo)}
+                  onOpenChange={() => toggleOrder(order.orderNo)}
                 >
                   <CollapsibleTrigger asChild>
                     <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg cursor-pointer hover:bg-muted transition-colors">
                       <div className="flex items-center gap-4">
-                        {expandedOrders.has(order.id) ? (
+                        {expandedOrders.has(order.orderNo) ? (
                           <ChevronDownIcon className="h-4 w-4" />
                         ) : (
                           <ChevronRightIcon className="h-4 w-4" />
                         )}
                         <div>
                           <div className="flex items-center gap-2">
-                            {getShopBadge(order.shop_cd)}
-                            <span className="font-medium">{order.shop_ord_no}</span>
-                            {getStatusBadge(order.ord_status)}
+                            {getShopBadge(order.shopCd)}
+                            <span className="font-medium">{order.orderNo}</span>
+                            {getStatusBadge(order.ordStatus)}
+                            {order.items.length > 1 && (
+                              <Badge variant="secondary" className="text-xs">
+                                {order.items.length}개 상품
+                              </Badge>
+                            )}
                           </div>
                           <div className="text-sm text-muted-foreground flex items-center gap-3 mt-1">
                             <span className="flex items-center gap-1">
                               <UserIcon className="h-3 w-3" />
-                              {order.to_name}
+                              {order.toName}
                             </span>
                             <span className="flex items-center gap-1">
                               <CalendarIcon className="h-3 w-3" />
-                              {order.ord_time ? new Date(order.ord_time).toLocaleDateString("ko-KR") : "-"}
+                              {order.ordTime ? new Date(order.ordTime).toLocaleDateString("ko-KR") : "-"}
                             </span>
                           </div>
                         </div>
                       </div>
                       <div className="text-right">
                         <div className="font-medium">
-                          {order.pay_amt?.toLocaleString()}원
+                          {order.totalAmount?.toLocaleString()}원
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          수량: {order.sale_cnt}
+                          총 {order.totalQty}개
                         </div>
                       </div>
                     </div>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <div className="p-4 bg-background border rounded-lg mt-1 space-y-3">
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div>
-                          <h4 className="font-medium mb-2 flex items-center gap-2">
-                            <PackageIcon className="h-4 w-4" />
-                            상품 정보
-                          </h4>
-                          <div className="text-sm space-y-1">
-                            <p><strong>상품명:</strong> {order.shop_sale_name}</p>
-                            <p><strong>옵션:</strong> {order.shop_opt_name || "-"}</p>
-                            <p><strong>수량:</strong> {order.sale_cnt}개</p>
-                            <p><strong>금액:</strong> {order.pay_amt?.toLocaleString()}원</p>
-                          </div>
-                        </div>
-                        <div>
-                          <h4 className="font-medium mb-2 flex items-center gap-2">
-                            <MapPinIcon className="h-4 w-4" />
-                            배송 정보
-                          </h4>
-                          <div className="text-sm space-y-1">
-                            <p><strong>수령인:</strong> {order.to_name}</p>
-                            <p className="flex items-center gap-1">
-                              <PhoneIcon className="h-3 w-3" />
-                              {order.to_tel || order.to_htel || "-"}
-                            </p>
-                            <p><strong>주소:</strong> {[order.to_addr1, order.to_addr2].filter(Boolean).join(" ") || "-"}</p>
-                            {order.invoice_no && (
-                              <p>
-                                <strong>송장:</strong> {order.carr_name} {order.invoice_no}
-                              </p>
-                            )}
-                          </div>
+                    <div className="p-4 bg-background border rounded-lg mt-1 space-y-4">
+                      {/* 상품 목록 */}
+                      <div>
+                        <h4 className="font-medium mb-3 flex items-center gap-2">
+                          <PackageIcon className="h-4 w-4" />
+                          주문 상품 ({order.items.length}개)
+                        </h4>
+                        <div className="space-y-2">
+                          {order.items.map((item: any, idx: number) => (
+                            <div 
+                              key={item.id} 
+                              className="flex items-center justify-between p-3 bg-muted/30 rounded-md text-sm"
+                            >
+                              <div className="flex-1">
+                                <div className="font-medium">{item.saleName}</div>
+                                <div className="text-muted-foreground flex flex-wrap gap-2 mt-1">
+                                  {item.optName && (
+                                    <span>옵션: {item.optName}</span>
+                                  )}
+                                  {item.skuCd && (
+                                    <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-mono">
+                                      SKU: {item.skuCd}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right ml-4">
+                                <div className="font-medium">{item.amt?.toLocaleString()}원</div>
+                                <div className="text-muted-foreground">x{item.qty}</div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                      {order.customer_id && (
+                      
+                      {/* 배송 정보 */}
+                      <div className="pt-3 border-t">
+                        <h4 className="font-medium mb-2 flex items-center gap-2">
+                          <MapPinIcon className="h-4 w-4" />
+                          배송 정보
+                        </h4>
+                        <div className="text-sm space-y-1">
+                          <p><strong>수령인:</strong> {order.toName}</p>
+                          <p className="flex items-center gap-1">
+                            <PhoneIcon className="h-3 w-3" />
+                            {order.toTel || order.toHtel || "-"}
+                          </p>
+                          <p><strong>주소:</strong> {[order.toAddr1, order.toAddr2].filter(Boolean).join(" ") || "-"}</p>
+                          {order.invoiceNo && (
+                            <p>
+                              <strong>송장:</strong> {order.carrName} {order.invoiceNo}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {order.customerId && (
                         <div className="pt-2 border-t">
                           <Badge variant="outline" className="text-xs">
-                            고객 ID: {order.customer_id.slice(0, 8)}...
+                            고객 ID: {order.customerId.slice(0, 8)}...
                           </Badge>
                         </div>
                       )}
