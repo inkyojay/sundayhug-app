@@ -61,6 +61,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const statusFilter = url.searchParams.get("status") || "all";
   const shopFilter = url.searchParams.get("shop") || "all";
   const searchQuery = url.searchParams.get("q") || "";
+  
+  // 기간별 조회 필터 (기본: 전체)
+  const dateFrom = url.searchParams.get("dateFrom") || "";
+  const dateTo = url.searchParams.get("dateTo") || "";
 
   const { createAdminClient } = await import("~/core/lib/supa-admin.server");
   const adminClient = createAdminClient();
@@ -105,15 +109,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
       shop_name,
       shop_sale_name,
       shop_opt_name,
-      sale_price,
+      pay_amt,
       sale_cnt,
       to_name,
       to_tel,
       to_htel,
-      to_addr,
+      to_addr1,
+      to_addr2,
       ord_time,
       invoice_no,
-      deli_name,
+      carr_name,
       customer_id
     `)
     .in("shop_cd", ["cafe24", "naver"])
@@ -127,6 +132,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
   if (searchQuery) {
     query = query.or(`to_name.ilike.%${searchQuery}%,shop_ord_no.ilike.%${searchQuery}%,to_tel.ilike.%${searchQuery}%`);
+  }
+  // 기간별 조회 필터
+  if (dateFrom) {
+    query = query.gte("ord_time", `${dateFrom}T00:00:00`);
+  }
+  if (dateTo) {
+    query = query.lte("ord_time", `${dateTo}T23:59:59`);
   }
 
   // 페이지네이션
@@ -151,6 +163,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
   if (searchQuery) {
     countQuery = countQuery.or(`to_name.ilike.%${searchQuery}%,shop_ord_no.ilike.%${searchQuery}%,to_tel.ilike.%${searchQuery}%`);
   }
+  if (dateFrom) {
+    countQuery = countQuery.gte("ord_time", `${dateFrom}T00:00:00`);
+  }
+  if (dateTo) {
+    countQuery = countQuery.lte("ord_time", `${dateTo}T23:59:59`);
+  }
 
   const { count } = await countQuery;
 
@@ -164,6 +182,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     statusFilter,
     shopFilter,
     searchQuery,
+    dateFrom,
+    dateTo,
   };
 }
 
@@ -205,7 +225,7 @@ export default function OrdersDirectPage() {
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [searchInput, setSearchInput] = useState(loaderData.searchQuery);
   
-  // 날짜 범위 상태 (기본: 최근 7일)
+  // 동기화 날짜 범위 (기본: 최근 7일)
   const [syncStartDate, setSyncStartDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
@@ -215,6 +235,10 @@ export default function OrdersDirectPage() {
     return new Date().toISOString().split("T")[0];
   });
   const [showSyncOptions, setShowSyncOptions] = useState(false);
+  
+  // 조회 날짜 범위
+  const [viewDateFrom, setViewDateFrom] = useState(loaderData.dateFrom || "");
+  const [viewDateTo, setViewDateTo] = useState(loaderData.dateTo || "");
 
   const isSyncingCafe24 = cafe24Fetcher.state === "submitting";
   const isSyncingNaver = naverFetcher.state === "submitting";
@@ -465,42 +489,120 @@ export default function OrdersDirectPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <form className="flex flex-wrap gap-4" method="GET">
-            <Select name="status" defaultValue={loaderData.statusFilter}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="주문 상태" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">전체 상태</SelectItem>
-                <SelectItem value="결제완료">결제완료</SelectItem>
-                <SelectItem value="상품준비">상품준비</SelectItem>
-                <SelectItem value="배송중">배송중</SelectItem>
-                <SelectItem value="배송완료">배송완료</SelectItem>
-                <SelectItem value="취소">취소</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select name="shop" defaultValue={loaderData.shopFilter}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="쇼핑몰" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">전체 쇼핑몰</SelectItem>
-                <SelectItem value="cafe24">Cafe24</SelectItem>
-                <SelectItem value="naver">네이버</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="flex gap-2 flex-1">
+          <form className="flex flex-col gap-4" method="GET">
+            {/* 기간별 조회 */}
+            <div className="flex flex-wrap items-center gap-3 pb-3 border-b">
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">조회 기간:</span>
+              </div>
               <Input
-                name="q"
-                placeholder="주문자명, 주문번호, 전화번호 검색"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="max-w-xs"
+                type="date"
+                name="dateFrom"
+                value={viewDateFrom}
+                onChange={(e) => setViewDateFrom(e.target.value)}
+                className="w-[140px]"
               />
-              <Button type="submit" variant="secondary">
-                <SearchIcon className="h-4 w-4 mr-2" />
-                검색
-              </Button>
+              <span className="text-muted-foreground">~</span>
+              <Input
+                type="date"
+                name="dateTo"
+                value={viewDateTo}
+                onChange={(e) => setViewDateTo(e.target.value)}
+                className="w-[140px]"
+              />
+              <div className="flex gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() - 7);
+                    setViewDateFrom(d.toISOString().split("T")[0]);
+                    setViewDateTo(new Date().toISOString().split("T")[0]);
+                  }}
+                >
+                  7일
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() - 30);
+                    setViewDateFrom(d.toISOString().split("T")[0]);
+                    setViewDateTo(new Date().toISOString().split("T")[0]);
+                  }}
+                >
+                  30일
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() - 90);
+                    setViewDateFrom(d.toISOString().split("T")[0]);
+                    setViewDateTo(new Date().toISOString().split("T")[0]);
+                  }}
+                >
+                  90일
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setViewDateFrom("");
+                    setViewDateTo("");
+                  }}
+                >
+                  전체
+                </Button>
+              </div>
+            </div>
+            
+            {/* 상태 / 쇼핑몰 / 검색 */}
+            <div className="flex flex-wrap gap-4">
+              <Select name="status" defaultValue={loaderData.statusFilter}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="주문 상태" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체 상태</SelectItem>
+                  <SelectItem value="결제완료">결제완료</SelectItem>
+                  <SelectItem value="상품준비">상품준비</SelectItem>
+                  <SelectItem value="배송중">배송중</SelectItem>
+                  <SelectItem value="배송완료">배송완료</SelectItem>
+                  <SelectItem value="취소">취소</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select name="shop" defaultValue={loaderData.shopFilter}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="쇼핑몰" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체 쇼핑몰</SelectItem>
+                  <SelectItem value="cafe24">Cafe24</SelectItem>
+                  <SelectItem value="naver">네이버</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="flex gap-2 flex-1">
+                <Input
+                  name="q"
+                  placeholder="주문자명, 주문번호, 전화번호 검색"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  className="max-w-xs"
+                />
+                <Button type="submit" variant="secondary">
+                  <SearchIcon className="h-4 w-4 mr-2" />
+                  검색
+                </Button>
+              </div>
             </div>
           </form>
         </CardContent>
@@ -555,7 +657,7 @@ export default function OrdersDirectPage() {
                       </div>
                       <div className="text-right">
                         <div className="font-medium">
-                          {order.sale_price?.toLocaleString()}원
+                          {order.pay_amt?.toLocaleString()}원
                         </div>
                         <div className="text-sm text-muted-foreground">
                           수량: {order.sale_cnt}
@@ -575,7 +677,7 @@ export default function OrdersDirectPage() {
                             <p><strong>상품명:</strong> {order.shop_sale_name}</p>
                             <p><strong>옵션:</strong> {order.shop_opt_name || "-"}</p>
                             <p><strong>수량:</strong> {order.sale_cnt}개</p>
-                            <p><strong>금액:</strong> {order.sale_price?.toLocaleString()}원</p>
+                            <p><strong>금액:</strong> {order.pay_amt?.toLocaleString()}원</p>
                           </div>
                         </div>
                         <div>
@@ -589,10 +691,10 @@ export default function OrdersDirectPage() {
                               <PhoneIcon className="h-3 w-3" />
                               {order.to_tel || order.to_htel || "-"}
                             </p>
-                            <p><strong>주소:</strong> {order.to_addr || "-"}</p>
+                            <p><strong>주소:</strong> {[order.to_addr1, order.to_addr2].filter(Boolean).join(" ") || "-"}</p>
                             {order.invoice_no && (
                               <p>
-                                <strong>송장:</strong> {order.deli_name} {order.invoice_no}
+                                <strong>송장:</strong> {order.carr_name} {order.invoice_no}
                               </p>
                             )}
                           </div>
