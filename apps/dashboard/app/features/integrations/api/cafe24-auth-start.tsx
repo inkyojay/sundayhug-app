@@ -24,13 +24,9 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // Cafe24 OAuth 인증 URL 구성
   // https://developers.cafe24.com/docs/en/api/admin/#oauth
-  const scopes = [
-    "mall.read_store",
-    "mall.read_order",
-    "mall.read_product",
-    "mall.read_category",
-    "mall.read_customer",
-  ].join(",");
+  // 환경변수에서 scope를 가져오거나, 기본값으로 주문 읽기 권한만 요청
+  // ⚠️ Cafe24 개발자센터에서 앱에 등록된 권한과 일치해야 함
+  const scopes = process.env.CAFE24_SCOPES || "mall.read_order";
 
   // state 파라미터로 CSRF 방지 (간단히 타임스탬프 사용)
   const state = Buffer.from(JSON.stringify({
