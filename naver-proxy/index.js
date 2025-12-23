@@ -6,7 +6,7 @@
 
 const express = require("express");
 const cors = require("cors");
-const crypto = require("crypto");
+const bcrypt = require("bcrypt");
 
 const app = express();
 app.use(cors());
@@ -39,16 +39,16 @@ function verifyApiKey(req, res, next) {
 }
 
 /**
- * 네이버 API 서명 생성
+ * 네이버 API 서명 생성 (bcrypt 사용)
+ * - password: client_id + "_" + timestamp
+ * - salt: client_secret (bcrypt salt 형식)
  */
-function generateSignature(clientId, clientSecret, timestamp) {
-  // client_id + "_" + timestamp를 client_secret으로 HMAC-SHA256
-  const signatureBase = `${clientId}_${timestamp}`;
-  const signature = crypto
-    .createHmac("sha256", clientSecret)
-    .update(signatureBase)
-    .digest("base64");
-  
+async function generateSignature(clientId, clientSecret, timestamp) {
+  const password = `${clientId}_${timestamp}`;
+  // bcrypt hashSync 사용 (client_secret이 bcrypt salt 형식)
+  const hash = bcrypt.hashSync(password, clientSecret);
+  // Base64 인코딩
+  const signature = Buffer.from(hash).toString("base64");
   return signature;
 }
 
@@ -92,9 +92,10 @@ app.post("/api/token", verifyApiKey, async (req, res) => {
     }
     
     const timestamp = Date.now();
-    const signature = generateSignature(clientId, clientSecret, timestamp);
+    const signature = await generateSignature(clientId, clientSecret, timestamp);
     
     console.log(`[토큰 발급] client_id: ${clientId}, account_id: ${accountId}, timestamp: ${timestamp}`);
+    console.log(`[토큰 발급] signature 생성 완료`);
     
     const tokenUrl = "https://api.commerce.naver.com/external/v1/oauth2/token";
     
@@ -261,7 +262,7 @@ app.post("/api/proxy", verifyApiKey, async (req, res) => {
 });
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 네이버 커머스 API 프록시 서버 시작 (v1.2): http://0.0.0.0:${PORT}`);
+  console.log(`🚀 네이버 커머스 API 프록시 서버 시작 (v1.3-bcrypt): http://0.0.0.0:${PORT}`);
   console.log(`📌 환경변수 설정 상태:`);
   console.log(`   - NAVER_CLIENT_ID: ${NAVER_CLIENT_ID ? "✅ 설정됨" : "❌ 미설정"}`);
   console.log(`   - NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET ? "✅ 설정됨" : "❌ 미설정"}`);
