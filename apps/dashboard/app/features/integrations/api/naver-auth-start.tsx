@@ -8,8 +8,6 @@ import { data, redirect } from "react-router";
 
 import type { Route } from "./+types/naver-auth-start";
 
-import { refreshNaverToken, testConnection } from "../lib/naver.server";
-
 /**
  * GET - 연동 시작 (토큰 발급)
  */
@@ -24,6 +22,9 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   console.log("🔑 네이버 토큰 발급 시작...");
 
+  // 동적 import로 서버 전용 모듈 로드
+  const { refreshNaverToken } = await import("../lib/naver.server");
+  
   // 토큰 발급 시도
   const token = await refreshNaverToken();
 
@@ -44,6 +45,9 @@ export async function loader({ request }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const actionType = formData.get("actionType");
+
+  // 동적 import로 서버 전용 모듈 로드
+  const { refreshNaverToken, testConnection } = await import("../lib/naver.server");
 
   if (actionType === "test") {
     const result = await testConnection();

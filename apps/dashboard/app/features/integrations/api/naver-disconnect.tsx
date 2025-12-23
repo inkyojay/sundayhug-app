@@ -7,8 +7,6 @@ import { data, redirect } from "react-router";
 
 import type { Route } from "./+types/naver-disconnect";
 
-import { disconnectNaver } from "../lib/naver.server";
-
 /**
  * POST - 연동 해제
  */
@@ -20,6 +18,9 @@ export async function action({ request }: Route.ActionArgs) {
     return data({ success: false, error: "계정 ID가 필요합니다." }, { status: 400 });
   }
 
+  // 동적 import로 서버 전용 모듈 로드
+  const { disconnectNaver } = await import("../lib/naver.server");
+  
   const result = await disconnectNaver(accountId);
 
   if (!result.success) {

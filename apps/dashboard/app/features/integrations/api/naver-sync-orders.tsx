@@ -8,8 +8,6 @@ import { data } from "react-router";
 
 import type { Route } from "./+types/naver-sync-orders";
 
-import { getOrders, getOrderDetails } from "../lib/naver.server";
-
 /**
  * POST - 주문 동기화
  */
@@ -22,6 +20,9 @@ export async function action({ request }: Route.ActionArgs) {
   const syncStartTime = Date.now();
 
   try {
+    // 동적 import로 서버 전용 모듈 로드
+    const { getOrders } = await import("../lib/naver.server");
+    
     // 1. 주문 목록 조회
     const ordersResult = await getOrders({
       orderDateFrom: startDate || undefined,

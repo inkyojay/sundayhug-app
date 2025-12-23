@@ -8,8 +8,6 @@ import { data } from "react-router";
 
 import type { Route } from "./+types/naver-sync-products";
 
-import { getProducts } from "../lib/naver.server";
-
 /**
  * POST - 상품 동기화 (조회)
  */
@@ -21,6 +19,9 @@ export async function action({ request }: Route.ActionArgs) {
   console.log("📦 네이버 상품 조회 시작...");
 
   try {
+    // 동적 import로 서버 전용 모듈 로드
+    const { getProducts } = await import("../lib/naver.server");
+    
     const result = await getProducts({ page, size });
 
     if (!result.success) {
