@@ -11,6 +11,7 @@
  * - 쇼핑몰 연동: (추후 추가)
  */
 import {
+  BarChart3Icon,
   BookOpenIcon,
   BoxIcon,
   LayoutDashboardIcon,
@@ -22,6 +23,7 @@ import {
   StarIcon,
   StoreIcon,
   UsersIcon,
+  ZapIcon,
 } from "lucide-react";
 
 import {
@@ -81,8 +83,12 @@ const data = {
       icon: ShoppingCartIcon,
       items: [
         {
-          title: "주문 목록",
+          title: "주문 목록 (플레이오토)",
           url: "/dashboard/orders",
+        },
+        {
+          title: "주문 관리 (직접연동)",
+          url: "/dashboard/orders-direct",
         },
       ],
     },
@@ -169,12 +175,16 @@ const data = {
       ],
     },
     
-    // ===== 분석 (준비중) =====
+    // ===== 분석 =====
     {
       title: "분석",
-      url: "#",
-      icon: MegaphoneIcon,
+      url: "/dashboard/customer-analytics",
+      icon: BarChart3Icon,
       items: [
+        {
+          title: "고객 분석",
+          url: "/dashboard/customer-analytics",
+        },
         {
           title: "광고 분석",
           url: "#",

@@ -78,6 +78,18 @@ export interface NaverClaim {
 const NAVER_API_BASE = "https://api.commerce.naver.com";
 
 /**
+ * 프록시 서버 URL (Railway에 배포)
+ * 네이버 커머스 API는 고정 IP에서만 호출 가능
+ */
+function getProxyUrl(): string | null {
+  return process.env.NAVER_PROXY_URL || null;
+}
+
+function getProxyApiKey(): string | null {
+  return process.env.NAVER_PROXY_API_KEY || null;
+}
+
+/**
  * 네이버 토큰 조회
  */
 export async function getNaverToken(accountId?: string): Promise<NaverToken | null> {
@@ -113,53 +125,91 @@ export function isTokenExpired(token: NaverToken): boolean {
 /**
  * 네이버 토큰 발급/갱신
  * Client Credentials 방식으로 토큰 발급
+ * 프록시 서버가 설정되어 있으면 프록시를 통해 발급
  */
 export async function refreshNaverToken(token?: NaverToken): Promise<NaverToken | null> {
   const clientId = process.env.NAVER_CLIENT_ID;
   const clientSecret = process.env.NAVER_CLIENT_SECRET;
+  const proxyUrl = getProxyUrl();
+  const proxyApiKey = getProxyApiKey();
 
   if (!clientId || !clientSecret) {
     console.error("❌ 네이버 credentials가 설정되지 않음");
     return null;
   }
 
-  const tokenUrl = `${NAVER_API_BASE}/external/v1/oauth2/token`;
-
-  // bcrypt timestamp for signature
-  const timestamp = Date.now();
-  
-  // 서명 생성: clientId + "_" + timestamp
-  const signatureBase = `${clientId}_${timestamp}`;
-  
-  // HMAC-SHA256으로 서명 생성
-  const crypto = await import("crypto");
-  const signature = crypto
-    .createHmac("sha256", clientSecret)
-    .update(signatureBase)
-    .digest("base64");
-
   try {
-    const response = await fetch(tokenUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        client_id: clientId,
-        timestamp: String(timestamp),
-        client_secret_sign: signature,
-        grant_type: "client_credentials",
-        type: "SELF",
-      }),
-    });
+    let tokenData: any;
 
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error("❌ 토큰 발급 실패:", response.status, errorData);
-      return null;
+    // 프록시 서버가 설정되어 있으면 프록시를 통해 토큰 발급
+    if (proxyUrl) {
+      console.log("🔄 프록시 서버를 통해 토큰 발급 시도...");
+      
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      
+      if (proxyApiKey) {
+        headers["X-Proxy-Api-Key"] = proxyApiKey;
+      }
+      
+      const response = await fetch(`${proxyUrl}/api/token`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          client_id: clientId,
+          client_secret: clientSecret,
+          account_id: process.env.NAVER_ACCOUNT_ID,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error("❌ 프록시 토큰 발급 실패:", response.status, errorData);
+        return null;
+      }
+
+      tokenData = await response.json();
+    } else {
+      // 직접 호출 (로컬 개발 또는 고정 IP 환경)
+      console.log("🔄 직접 토큰 발급 시도...");
+      
+      const tokenUrl = `${NAVER_API_BASE}/external/v1/oauth2/token`;
+      const timestamp = Date.now();
+      
+      // 서명 생성: clientId + "_" + timestamp
+      const signatureBase = `${clientId}_${timestamp}`;
+      
+      // HMAC-SHA256으로 서명 생성
+      const crypto = await import("crypto");
+      const signature = crypto
+        .createHmac("sha256", clientSecret)
+        .update(signatureBase)
+        .digest("base64");
+
+      const response = await fetch(tokenUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          client_id: clientId,
+          timestamp: String(timestamp),
+          client_secret_sign: signature,
+          grant_type: "client_credentials",
+          type: "SELLER",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error("❌ 토큰 발급 실패:", response.status, errorData);
+        return null;
+      }
+
+      tokenData = await response.json();
     }
-
-    const tokenData = await response.json();
+    
     console.log("✅ 네이버 토큰 발급 성공");
 
     // DB 업데이트/저장
@@ -218,6 +268,7 @@ export async function getValidToken(accountId?: string): Promise<NaverToken | nu
 
 /**
  * 네이버 커머스 API 호출
+ * 프록시 서버가 설정되어 있으면 프록시를 통해 호출
  */
 async function naverFetch<T>(
   endpoint: string,
@@ -228,23 +279,54 @@ async function naverFetch<T>(
   } = {}
 ): Promise<{ success: boolean; data?: T; error?: string }> {
   const { method = "GET", body, accountId } = options;
+  const proxyUrl = getProxyUrl();
+  const proxyApiKey = getProxyApiKey();
   
   const token = await getValidToken(accountId);
   if (!token) {
     return { success: false, error: "유효한 네이버 토큰이 없습니다. 연동을 다시 해주세요." };
   }
 
-  const apiUrl = `${NAVER_API_BASE}${endpoint}`;
-
   try {
-    const response = await fetch(apiUrl, {
-      method,
-      headers: {
+    let response: Response;
+    
+    // 프록시 서버가 설정되어 있으면 프록시를 통해 호출
+    if (proxyUrl) {
+      const headers: Record<string, string> = {
         "Content-Type": "application/json",
         "Authorization": `${token.token_type} ${token.access_token}`,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+      };
+      
+      if (proxyApiKey) {
+        headers["X-Proxy-Api-Key"] = proxyApiKey;
+      }
+      
+      // 범용 프록시 API 사용
+      response = await fetch(`${proxyUrl}/api/proxy`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          method,
+          path: endpoint,
+          headers: {
+            "Authorization": `${token.token_type} ${token.access_token}`,
+          },
+          body,
+        }),
+      });
+    } else {
+      // 직접 호출
+      const apiUrl = `${NAVER_API_BASE}${endpoint}`;
+      
+      response = await fetch(apiUrl, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `${token.token_type} ${token.access_token}`,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    }
 
     const responseData = await response.json();
 

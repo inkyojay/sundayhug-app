@@ -9,6 +9,99 @@
 
 ---
 
+## 2025-12-23 (월) - 네이버 스마트스토어 API 연동
+
+### 작업 내용
+
+1. **네이버 커머스 API 연동 구현**
+   - `/dashboard/integrations/naver` - 연동 상태 페이지
+   - 토큰 발급/갱신 로직 (Client Credentials 방식)
+   - 주문 동기화 기능
+   - 상품 동기화 기능 (준비중)
+
+2. **Railway 프록시 서버 구축**
+   - Vercel의 동적 IP 문제 해결을 위해 Railway에 프록시 서버 배포
+   - 고정 Outbound IP (`208.77.246.15`) 제공
+   - bcrypt 기반 서명 생성 (네이버 API 요구사항)
+   - `/my-ip` 엔드포인트로 실제 외부 IP 확인 가능
+
+3. **네이버 API 인증 구현**
+   - `type=SELF` (내 쇼핑몰 전용)
+   - `account_id` 필수 파라미터 처리
+   - 토큰 자동 갱신 로직
+
+### 환경변수 (Vercel)
+```
+NAVER_CLIENT_ID=발급받은 클라이언트 ID
+NAVER_CLIENT_SECRET=발급받은 클라이언트 시크릿
+NAVER_ACCOUNT_ID=ncp_1okmyk_01
+NAVER_PROXY_URL=https://sundayhug-app-production.up.railway.app
+NAVER_PROXY_API_KEY=sundayhug-proxy-2024
+```
+
+### 환경변수 (Railway 프록시)
+```
+NAVER_CLIENT_ID=발급받은 클라이언트 ID
+NAVER_CLIENT_SECRET=발급받은 클라이언트 시크릿
+NAVER_ACCOUNT_ID=ncp_1okmyk_01
+PROXY_API_KEY=sundayhug-proxy-2024
+```
+
+### DB 마이그레이션
+```sql
+-- 네이버 토큰 테이블
+CREATE TABLE naver_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id TEXT NOT NULL UNIQUE,
+  access_token TEXT NOT NULL,
+  token_type TEXT DEFAULT 'Bearer',
+  expires_in INTEGER,
+  scope TEXT,
+  issued_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  client_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### 파일 변경
+```
+apps/dashboard/
+├── app/
+│   ├── features/integrations/
+│   │   ├── api/
+│   │   │   ├── naver-auth-start.tsx     # 연동 시작
+│   │   │   ├── naver-disconnect.tsx     # 연동 해제
+│   │   │   ├── naver-sync-orders.tsx    # 주문 동기화
+│   │   │   └── naver-sync-products.tsx  # 상품 동기화
+│   │   ├── lib/
+│   │   │   └── naver.server.ts          # API 클라이언트
+│   │   └── screens/
+│   │       └── naver-status.tsx         # 연동 상태 페이지
+│   └── routes.ts                        # 네이버 연동 라우트 추가
+
+naver-proxy/                             # Railway 프록시 서버
+├── index.js                             # Express 서버
+├── package.json
+├── package-lock.json
+├── railway.json
+├── README.md
+└── .gitignore
+```
+
+### 네이버 커머스 API 센터 설정
+1. 애플리케이션 생성 (내 쇼핑몰 전용)
+2. IP 등록: `208.77.246.15` (Railway Static IP)
+3. 필요 권한: 주문 조회, 상품 조회
+
+### 트러블슈팅
+- **`type` 에러**: `SELLER` → `SELF`로 변경 (내 쇼핑몰 전용)
+- **IP 에러**: Railway Pro 플랜 업그레이드 후 Static IP 활성화
+- **서명 에러**: HMAC-SHA256 → bcrypt로 변경
+
+---
+
 ## 2025-12-22 (일) - 회원 관리 및 관리자 승인 시스템
 
 ### 작업 내용

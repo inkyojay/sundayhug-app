@@ -60,6 +60,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   
   try {
     // 1. 인가 코드로 토큰 교환
+    console.log("[Kakao Callback] 토큰 교환 시작...");
     const tokenResponse = await fetch("https://kauth.kakao.com/oauth/token", {
       method: "POST",
       headers: {
@@ -81,7 +82,10 @@ export async function loader({ request }: Route.LoaderArgs) {
       return redirect("/customer/login?error=kakao_token_failed");
     }
     
+    console.log("[Kakao Callback] 토큰 발급 성공, scope:", tokenData.scope);
+    
     // 2. 사용자 정보 요청
+    console.log("[Kakao Callback] 사용자 정보 요청...");
     const userResponse = await fetch("https://kapi.kakao.com/v2/user/me", {
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
@@ -107,41 +111,58 @@ export async function loader({ request }: Route.LoaderArgs) {
     const kakaoAgeRange = kakaoAccount.age_range || null;
     const kakaoBirthday = kakaoAccount.birthday || null;
     
+    console.log("[Kakao Callback] 수집된 정보:", {
+      kakaoId,
+      email: kakaoEmail,
+      nickname: kakaoNickname,
+      name: kakaoName,
+      phone: kakaoPhone,
+      gender: kakaoGender,
+      ageRange: kakaoAgeRange,
+    });
+    
     if (!kakaoEmail) {
       console.error("[Kakao Callback] 이메일 없음 - 동의 필요");
       return redirect("/customer/login?error=kakao_email_required");
     }
     
     // 3. Supabase에서 기존 사용자 확인 또는 생성
+    console.log("[Kakao Callback] Supabase 사용자 확인/생성...");
+    
     // 카카오 ID 기반 고유 비밀번호 (변경 불가능한 고정값)
     const kakaoPassword = `kakao_${kakaoId}_sundayhug_2024!`;
-    
-    // 이메일로 기존 사용자 확인
-    const { data: existingUsers } = await adminClient.auth.admin.listUsers();
-    const existingUser = existingUsers?.users?.find(u => u.email === kakaoEmail);
     
     let userId: string;
     let isNewUser = false;
     
-    if (existingUser) {
-      // 기존 사용자 - 비밀번호 업데이트 (카카오 로그인용)
-      userId = existingUser.id;
+    // profiles 테이블에서 이메일로 기존 사용자 확인 (더 빠르고 확실함)
+    console.log("[Kakao Callback] profiles에서 이메일로 사용자 조회...");
+    const { data: existingProfile } = await adminClient
+      .from("profiles")
+      .select("id")
+      .eq("email", kakaoEmail)
+      .maybeSingle();
+    
+    if (existingProfile) {
+      // 기존 사용자 - 비밀번호 업데이트
+      console.log("[Kakao Callback] 기존 사용자 발견 (profiles):", existingProfile.id);
+      userId = existingProfile.id;
       
-      // 비밀번호 업데이트 (카카오 로그인 시마다)
+      // 비밀번호 업데이트 (카카오 로그인용)
       await adminClient.auth.admin.updateUserById(userId, {
         password: kakaoPassword,
         user_metadata: {
-          ...existingUser.user_metadata,
           provider: "kakao",
           kakao_id: kakaoId,
         },
       });
     } else {
       // 새 사용자 생성
+      console.log("[Kakao Callback] 새 사용자 생성...");
       const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
         email: kakaoEmail,
         password: kakaoPassword,
-        email_confirm: true, // 이메일 인증 완료 처리
+        email_confirm: true,
         user_metadata: {
           name: kakaoName,
           avatar_url: kakaoProfileImage,
@@ -150,36 +171,39 @@ export async function loader({ request }: Route.LoaderArgs) {
         },
       });
       
-      if (createError || !newUser.user) {
+      if (createError || !newUser?.user) {
         console.error("[Kakao Callback] 사용자 생성 실패:", createError);
         return redirect("/customer/login?error=create_failed");
       }
       
       userId = newUser.user.id;
       isNewUser = true;
+      console.log("[Kakao Callback] 새 사용자 생성 완료:", userId);
     }
     
     // 4. profiles 테이블에 추가 정보 저장/업데이트
+    console.log("[Kakao Callback] profiles 업데이트...");
+    
     // 기존 프로필 확인
-    const { data: existingProfile } = await adminClient
+    const { data: profileData } = await adminClient
       .from("profiles")
       .select("*")
       .eq("id", userId)
       .single();
     
-    if (existingProfile) {
+    if (profileData) {
       // 기존 프로필 업데이트
       await adminClient
         .from("profiles")
         .update({
-          name: kakaoName || existingProfile.name,
+          name: kakaoName || profileData.name,
           email: kakaoEmail,
-          phone: kakaoPhone || existingProfile.phone,
+          phone: kakaoPhone || profileData.phone,
           kakao_id: kakaoId,
           kakao_nickname: kakaoNickname,
           kakao_profile_image: kakaoProfileImage,
-          gender: kakaoGender || existingProfile.gender,
-          age_range: kakaoAgeRange || existingProfile.age_range,
+          gender: kakaoGender || profileData.gender,
+          age_range: kakaoAgeRange || profileData.age_range,
           last_login_at: new Date().toISOString(),
         })
         .eq("id", userId);
@@ -202,7 +226,11 @@ export async function loader({ request }: Route.LoaderArgs) {
         });
     }
     
+    console.log("[Kakao Callback] profiles 업데이트 완료");
+    
     // 5. Supabase 세션 생성 (비밀번호 로그인)
+    console.log("[Kakao Callback] 세션 생성...");
+    
     const [supabase, headers] = makeServerClient(request);
     
     // 비밀번호로 로그인하여 세션 생성
@@ -215,6 +243,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       console.error("[Kakao Callback] 로그인 실패:", signInError);
       return redirect("/customer/login?error=login_failed");
     }
+    
+    console.log("[Kakao Callback] 세션 생성 완료:", signInData.user?.id);
     
     // 6. 마이페이지로 리다이렉트
     return redirect("/customer/mypage", { headers });

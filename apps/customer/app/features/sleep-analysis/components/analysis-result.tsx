@@ -13,8 +13,7 @@ import {
   CheckCircle,
   Moon,
   Image as ImageIcon,
-  MessageCircle,
-  Instagram
+  MessageCircle
 } from "lucide-react";
 import { useState, useRef } from "react";
 
@@ -76,8 +75,8 @@ interface AnalysisResultProps {
   babyAgeMonths?: number;
   products?: Product[];  // DB에서 가져온 추천 제품 목록
   onReset: () => void;
-  onDownloadSlides?: () => void;
-  isDownloading?: boolean;
+  onShareStoryCard?: () => void;
+  isGeneratingCard?: boolean;
 }
 
 // 위험도별 설정 (영문 키 사용 - Gemini API 응답 형식)
@@ -127,8 +126,8 @@ export function AnalysisResult({
   babyAgeMonths,
   products = [],
   onReset,
-  onDownloadSlides,
-  isDownloading = false,
+  onShareStoryCard,
+  isGeneratingCard = false,
 }: AnalysisResultProps) {
   const [activeFeedbackId, setActiveFeedbackId] = useState<number | null>(null);
   const [showShareOptions, setShowShareOptions] = useState(false);
@@ -218,137 +217,128 @@ export function AnalysisResult({
     }
   };
 
-  // 인스타그램 카드 슬라이드
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [slideUrls, setSlideUrls] = useState<string[]>([]);
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [isLoadingSlides, setIsLoadingSlides] = useState(false);
-  const [slideError, setSlideError] = useState<string | null>(null);
+  // 이미지로 저장 (html2canvas)
+  const [isSavingImage, setIsSavingImage] = useState(false);
+  const [saveProgress, setSaveProgress] = useState<string>("");
   
-  // 터치 스와이프 지원
-  const touchStartX = useRef<number>(0);
-  const touchEndX = useRef<number>(0);
-  
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
-  
-  const handleTouchMove = (e: React.TouchEvent) => {
-    touchEndX.current = e.touches[0].clientX;
-  };
-  
-  const handleTouchEnd = () => {
-    const diff = touchStartX.current - touchEndX.current;
-    const threshold = 50; // 최소 스와이프 거리
-    
-    if (diff > threshold && currentSlide < slideUrls.length - 1) {
-      // 왼쪽으로 스와이프 → 다음 슬라이드
-      setCurrentSlide(prev => prev + 1);
-    } else if (diff < -threshold && currentSlide > 0) {
-      // 오른쪽으로 스와이프 → 이전 슬라이드
-      setCurrentSlide(prev => prev - 1);
-    }
-  };
-  
-  // 로딩 메시지
-  const [loadingStep, setLoadingStep] = useState(0);
-  const [retryCount, setRetryCount] = useState(0);
-  const loadingMessages = [
-    { emoji: "🎨", text: "카드 디자인 준비 중..." },
-    { emoji: "📸", text: "분석 이미지 처리 중..." },
-    { emoji: "✨", text: "예쁜 카드뉴스 만드는 중..." },
-    { emoji: "🌙", text: "수면 정보 정리 중..." },
-    { emoji: "💾", text: "거의 다 됐어요!" },
-    { emoji: "⏳", text: "조금만 더 기다려주세요..." },
-    { emoji: "🔄", text: "열심히 만들고 있어요..." },
-  ];
-  
-  // 슬라이드 로드 (타임아웃 없음)
-  const loadSlides = async (isRetry = false) => {
-    if (!analysisId) return;
-    if (!isRetry && slideUrls.length > 0) return;
-    
-    setIsLoadingSlides(true);
-    setSlideError(null);
-    setLoadingStep(0);
-    if (isRetry) {
-      setSlideUrls([]);
-      setRetryCount(prev => prev + 1);
-    }
-    
-    // 로딩 메시지 애니메이션
-    const loadingInterval = setInterval(() => {
-      setLoadingStep(prev => (prev + 1) % loadingMessages.length);
-    }, 2500);
+  const handleSaveAsImage = async () => {
+    if (!resultRef.current || isSavingImage) return;
+
+    setIsSavingImage(true);
+    setSaveProgress("이미지 생성 중...");
     
     try {
-      // 먼저 기존 슬라이드가 있는지 확인
-      const getResponse = await fetch(`/api/sleep/${analysisId}/slides`);
-      const getData = await getResponse.json();
+      // 동적 import - Vite 번들 분석 제외
+      const html2canvasModule = await import(/* @vite-ignore */ "html2canvas");
+      const html2canvas = html2canvasModule.default;
       
-      if (getData.success && getData.data?.slideUrls?.length > 0) {
-        setSlideUrls(getData.data.slideUrls);
-        clearInterval(loadingInterval);
-        setIsLoadingSlides(false);
-        return;
+      setSaveProgress("화면 캡처 중...");
+      
+      // 캡처 대상 요소
+      const element = resultRef.current;
+      
+      const canvas = await html2canvas(element, {
+        backgroundColor: "#F5F5F0",
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        imageTimeout: 15000,
+        onclone: (clonedDoc) => {
+          // 클론된 문서에서 스타일 조정
+          const clonedElement = clonedDoc.querySelector('[data-result-card]');
+          if (clonedElement) {
+            (clonedElement as HTMLElement).style.overflow = 'visible';
+          }
+        }
+      });
+      
+      setSaveProgress("이미지 저장 중...");
+      
+      // Blob으로 변환하여 다운로드 (모바일 호환성 개선)
+      const blob = await new Promise<Blob>((resolve) => {
+        canvas.toBlob((b) => resolve(b!), "image/png", 1.0);
+      });
+      
+      const fileName = `수면분석결과-${new Date().toISOString().split("T")[0]}.png`;
+      
+      // 모바일 체크
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      // Web Share API 지원 확인 (모바일에서 사진첩 저장 가능)
+      if (isMobile && navigator.share && navigator.canShare) {
+        const file = new File([blob], fileName, { type: "image/png" });
+        const shareData = { files: [file] };
+        
+        if (navigator.canShare(shareData)) {
+          try {
+            await navigator.share(shareData);
+            setSaveProgress("");
+            setIsSavingImage(false);
+            return;
+          } catch (shareError) {
+            // 공유 취소 또는 실패 시 일반 다운로드로 폴백
+            console.log("공유 취소됨, 일반 다운로드 시도");
+          }
+        }
       }
       
-      // 슬라이드 생성 (타임아웃 없음 - 끝까지 기다림)
-      const postResponse = await fetch(`/api/sleep/${analysisId}/slides`, { method: "POST" });
-      const postData = await postResponse.json();
+      // 일반 다운로드 (PC 또는 Web Share 미지원 시)
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.download = fileName;
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
       
-      if (postData.success && postData.data?.slideUrls) {
-        setSlideUrls(postData.data.slideUrls);
-      } else {
-        throw new Error(postData.error || "슬라이드 생성 실패");
+      // 모바일에서 다운로드 안내
+      if (isMobile) {
+        alert("이미지가 다운로드되었습니다.\n'파일' 또는 '다운로드' 폴더에서 확인하세요.");
       }
+      
     } catch (error) {
-      console.error("슬라이드 로드 에러:", error);
-      const errorMsg = error instanceof Error ? error.message : "알 수 없는 오류";
-      setSlideError(`슬라이드 생성 실패: ${errorMsg}`);
+      console.error("이미지 저장 실패:", error);
+      alert("이미지 저장에 실패했습니다. 다시 시도해주세요.");
     } finally {
-      clearInterval(loadingInterval);
-      setIsLoadingSlides(false);
+      setIsSavingImage(false);
+      setSaveProgress("");
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Action Buttons - 모바일 친화적 */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3">
+      {/* Action Buttons */}
+      <div className="flex flex-wrap items-center justify-center gap-3">
         <Button 
           onClick={onReset} 
           variant="outline"
-          className="rounded-xl border-gray-300 text-gray-700 hover:bg-gray-100 h-12"
+          className="rounded-xl border-gray-300 text-gray-700 hover:bg-gray-100"
         >
           <RefreshCw className="mr-2 h-4 w-4" />
           새로 분석
         </Button>
 
-        {/* 인스타그램 공유 버튼 - 가장 눈에 띄게 */}
-        <Button 
-          onClick={() => {
-            setShowShareModal(true);
-            loadSlides();
-          }}
-          disabled={isLoadingSlides || !analysisId}
-          className="rounded-xl bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 text-white hover:opacity-90 h-12 font-semibold shadow-lg"
-        >
-          <Instagram className="mr-2 h-5 w-5" />
-          인스타 카드 만들기
-        </Button>
-
-        {/* 베이비릴스 버튼 */}
-        {analysisId && (
-          <a 
-            href={`/customer/sleep/reels/${analysisId}`}
-            className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white hover:opacity-90 h-12 font-semibold shadow-lg px-6"
+        {/* 스토리 카드 공유 버튼 */}
+        {onShareStoryCard && (
+          <Button 
+            onClick={onShareStoryCard}
+            disabled={isGeneratingCard}
+            className="rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-            🎵 우리 아기 노래 만들기
-          </a>
+            {isGeneratingCard ? (
+              <>
+                <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                카드 생성 중...
+              </>
+            ) : (
+              <>
+                <Share2 className="mr-2 h-4 w-4" />
+                스토리 카드 공유
+              </>
+            )}
+          </Button>
         )}
       </div>
 
@@ -356,176 +346,6 @@ export function AnalysisResult({
         <p className="text-center text-sm text-gray-500">
           ✓ 분석 저장 완료 (ID: {analysisId.substring(0, 8)}...)
         </p>
-      )}
-
-      {/* 캐러셀 슬라이드 모달 */}
-      {showShareModal && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col">
-          {/* 헤더 */}
-          <div className="flex items-center justify-between p-4">
-            <button 
-              onClick={() => { setShowShareModal(false); setCurrentSlide(0); }}
-              className="text-white text-lg font-medium"
-            >
-              ✕ 닫기
-            </button>
-            <span className="text-white font-bold">
-              {slideUrls.length > 0 ? `${currentSlide + 1} / ${slideUrls.length}` : "인스타 카드"}
-            </span>
-            <div className="w-16"></div>
-          </div>
-          
-          {/* 안내 메시지 */}
-          <div className="bg-gradient-to-r from-purple-500 to-pink-500 py-2 px-4 text-center">
-            <p className="text-white font-bold text-sm">
-              👆 이미지 길게 누르면 저장! 👈👉 스와이프로 넘기기
-            </p>
-          </div>
-          
-          {/* 캐러셀 영역 */}
-          <div 
-            className="flex-1 relative overflow-hidden"
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-          >
-            {isLoadingSlides ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center px-8">
-                  {/* 귀여운 로딩 애니메이션 */}
-                  <div className="relative mb-6">
-                    <div className="text-6xl animate-bounce">
-                      {loadingMessages[loadingStep].emoji}
-                    </div>
-                    {/* 반짝이는 별들 */}
-                    <div className="absolute -top-2 -left-4 text-yellow-400 animate-pulse text-xl">✨</div>
-                    <div className="absolute -top-1 -right-2 text-yellow-400 animate-pulse text-lg" style={{ animationDelay: '0.5s' }}>✨</div>
-                    <div className="absolute -bottom-1 left-0 text-yellow-400 animate-pulse text-sm" style={{ animationDelay: '1s' }}>✨</div>
-                  </div>
-                  
-                  {/* 로딩 메시지 */}
-                  <p className="text-white text-lg font-medium mb-2">
-                    {loadingMessages[loadingStep].text}
-                  </p>
-                  
-                  {/* 프로그레스 바 */}
-                  <div className="w-48 mx-auto bg-gray-700 rounded-full h-2 mb-4 overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 rounded-full transition-all duration-500"
-                      style={{ 
-                        width: `${((loadingStep + 1) / loadingMessages.length) * 100}%`,
-                        animation: 'pulse 1s infinite'
-                      }}
-                    />
-                  </div>
-                  
-                  {/* 팁 메시지 */}
-                  <div className="bg-white/10 rounded-xl px-4 py-3 max-w-xs mx-auto">
-                    <p className="text-gray-300 text-sm">
-                      💡 <span className="text-orange-400">Tip!</span> 카드뉴스는 인스타 스토리에 딱이에요!
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : slideError ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center p-8 max-w-sm">
-                  <div className="text-6xl mb-4">😢</div>
-                  <p className="text-white text-lg font-medium mb-2">앗, 문제가 생겼어요!</p>
-                  <p className="text-gray-400 text-sm mb-6">{slideError}</p>
-                  
-                  <button 
-                    onClick={() => loadSlides(true)}
-                    className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-4 px-6 rounded-xl mb-3 flex items-center justify-center gap-2"
-                  >
-                    🔄 다시 시도하기
-                  </button>
-                  
-                  {retryCount > 0 && (
-                    <p className="text-gray-500 text-xs">
-                      재시도 {retryCount}회 • 네트워크 연결을 확인해주세요
-                    </p>
-                  )}
-                </div>
-              </div>
-            ) : slideUrls.length > 0 ? (
-              <>
-                {/* 슬라이드 컨테이너 */}
-                <div 
-                  className="flex h-full transition-transform duration-300 ease-out"
-                  style={{ transform: `translateX(-${currentSlide * 100}%)` }}
-                >
-                  {slideUrls.map((url, index) => (
-                    <div 
-                      key={index}
-                      className="min-w-full h-full flex items-center justify-center p-4"
-                    >
-                      <img 
-                        src={url}
-                        alt={`슬라이드 ${index + 1}`}
-                        className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                        style={{ WebkitTouchCallout: 'default' }}
-                        draggable={false}
-                      />
-                    </div>
-                  ))}
-                </div>
-                
-                {/* 좌우 네비게이션 버튼 */}
-                {currentSlide > 0 && (
-                  <button
-                    onClick={() => setCurrentSlide(prev => prev - 1)}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/20 hover:bg-white/40 rounded-full flex items-center justify-center text-white text-2xl backdrop-blur-sm"
-                  >
-                    ‹
-                  </button>
-                )}
-                {currentSlide < slideUrls.length - 1 && (
-                  <button
-                    onClick={() => setCurrentSlide(prev => prev + 1)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/20 hover:bg-white/40 rounded-full flex items-center justify-center text-white text-2xl backdrop-blur-sm"
-                  >
-                    ›
-                  </button>
-                )}
-              </>
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <div className="text-4xl mb-4">📸</div>
-                  <p className="text-white mb-4">카드뉴스를 불러오는 중...</p>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          {/* 하단 인디케이터 & 안내 */}
-          <div className="p-4 bg-black/80">
-            {/* 페이지 인디케이터 */}
-            {slideUrls.length > 0 && (
-              <div className="flex justify-center gap-2 mb-3">
-                {slideUrls.map((_, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setCurrentSlide(index)}
-                    className={`w-2 h-2 rounded-full transition-all ${
-                      index === currentSlide 
-                        ? "bg-white w-6" 
-                        : "bg-white/40"
-                    }`}
-                  />
-                ))}
-              </div>
-            )}
-            
-            <p className="text-gray-400 text-sm text-center">
-              원하는 이미지만 골라서 저장하세요! ✨
-            </p>
-            <p className="text-orange-400 text-xs text-center mt-1">
-              @sundayhug.official 태그하면 선물이! 🎁
-            </p>
-          </div>
-        </div>
       )}
 
       {/* Main Content */}
@@ -725,9 +545,6 @@ export function AnalysisResult({
             </ul>
           </div>
         )}
-
-        {/* 제품 추천 섹션 */}
-        <ProductRecommendations recommendations={productRecommendations} />
       </div>
 
       {/* 안내 메시지 */}

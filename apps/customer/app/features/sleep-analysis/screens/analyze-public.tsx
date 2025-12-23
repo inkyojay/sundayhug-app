@@ -11,6 +11,7 @@ import { Button } from "~/core/components/ui/button";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { UploadForm } from "../components/upload-form";
 import { AnalysisResult } from "../components/analysis-result";
+import { StoryCardModal } from "../components/story-card-modal";
 import { analyzeSleepEnvironment } from "../lib/gemini.server";
 import { saveSleepAnalysis, calculateAgeInMonths } from "../lib/sleep-analysis.server";
 import type { AnalysisReport } from "../schema";
@@ -29,13 +30,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   
   let defaultPhoneNumber = "";
   let babies: { id: string; name: string; birth_date: string; gender: string | null }[] = [];
-  
-  // 추천 제품 목록 가져오기
-  const { data: products } = await supabase
-    .from("sleep_recommended_products")
-    .select("*")
-    .eq("is_active", true)
-    .order("display_order", { ascending: true });
   
   if (user) {
     const { data: profile } = await supabase
@@ -56,12 +50,19 @@ export async function loader({ request }: Route.LoaderArgs) {
     babies = babyProfiles || [];
   }
   
+  // 추천 제품 목록 가져오기
+  const { data: recommendedProducts } = await supabase
+    .from("sleep_recommended_products")
+    .select("*")
+    .eq("is_active", true)
+    .order("display_order", { ascending: true });
+  
   return data({ 
     isLoggedIn: !!user,
     userId: user?.id || null,
     defaultPhoneNumber,
     babies,
-    products: products || [],
+    products: recommendedProducts || [],
   });
 }
 
@@ -134,10 +135,14 @@ export async function action({ request }: Route.ActionArgs) {
       console.warn("Failed to save to database (continuing):", dbError);
     }
 
+    // 생년월일로 월령 계산
+    const ageInMonthsForResult = calculateAgeInMonths(birthDate);
+    
     return data({
       success: true,
       report,
       analysisId,
+      babyAgeMonths: ageInMonthsForResult,
     });
   } catch (error) {
     console.error("Analysis error:", error);
@@ -273,7 +278,8 @@ export default function AnalyzePublicPage() {
   const loaderData = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [formData, setFormData] = useState<UploadFormData | null>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [isGeneratingCard, setIsGeneratingCard] = useState(false);
+  const [storyCardData, setStoryCardData] = useState<{ url: string; score: number } | null>(null);
   
   const defaultPhoneNumber = loaderData?.defaultPhoneNumber || "";
   const babies = loaderData?.babies || [];
@@ -284,6 +290,7 @@ export default function AnalyzePublicPage() {
   const result = fetcher.data;
   const report = result && "report" in result ? result.report as AnalysisReport : null;
   const analysisId = result && "analysisId" in result ? result.analysisId as string : undefined;
+  const babyAgeMonths = result && "babyAgeMonths" in result ? result.babyAgeMonths as number : undefined;
   const error = result && "error" in result ? result.error as string : null;
 
   const handleSubmit = (data: UploadFormData) => {
@@ -305,89 +312,58 @@ export default function AnalyzePublicPage() {
     setFormData(null);
   };
 
-  // 이미지 다운로드 (모바일 사진첩 저장 지원)
-  const handleDownloadSlides = async () => {
+  // 스토리 카드 공유 (한 장짜리 인스타 스토리 카드)
+  const handleShareStoryCard = async () => {
     if (!analysisId) {
       alert("분석 ID가 없어 이미지를 생성할 수 없습니다.");
       return;
     }
     
-    setIsDownloading(true);
+    setIsGeneratingCard(true);
     try {
-      const response = await fetch(`/api/sleep/${analysisId}/slides`, {
+      // 스토리 카드 API 호출
+      const response = await fetch(`/api/sleep/${analysisId}/story-card`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
       });
       
       const responseData = await response.json();
       
-      if (!responseData.success || !responseData.data?.slideUrls) {
-        throw new Error(responseData.error || "이미지 생성에 실패했습니다.");
+      if (!responseData.success || !responseData.data?.storyCardUrl) {
+        throw new Error(responseData.error || "스토리 카드 생성에 실패했습니다.");
       }
       
-      const slideUrls = responseData.data.slideUrls as string[];
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const storyCardUrl = responseData.data.storyCardUrl as string;
+      const score = responseData.data.score as number;
       
-      for (let i = 0; i < slideUrls.length; i++) {
-        const slideUrl = slideUrls[i];
-        const imgResponse = await fetch(slideUrl);
-        const blob = await imgResponse.blob();
-        const fileName = `수면분석-${i + 1}.png`;
-        
-        // 모바일: Web Share API 시도
-        if (isMobile && navigator.share && navigator.canShare) {
-          const file = new File([blob], fileName, { type: "image/png" });
-          if (navigator.canShare({ files: [file] })) {
-            try {
-              await navigator.share({ files: [file] });
-              continue;
-            } catch { /* 공유 취소 시 일반 다운로드 */ }
-          }
-        }
-        
-        // 일반 다운로드
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(blobUrl);
-        
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
+      // 모달로 이미지 표시 (모바일에서 길게 눌러서 저장)
+      setStoryCardData({ url: storyCardUrl, score });
       
-      if (!isMobile) {
-        alert(`${slideUrls.length}장의 이미지가 저장되었습니다!`);
-      }
     } catch (err) {
-      console.error("Download error:", err);
-      alert(err instanceof Error ? err.message : "다운로드 중 오류가 발생했습니다.");
+      console.error("Story card error:", err);
+      alert(err instanceof Error ? err.message : "카드 생성 중 오류가 발생했습니다.");
     } finally {
-      setIsDownloading(false);
+      setIsGeneratingCard(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0] dark:bg-[#121212] transition-colors duration-300">
-      <div className="mx-auto max-w-2xl px-4 md:px-6 py-8 md:py-10">
-        {/* Header */}
-        <div className="text-center mb-10">
+    <div className="min-h-screen bg-gradient-to-b from-amber-50 via-orange-50/30 to-white dark:from-[#0f0f0f] dark:via-[#121212] dark:to-[#1a1a1a]">
+      <div className="mx-auto max-w-lg px-4 py-6 pb-24">
+        {/* Compact Header */}
+        <div className="flex items-center gap-3 mb-6">
           <Link 
             to="/customer/sleep"
-            className="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-6"
+            className="w-10 h-10 flex items-center justify-center rounded-full bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-shadow"
           >
-            <ArrowLeft className="w-5 h-5" />
-            <span className="text-sm font-medium">수면 분석</span>
+            <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </Link>
-          
-          <div className="w-16 h-16 bg-[#1A1A1A] dark:bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Moon className="w-8 h-8 text-white" />
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">AI 수면 환경 분석</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">아기 수면 공간을 분석해드려요</p>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">AI 수면 환경 분석</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-2">
-            아기의 수면 공간 사진을 올려주세요
-          </p>
         </div>
 
         <main>
@@ -396,9 +372,12 @@ export default function AnalyzePublicPage() {
 
           {/* Error State */}
           {error && !isLoading && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl px-5 py-4 mb-6">
-              <strong className="font-bold">오류 발생: </strong>
-              <span>{error}</span>
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl px-4 py-3 mb-4 flex items-start gap-2">
+              <span className="text-lg">⚠️</span>
+              <div>
+                <strong className="font-semibold">오류 발생</strong>
+                <p className="text-sm mt-0.5">{error}</p>
+              </div>
             </div>
           )}
 
@@ -409,25 +388,33 @@ export default function AnalyzePublicPage() {
                 report={report}
                 imagePreview={formData.imagePreview}
                 analysisId={analysisId}
+                babyAgeMonths={babyAgeMonths}
                 products={products}
                 onReset={handleReset}
-                onDownloadSlides={handleDownloadSlides}
-                isDownloading={isDownloading}
+                onShareStoryCard={handleShareStoryCard}
+                isGeneratingCard={isGeneratingCard}
               />
             ) : (
-              <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 md:p-6 border border-gray-100 dark:border-gray-700">
-                <UploadForm 
-                  onSubmit={handleSubmit} 
-                  isLoading={isLoading} 
-                  defaultPhoneNumber={defaultPhoneNumber}
-                  babies={babies}
-                  isLoggedIn={isLoggedIn}
-                />
-              </div>
+              <UploadForm 
+                onSubmit={handleSubmit} 
+                isLoading={isLoading} 
+                defaultPhoneNumber={defaultPhoneNumber}
+                babies={babies}
+                isLoggedIn={isLoggedIn}
+              />
             )
           )}
         </main>
       </div>
+
+      {/* 스토리 카드 모달 */}
+      {storyCardData && (
+        <StoryCardModal
+          imageUrl={storyCardData.url}
+          score={storyCardData.score}
+          onClose={() => setStoryCardData(null)}
+        />
+      )}
     </div>
   );
 }

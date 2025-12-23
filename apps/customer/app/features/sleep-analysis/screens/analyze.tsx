@@ -12,6 +12,7 @@ import { data, useFetcher, useRouteLoaderData } from "react-router";
 import makeServerClient from "~/core/lib/supa-client.server";
 
 import { AnalysisResult } from "../components/analysis-result";
+import { StoryCardModal } from "../components/story-card-modal";
 import { UploadForm, type UploadFormData } from "../components/upload-form";
 import { analyzeSleepEnvironment } from "../lib/gemini.server";
 import { calculateAgeInMonths } from "../lib/utils";
@@ -80,7 +81,8 @@ export default function AnalyzePage() {
   const loaderData = useRouteLoaderData<typeof loader>("routes/features/sleep-analysis/screens/analyze");
   const fetcher = useFetcher<typeof action>();
   const [formData, setFormData] = useState<UploadFormData | null>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [isGeneratingCard, setIsGeneratingCard] = useState(false);
+  const [storyCardData, setStoryCardData] = useState<{ url: string; score: number } | null>(null);
 
   const isLoading = fetcher.state === "submitting";
   const result = fetcher.data;
@@ -105,75 +107,37 @@ export default function AnalyzePage() {
     setFormData(null);
   };
 
-  // 카드뉴스 이미지 다운로드 (Placid API 사용)
-  const handleDownloadSlides = async () => {
+  // 스토리 카드 공유 (한 장짜리 인스타 스토리 카드)
+  const handleShareStoryCard = async () => {
     if (!analysisId) return;
     
-    setIsDownloading(true);
+    setIsGeneratingCard(true);
     try {
-      // 아기 이름 가져오기
-      const babyName = formData?.newBabyName || "우리 아기";
-      
-      // 새 카드뉴스 API 호출 (Placid)
-      const response = await fetch(`/api/sleep/${analysisId}/cardnews`, {
+      // 스토리 카드 API 호출
+      const response = await fetch(`/api/sleep/${analysisId}/story-card`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ babyName }),
       });
       
       const responseData = await response.json();
       
-      if (!responseData.success || !responseData.data?.slideUrls) {
-        if (responseData.error?.includes("Card news text not generated")) {
-          alert("이 분석 결과는 카드뉴스 생성을 지원하지 않습니다.\n새로 분석을 진행해주세요.");
-          return;
-        }
-        throw new Error(responseData.error || "카드뉴스 이미지 생성에 실패했습니다.");
+      if (!responseData.success || !responseData.data?.storyCardUrl) {
+        throw new Error(responseData.error || "스토리 카드 생성에 실패했습니다.");
       }
       
-      const slideUrls = responseData.data.slideUrls as string[];
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const storyCardUrl = responseData.data.storyCardUrl as string;
+      const score = responseData.data.score as number;
       
-      for (let i = 0; i < slideUrls.length; i++) {
-        const slideUrl = slideUrls[i];
-        const imgResponse = await fetch(slideUrl);
-        const blob = await imgResponse.blob();
-        const fileName = `카드뉴스-${i + 1}.png`;
-        
-        // 모바일: Web Share API 시도
-        if (isMobile && navigator.share && navigator.canShare) {
-          const file = new File([blob], fileName, { type: "image/png" });
-          if (navigator.canShare({ files: [file] })) {
-            try {
-              await navigator.share({ files: [file] });
-              continue;
-            } catch { /* 공유 취소 시 일반 다운로드 */ }
-          }
-        }
-        
-        // 일반 다운로드
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(blobUrl);
-        
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
+      // 모달로 이미지 표시 (모바일에서 길게 눌러서 저장)
+      setStoryCardData({ url: storyCardUrl, score });
       
-      if (!isMobile) {
-        alert(`📸 ${slideUrls.length}장의 카드뉴스가 저장되었습니다!`);
-      }
     } catch (err) {
-      console.error("Card news download error:", err);
-      alert(err instanceof Error ? err.message : "카드뉴스 생성 중 오류가 발생했습니다.");
+      console.error("Story card error:", err);
+      alert(err instanceof Error ? err.message : "카드 생성 중 오류가 발생했습니다.");
     } finally {
-      setIsDownloading(false);
+      setIsGeneratingCard(false);
     }
   };
 
@@ -213,14 +177,23 @@ export default function AnalyzePage() {
               imagePreview={formData.imagePreview}
               analysisId={analysisId}
               onReset={handleReset}
-              onDownloadSlides={handleDownloadSlides}
-              isDownloading={isDownloading}
+              onShareStoryCard={handleShareStoryCard}
+              isGeneratingCard={isGeneratingCard}
             />
           ) : (
             <UploadForm onSubmit={handleSubmit} isLoading={isLoading} />
           )
         )}
       </main>
+
+      {/* 스토리 카드 모달 */}
+      {storyCardData && (
+        <StoryCardModal
+          imageUrl={storyCardData.url}
+          score={storyCardData.score}
+          onClose={() => setStoryCardData(null)}
+        />
+      )}
     </div>
   );
 }

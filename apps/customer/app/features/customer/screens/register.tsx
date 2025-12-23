@@ -8,7 +8,7 @@
 import type { Route } from "./+types/register";
 
 import { useState, useEffect, useRef } from "react";
-import { data, useNavigate, useActionData, Form, useLoaderData, Link, useFetcher } from "react-router";
+import { data, useNavigate, useActionData, Form, useLoaderData, Link, useFetcher, useNavigation } from "react-router";
 import { ArrowLeft, Mail, CheckCircle, ChevronRight, Loader2 } from "lucide-react";
 
 import { Button } from "~/core/components/ui/button";
@@ -108,6 +108,8 @@ export async function action({ request }: Route.ActionArgs) {
       });
     }
 
+    console.log("[회원가입] signUp 시도:", { email, name, phone: normalizedPhone });
+    
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -119,23 +121,43 @@ export async function action({ request }: Route.ActionArgs) {
       },
     });
 
+    console.log("[회원가입] signUp 결과:", { authData, authError });
+
     if (authError) {
-      console.error("회원가입 오류:", authError);
+      console.error("[회원가입] 오류:", authError);
       if (authError.message.includes("already registered")) {
         return data({ success: false, error: "이미 가입된 이메일입니다." });
       }
+      if (authError.message.includes("rate limit")) {
+        return data({ success: false, error: "너무 많은 요청입니다. 잠시 후 다시 시도해주세요." });
+      }
       return data({ success: false, error: `회원가입 실패: ${authError.message}` });
     }
+    
+    if (!authData.user) {
+      console.error("[회원가입] user 객체 없음");
+      return data({ success: false, error: "회원가입 처리 중 오류가 발생했습니다." });
+    }
 
-    if (authData.user) {
-      await supabase
-        .from("profiles")
-        .update({
-          name: name,
-          phone: normalizedPhone,
-          phone_verified: true,
-        })
-        .eq("id", authData.user.id);
+    // profiles 테이블 업데이트 (Admin Client 사용 - RLS 우회)
+    console.log("[회원가입] profiles upsert 시도:", authData.user.id);
+    
+    const adminClient = (await import("~/core/lib/supa-admin-client.server")).default;
+    
+    const { error: profileError } = await adminClient
+      .from("profiles")
+      .upsert({
+        id: authData.user.id,
+        email: email,
+        name: name,
+        phone: normalizedPhone,
+      }, { onConflict: "id" });
+    
+    if (profileError) {
+      console.error("[회원가입] profiles upsert 오류:", profileError);
+      // profiles 업데이트 실패해도 회원가입은 성공으로 처리
+    } else {
+      console.log("[회원가입] profiles upsert 완료");
     }
 
     return data({ success: true }, { headers });
@@ -148,7 +170,10 @@ export default function CustomerRegisterScreen() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
+  const navigation = useNavigation();
   const otpFetcher = useFetcher();
+  
+  const isSubmitting = navigation.state === "submitting";
   
   const [step, setStep] = useState<"select" | "email" | "phone" | "verify" | "complete">("select");
   const [error, setError] = useState<string | null>(null);
@@ -265,7 +290,7 @@ export default function CustomerRegisterScreen() {
     }
   };
 
-  // SMS 인증번호 확인
+  // SMS 인증번호 확인 (OTP 검증만, 회원가입 없음)
   const handleVerifyOtp = async () => {
     setError(null);
     
@@ -277,13 +302,13 @@ export default function CustomerRegisterScreen() {
     setOtpLoading(true);
     
     try {
-      const response = await fetch("/api/auth/phone/verify-otp", {
+      // verify-otp-only: OTP 검증만 수행, 회원가입/로그인 처리 없음
+      const response = await fetch("/api/auth/phone/verify-otp-only", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           phoneNumber: phoneNumber.replace(/-/g, ""),
           otp: otpCode,
-          name: name,
         }),
       });
       
@@ -548,7 +573,7 @@ export default function CustomerRegisterScreen() {
                         <InputOTPSlot
                           key={index}
                           index={index}
-                          className="h-14 w-12 rounded-xl border-gray-200 bg-white text-xl"
+                          className="h-14 w-12 rounded-xl border-gray-200 bg-white text-xl text-gray-900"
                         />
                       ))}
                     </InputOTPGroup>
@@ -566,9 +591,19 @@ export default function CustomerRegisterScreen() {
                     )}
                   </Button>
                 </div>
-                <p className="text-xs text-gray-400 text-center">
-                  인증번호가 오지 않았나요? {countdown === 0 && "재발송 버튼을 눌러주세요."}
-                </p>
+                <div className="text-center">
+                  <p className="text-xs text-gray-400 mb-2">
+                    인증번호가 오지 않았나요?
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={otpLoading || countdown > 0}
+                    className="text-sm text-[#FF6B35] font-medium hover:underline disabled:text-gray-400 disabled:no-underline"
+                  >
+                    {countdown > 0 ? `${countdown}초 후 재발송 가능` : "인증번호 다시 보내기"}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -616,9 +651,14 @@ export default function CustomerRegisterScreen() {
               
               <Button 
                 type="submit" 
-                className="w-full h-14 rounded-2xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white font-medium text-base"
+                disabled={isSubmitting}
+                className="w-full h-14 rounded-2xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white font-medium text-base disabled:opacity-50"
               >
-                가입 완료
+                {isSubmitting ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  "가입 완료"
+                )}
               </Button>
             </Form>
           </div>

@@ -65,8 +65,14 @@ export async function action({ request }: Route.ActionArgs): Promise<SyncResult>
     const { createAdminClient } = await import("~/core/lib/supa-admin.server");
     const adminClient = createAdminClient();
 
+    // 고객 매칭 유틸리티 import
+    const { matchOrCreateCustomer, linkOrderToCustomer } = await import(
+      "~/features/customer-analytics/lib/customer-matcher.server"
+    );
+
     let syncedCount = 0;
     let skippedCount = 0;
+    let customerMatchedCount = 0;
 
     for (const cafe24Order of cafe24Orders) {
       // 주문 상품별로 개별 레코드 생성 (기존 orders 테이블 구조와 호환)
@@ -74,23 +80,47 @@ export async function action({ request }: Route.ActionArgs): Promise<SyncResult>
         const orderData = mapCafe24OrderToDb(cafe24Order, item);
 
         // uniq 기준으로 upsert
-        const { error: upsertError } = await adminClient
+        const { data: upsertedOrder, error: upsertError } = await adminClient
           .from("orders")
           .upsert(orderData, {
             onConflict: "uniq",
-          });
+          })
+          .select("id, to_name, to_tel, to_htel, sale_price, ord_time, shop_cd")
+          .single();
 
         if (upsertError) {
           console.error("❌ 주문 저장 실패:", upsertError, orderData.uniq);
           skippedCount++;
         } else {
           syncedCount++;
+
+          // 고객 매칭 처리
+          if (upsertedOrder) {
+            try {
+              const customerId = await matchOrCreateCustomer(adminClient, {
+                id: upsertedOrder.id,
+                to_name: upsertedOrder.to_name,
+                to_tel: upsertedOrder.to_tel,
+                to_htel: upsertedOrder.to_htel,
+                sale_price: upsertedOrder.sale_price,
+                ord_time: upsertedOrder.ord_time,
+                shop_cd: upsertedOrder.shop_cd,
+              });
+
+              if (customerId) {
+                await linkOrderToCustomer(adminClient, upsertedOrder.id, customerId);
+                customerMatchedCount++;
+              }
+            } catch (matchErr) {
+              console.warn("고객 매칭 실패:", matchErr);
+            }
+          }
         }
       }
     }
 
     const durationMs = Date.now() - startTime;
-    console.log(`✅ Cafe24 주문 동기화 완료: ${syncedCount}건 저장, ${skippedCount}건 실패 (${durationMs}ms)`);
+    console.log(`✅ Cafe24 주문 동기화 완료: ${syncedCount}건 저장, ${skippedCount}건 실패, ${customerMatchedCount}건 고객 매칭 (${durationMs}ms)`);
 
     return {
       success: true,

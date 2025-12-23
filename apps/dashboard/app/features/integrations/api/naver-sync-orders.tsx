@@ -53,13 +53,19 @@ export async function action({ request }: Route.ActionArgs) {
     const { createAdminClient } = await import("~/core/lib/supa-admin.server");
     const adminClient = createAdminClient();
 
+    // 고객 매칭 유틸리티 import
+    const { matchOrCreateCustomer, linkOrderToCustomer } = await import(
+      "~/features/customer-analytics/lib/customer-matcher.server"
+    );
+
     let syncedCount = 0;
     let failedCount = 0;
+    let customerMatchedCount = 0;
 
     for (const order of orders) {
       try {
         // orders 테이블에 upsert
-        const { error: upsertError } = await adminClient
+        const { data: upsertedOrder, error: upsertError } = await adminClient
           .from("orders")
           .upsert({
             // 네이버 주문 고유번호를 uniq로 사용
@@ -88,13 +94,36 @@ export async function action({ request }: Route.ActionArgs) {
             sol_no: 0, // 네이버는 PlayAuto와 무관
             synced_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-          }, { onConflict: "uniq" });
+          }, { onConflict: "uniq" })
+          .select("id, to_name, to_tel, pay_amt, ord_time, shop_cd")
+          .single();
 
         if (upsertError) {
           console.error(`❌ 주문 저장 실패 (${order.productOrderId}):`, upsertError);
           failedCount++;
         } else {
           syncedCount++;
+
+          // 고객 매칭 처리
+          if (upsertedOrder) {
+            try {
+              const customerId = await matchOrCreateCustomer(adminClient, {
+                id: upsertedOrder.id,
+                to_name: upsertedOrder.to_name,
+                to_tel: upsertedOrder.to_tel,
+                sale_price: upsertedOrder.pay_amt,
+                ord_time: upsertedOrder.ord_time,
+                shop_cd: upsertedOrder.shop_cd,
+              });
+
+              if (customerId) {
+                await linkOrderToCustomer(adminClient, upsertedOrder.id, customerId);
+                customerMatchedCount++;
+              }
+            } catch (matchErr) {
+              console.warn("고객 매칭 실패:", matchErr);
+            }
+          }
         }
       } catch (err) {
         console.error(`❌ 주문 처리 중 오류 (${order.productOrderId}):`, err);
@@ -103,7 +132,7 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     const duration = Date.now() - syncStartTime;
-    console.log(`✅ 네이버 주문 동기화 완료: ${syncedCount}건 성공, ${failedCount}건 실패 (${duration}ms)`);
+    console.log(`✅ 네이버 주문 동기화 완료: ${syncedCount}건 성공, ${failedCount}건 실패, ${customerMatchedCount}건 고객 매칭 (${duration}ms)`);
 
     // 3. 동기화 로그 저장
     await adminClient.from("order_sync_logs").insert({
