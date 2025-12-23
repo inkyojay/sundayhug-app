@@ -228,6 +228,9 @@ async function cafe24Fetch<T>(
   const apiUrl = `https://${token.mall_id}.cafe24api.com/api/v2${endpoint}`;
 
   try {
+    console.log(`🌐 Cafe24 API 요청: ${method} ${apiUrl}`);
+    console.log(`🔑 토큰: ${token.access_token.slice(0, 10)}...`);
+    
     const response = await fetch(apiUrl, {
       method,
       headers: {
@@ -238,7 +241,16 @@ async function cafe24Fetch<T>(
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    const responseData = await response.json();
+    const responseText = await response.text();
+    console.log(`📥 Cafe24 API 응답 (${response.status}):`, responseText.slice(0, 2000));
+
+    let responseData;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch {
+      console.error("❌ JSON 파싱 실패:", responseText);
+      return { success: false, error: "API 응답 파싱 실패" };
+    }
 
     if (!response.ok) {
       console.error("❌ Cafe24 API 에러:", response.status, responseData);
@@ -287,9 +299,9 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
     return d.toISOString().split("T")[0];
   })();
 
-  // Cafe24 API는 order_date_from, order_date_to 사용
-  queryParams.set("order_date_from", startDate);
-  queryParams.set("order_date_to", endDate);
+  // Cafe24 API 날짜 필터
+  queryParams.set("start_date", startDate);
+  queryParams.set("end_date", endDate);
   
   if (params.orderStatus) {
     queryParams.set("order_status", params.orderStatus);
