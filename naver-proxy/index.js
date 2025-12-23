@@ -104,7 +104,7 @@ app.post("/api/token", verifyApiKey, async (req, res) => {
     params.append("timestamp", timestamp.toString());
     params.append("client_secret_sign", signature);
     params.append("grant_type", "client_credentials");
-    params.append("type", "SELLER");
+    params.append("type", "SELF");
     params.append("account_id", accountId);
     
     const response = await fetch(tokenUrl, {
