@@ -43,6 +43,20 @@ export async function action({ request }: Route.ActionArgs) {
       );
     }
 
+    // 전화번호 중복 체크 (이미 가입된 전화번호인지 확인)
+    const { data: existingProfile } = await adminClient
+      .from("profiles")
+      .select("id, phone")
+      .eq("phone", normalizedPhone)
+      .single();
+
+    if (existingProfile) {
+      return data(
+        { success: false, error: "이미 가입된 전화번호입니다. 다른 전화번호를 사용해주세요." },
+        { status: 400 }
+      );
+    }
+
     // 6자리 OTP 생성
     const otp = generateOTP();
 
