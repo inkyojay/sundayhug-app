@@ -75,8 +75,8 @@ interface AnalysisResultProps {
   babyAgeMonths?: number;
   products?: Product[];  // DB에서 가져온 추천 제품 목록
   onReset: () => void;
-  onDownloadSlides?: () => void;
-  isDownloading?: boolean;
+  onShareStoryCard?: () => void;
+  isGeneratingCard?: boolean;
 }
 
 // 위험도별 설정 (영문 키 사용 - Gemini API 응답 형식)
@@ -126,8 +126,8 @@ export function AnalysisResult({
   babyAgeMonths,
   products = [],
   onReset,
-  onDownloadSlides,
-  isDownloading = false,
+  onShareStoryCard,
+  isGeneratingCard = false,
 }: AnalysisResultProps) {
   const [activeFeedbackId, setActiveFeedbackId] = useState<number | null>(null);
   const [showShareOptions, setShowShareOptions] = useState(false);
@@ -320,22 +320,22 @@ export function AnalysisResult({
           새로 분석
         </Button>
 
-        {/* 이미지로 저장하기 버튼 (인스타 슬라이드 다운로드) */}
-        {onDownloadSlides && (
+        {/* 스토리 카드 공유 버튼 */}
+        {onShareStoryCard && (
           <Button 
-            onClick={onDownloadSlides}
-            disabled={isDownloading}
+            onClick={onShareStoryCard}
+            disabled={isGeneratingCard}
             className="rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
           >
-            {isDownloading ? (
+            {isGeneratingCard ? (
               <>
                 <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                이미지 생성 중... 잠시만 기다려주세요
+                카드 생성 중...
               </>
             ) : (
               <>
-                <Download className="mr-2 h-4 w-4" />
-                이미지로 저장하기
+                <Share2 className="mr-2 h-4 w-4" />
+                스토리 카드 공유
               </>
             )}
           </Button>

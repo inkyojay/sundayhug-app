@@ -50,6 +50,7 @@ export default [
       route("/analyze-from-url", "features/sleep-analysis/api/analyze-from-url.tsx"),
       route("/:id/slides", "features/sleep-analysis/api/slides.tsx"),
       route("/:id/cardnews", "features/sleep-analysis/api/cardnews.tsx"),
+      route("/:id/story-card", "features/sleep-analysis/api/story-card.tsx"),
       route("/:id/share-card", "features/sleep-analysis/api/share-card.route.ts"),
       route("/seed-references", "features/sleep-analysis/api/seed-references.tsx"),
     ]),
