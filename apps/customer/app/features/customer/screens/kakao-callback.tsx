@@ -132,50 +132,67 @@ export async function loader({ request }: Route.LoaderArgs) {
     // 카카오 ID 기반 고유 비밀번호 (변경 불가능한 고정값)
     const kakaoPassword = `kakao_${kakaoId}_sundayhug_2024!`;
     
-    // 이메일로 기존 사용자 확인
-    const { data: existingUsers } = await adminClient.auth.admin.listUsers();
-    const existingUser = existingUsers?.users?.find(u => u.email === kakaoEmail);
-    
     let userId: string;
     let isNewUser = false;
     
-    if (existingUser) {
-      // 기존 사용자 - 비밀번호 업데이트 (카카오 로그인용)
-      console.log("[Kakao Callback] 기존 사용자 발견:", existingUser.id);
-      userId = existingUser.id;
-      
-      // 비밀번호 업데이트 (카카오 로그인 시마다)
-      await adminClient.auth.admin.updateUserById(userId, {
-        password: kakaoPassword,
-        user_metadata: {
-          ...existingUser.user_metadata,
-          provider: "kakao",
-          kakao_id: kakaoId,
-        },
-      });
-    } else {
-      // 새 사용자 생성
-      console.log("[Kakao Callback] 새 사용자 생성...");
-      const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
-        email: kakaoEmail,
-        password: kakaoPassword,
-        email_confirm: true, // 이메일 인증 완료 처리
-        user_metadata: {
-          name: kakaoName,
-          avatar_url: kakaoProfileImage,
-          provider: "kakao",
-          kakao_id: kakaoId,
-        },
-      });
-      
-      if (createError || !newUser.user) {
+    // 먼저 새 사용자 생성 시도
+    console.log("[Kakao Callback] 새 사용자 생성 시도...");
+    const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
+      email: kakaoEmail,
+      password: kakaoPassword,
+      email_confirm: true, // 이메일 인증 완료 처리
+      user_metadata: {
+        name: kakaoName,
+        avatar_url: kakaoProfileImage,
+        provider: "kakao",
+        kakao_id: kakaoId,
+      },
+    });
+    
+    if (createError) {
+      // 이미 존재하는 이메일인 경우 - 기존 사용자 찾아서 업데이트
+      if (createError.code === "email_exists") {
+        console.log("[Kakao Callback] 이메일 이미 존재, 기존 사용자 조회...");
+        
+        // 이메일로 사용자 목록 조회 (필터링)
+        const { data: usersData } = await adminClient.auth.admin.listUsers({
+          page: 1,
+          perPage: 1000, // 충분히 큰 수
+        });
+        
+        const existingUser = usersData?.users?.find(u => u.email === kakaoEmail);
+        
+        if (existingUser) {
+          console.log("[Kakao Callback] 기존 사용자 발견:", existingUser.id);
+          userId = existingUser.id;
+          
+          // 비밀번호 업데이트 (카카오 로그인용)
+          await adminClient.auth.admin.updateUserById(userId, {
+            password: kakaoPassword,
+            user_metadata: {
+              ...existingUser.user_metadata,
+              provider: "kakao",
+              kakao_id: kakaoId,
+            },
+          });
+        } else {
+          // 정말 찾을 수 없는 경우 - 에러
+          console.error("[Kakao Callback] 기존 사용자를 찾을 수 없음");
+          return redirect("/customer/login?error=user_not_found");
+        }
+      } else {
+        // 다른 에러
         console.error("[Kakao Callback] 사용자 생성 실패:", createError);
         return redirect("/customer/login?error=create_failed");
       }
-      
+    } else if (newUser?.user) {
+      // 새 사용자 생성 성공
       userId = newUser.user.id;
       isNewUser = true;
       console.log("[Kakao Callback] 새 사용자 생성 완료:", userId);
+    } else {
+      console.error("[Kakao Callback] 사용자 생성 실패: 알 수 없는 에러");
+      return redirect("/customer/login?error=create_failed");
     }
     
     // 4. profiles 테이블에 추가 정보 저장/업데이트
