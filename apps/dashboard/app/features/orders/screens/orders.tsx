@@ -274,6 +274,74 @@ export async function action({ request }: Route.ActionArgs) {
   const startDate = formData.get("startDate") as string;
   const endDate = formData.get("endDate") as string;
 
+  // Cafe24 동기화
+  if (actionType === "cafe24-sync") {
+    try {
+      const { getOrders } = await import("~/features/integrations/lib/cafe24.server");
+      const { createAdminClient } = await import("~/core/lib/supa-admin.server");
+      const adminClient = createAdminClient();
+      
+      const ordersResult = await getOrders({
+        startDate,
+        endDate,
+        limit: 100,
+      });
+
+      if (!ordersResult.success) {
+        return { success: false, error: ordersResult.error || "Cafe24 주문 조회 실패" };
+      }
+
+      const cafe24Orders = ordersResult.orders || [];
+      let syncedCount = 0;
+
+      // 주문 상태 매핑
+      const statusMap: Record<string, string> = {
+        "N00": "입금전", "N10": "결제완료", "N20": "상품준비중",
+        "N21": "배송대기", "N22": "배송보류", "N30": "배송중",
+        "N40": "배송완료", "C00": "취소", "C10": "취소완료",
+        "R00": "반품", "R10": "반품완료", "E00": "교환", "E10": "교환완료",
+      };
+
+      for (const order of cafe24Orders) {
+        for (const item of order.items || []) {
+          const receiver = order.receiver || {};
+          const orderData = {
+            uniq: `cafe24_${order.order_id}_${item.order_item_code}`,
+            sol_no: 0,
+            ord_status: statusMap[item.order_status] || item.order_status || "신규주문",
+            shop_cd: "cafe24",
+            shop_name: "카페24",
+            shop_ord_no: order.order_id,
+            shop_sale_name: item.product_name,
+            shop_sku_cd: item.product_code,
+            shop_opt_name: item.option_value || null,
+            sale_cnt: item.quantity,
+            ord_time: order.order_date,
+            pay_amt: parseFloat(item.product_price) * item.quantity,
+            sales: parseFloat(item.product_price) * item.quantity,
+            order_name: order.order_name || order.buyer_name,
+            to_name: receiver.name || order.billing_name,
+            to_tel: receiver.phone || "",
+            to_htel: receiver.cellphone || "",
+            to_addr1: receiver.address1 || "",
+            to_addr2: receiver.address2 || "",
+            ship_msg: receiver.shipping_message || null,
+            invoice_no: item.tracking_no || null,
+            synced_at: new Date().toISOString(),
+          };
+
+          const { error } = await adminClient.from("orders").upsert(orderData, { onConflict: "uniq" });
+          if (!error) syncedCount++;
+        }
+      }
+
+      return { success: true, message: `Cafe24에서 ${syncedCount}개 주문 동기화 완료!` };
+    } catch (error: any) {
+      return { success: false, error: error.message || "Cafe24 동기화 중 오류" };
+    }
+  }
+
+  // PlayAuto 동기화 (기존 로직)
   const start = startDate ? new Date(startDate) : new Date();
   const today = new Date();
   const daysAgo = Math.ceil((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
@@ -392,6 +460,13 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
     );
   };
 
+  const handleCafe24Sync = () => {
+    fetcher.submit(
+      { actionType: "cafe24-sync", startDate, endDate },
+      { method: "POST" }
+    );
+  };
+
   const toggleOrder = (ordNo: string) => {
     setExpandedOrders(prev => {
       const next = new Set(prev);
@@ -431,6 +506,7 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
       case "스마트스토어":
         return <Badge variant="outline" className="border-green-500 text-green-500">{shop}</Badge>;
       case "카페24(신)":
+      case "카페24":
         return <Badge variant="outline" className="border-blue-500 text-blue-500">{shop}</Badge>;
       case "쿠팡":
         return <Badge variant="outline" className="border-red-500 text-red-500">{shop}</Badge>;
@@ -494,13 +570,17 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
                 </Button>
                 <Button onClick={handleSync} disabled={isLoading}>
                   <DatabaseIcon className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-                  {isLoading ? "동기화 중..." : "데이터 동기화"}
+                  {isLoading ? "동기화 중..." : "PlayAuto 동기화"}
+                </Button>
+                <Button variant="secondary" onClick={handleCafe24Sync} disabled={isLoading}>
+                  <RefreshCwIcon className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+                  {isLoading ? "동기화 중..." : "Cafe24 동기화"}
                 </Button>
               </div>
               
               <p className="text-xs text-muted-foreground ml-auto">
                 <span className="font-medium">주문 조회</span>: DB 캐시에서 조회 | 
-                <span className="font-medium"> 데이터 동기화</span>: PlayAuto에서 새로 가져오기
+                <span className="font-medium"> 동기화</span>: PlayAuto/Cafe24에서 가져오기
               </p>
             </div>
           </CardContent>

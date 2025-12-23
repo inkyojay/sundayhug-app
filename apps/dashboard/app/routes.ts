@@ -171,6 +171,11 @@ export default [
           index("features/members/screens/member-list.tsx"),
           route("/:id", "features/members/screens/member-detail.tsx"),
         ]),
+        
+        // 외부 연동 관리
+        ...prefix("/integrations", [
+          route("/cafe24", "features/integrations/screens/cafe24-status.tsx"),
+        ]),
       ]),
       
       // 계정 설정

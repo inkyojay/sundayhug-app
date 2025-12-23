@@ -1,457 +1,346 @@
 /**
  * Cafe24 연동 상태 페이지
- * /dashboard/integrations/cafe24
  * 
- * Vercel 대시보드 내에서 직접 Cafe24 OAuth 인증 처리
+ * Cafe24 API 연동 상태를 확인하고 관리합니다.
+ * - 연동 상태 확인
+ * - 연동 시작/해제
+ * - 쇼핑몰 정보 표시
  */
 import type { Route } from "./+types/cafe24-status";
 
-import { data, useSearchParams } from "react-router";
-import makeServerClient from "~/core/lib/supa-client.server";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/core/components/ui/card";
-import { Button } from "~/core/components/ui/button";
-import { Badge } from "~/core/components/ui/badge";
-import { 
-  CheckCircle2, 
-  XCircle, 
-  RefreshCw, 
-  Clock, 
-  AlertTriangle,
+import {
+  AlertCircle,
+  CheckCircle2,
+  ExternalLink,
+  Link2,
+  Link2Off,
+  RefreshCw,
   ShoppingBag,
-  KeyRound,
-  Shield,
+  Store,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Link, data, redirect, useFetcher } from "react-router";
 
-interface TokenData {
-  mall_id: string;
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  expires_in: number;
-  expires_at: string | null;
-  issued_at: string | null;
-  scope: string | null;
-  updated_at: string;
-}
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "~/core/components/ui/alert";
+import { Badge } from "~/core/components/ui/badge";
+import { Button } from "~/core/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "~/core/components/ui/card";
 
-// loader에서 클라이언트로 전달할 데이터 타입
-interface LoaderData {
-  tokenData: TokenData | null;
-  error: string | null;
-  configValid: boolean;
-  missingConfig: string[];
-  mallId: string;
-  isExpired: boolean;
-  configStatus: {
-    clientId: boolean;
-    clientSecret: boolean;
-    authServer: boolean;
-  };
-}
+import {
+  type Cafe24Token,
+  getCafe24Token,
+  getStoreInfo,
+  disconnectCafe24,
+} from "../lib/cafe24.server";
+
+export const meta: Route.MetaFunction = () => {
+  return [{ title: `Cafe24 연동 | Sundayhug Admin` }];
+};
 
 export async function loader({ request }: Route.LoaderArgs) {
-  try {
-    // 서버 모듈 동적 import (클라이언트 번들에 포함되지 않음)
-    const { CAFE24_CONFIG, isTokenExpired } = await import("../lib/cafe24.server");
-    
-    const [supabase, headers] = makeServerClient(request);
-    
-    // 인증 확인
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      throw new Response("Unauthorized", { status: 401 });
+  const url = new URL(request.url);
+  const success = url.searchParams.get("success");
+  const error = url.searchParams.get("error");
+
+  // 토큰 조회
+  const token = await getCafe24Token();
+  
+  let storeInfo = null;
+  if (token) {
+    // 토큰이 있으면 쇼핑몰 정보 조회
+    const storeResult = await getStoreInfo();
+    if (storeResult.success) {
+      storeInfo = storeResult.store;
     }
-
-    let tokenData: TokenData | null = null;
-    let error: string | null = null;
-    let configValid = true;
-    let missingConfig: string[] = [];
-
-    // 설정 확인 (서버에서만)
-    const required = ["clientId", "clientSecret", "authServer"];
-    missingConfig = required.filter(
-      (key) => !CAFE24_CONFIG[key as keyof typeof CAFE24_CONFIG]
-    );
-    configValid = missingConfig.length === 0;
-
-    // Supabase에서 토큰 조회
-    const { data: dbData, error: dbError } = await supabase
-      .from("cafe24_tokens")
-      .select("*")
-      .eq("mall_id", CAFE24_CONFIG.mallId)
-      .single();
-
-    if (dbError && dbError.code !== "PGRST116") {
-      error = dbError.message;
-    } else if (dbData) {
-      tokenData = dbData;
-    }
-
-    // 토큰 만료 여부 (서버에서 계산)
-    const expired = tokenData ? isTokenExpired(tokenData.expires_at) : true;
-
-    // 환경 변수 상태 (서버에서 확인)
-    const configStatus = {
-      clientId: !!CAFE24_CONFIG.clientId,
-      clientSecret: !!CAFE24_CONFIG.clientSecret,
-      authServer: !!CAFE24_CONFIG.authServer,
-    };
-
-    return data<LoaderData>({
-      tokenData,
-      error,
-      configValid,
-      missingConfig,
-      mallId: CAFE24_CONFIG.mallId,
-      isExpired: expired,
-      configStatus,
-    }, { headers });
-    
-  } catch (err) {
-    console.error("Cafe24 연동 페이지 로드 에러:", err);
-    
-    // 에러 발생 시 기본값 반환
-    return data<LoaderData>({
-      tokenData: null,
-      error: err instanceof Error ? err.message : "페이지 로드 중 오류가 발생했습니다.",
-      configValid: false,
-      missingConfig: [],
-      mallId: "sundayhugkr",
-      isExpired: true,
-      configStatus: {
-        clientId: false,
-        clientSecret: false,
-        authServer: false,
-      },
-    });
   }
+
+  return {
+    isConnected: !!token,
+    token: token ? {
+      mall_id: token.mall_id,
+      scope: token.scope,
+      expires_at: token.expires_at,
+      updated_at: token.updated_at,
+    } : null,
+    storeInfo,
+    message: success === "true" ? "연동이 완료되었습니다!" : null,
+    error: error || null,
+  };
 }
 
-export default function Cafe24StatusPage({ loaderData }: Route.ComponentProps) {
-  const { 
-    tokenData, 
-    error, 
-    configValid, 
-    missingConfig, 
-    mallId, 
-    isExpired: expired,
-    configStatus,
-  } = loaderData;
-  const [searchParams] = useSearchParams();
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const actionType = formData.get("actionType") as string;
 
-  // URL 파라미터에서 결과 메시지 처리
-  useEffect(() => {
-    const success = searchParams.get("success");
-    const errorParam = searchParams.get("error");
-
-    if (success === "authenticated") {
-      setNotification({ type: "success", message: "Cafe24 인증이 완료되었습니다!" });
-    } else if (errorParam) {
-      setNotification({ type: "error", message: `인증 오류: ${decodeURIComponent(errorParam)}` });
+  if (actionType === "disconnect") {
+    const mallId = formData.get("mallId") as string;
+    const result = await disconnectCafe24(mallId);
+    
+    if (!result.success) {
+      return data({ success: false, error: result.error });
     }
+    
+    return data({ success: true, message: "연동이 해제되었습니다." });
+  }
 
-    // 3초 후 알림 제거
-    if (success || errorParam) {
-      const timer = setTimeout(() => setNotification(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [searchParams]);
+  return data({ success: false, error: "알 수 없는 액션" });
+}
 
-  // 토큰 상태 계산 (클라이언트에서)
-  const now = new Date();
-  const expiresAt = tokenData?.expires_at ? new Date(tokenData.expires_at) : null;
-  const remainingSeconds = expiresAt 
-    ? Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000)) 
-    : 0;
-  const remainingMinutes = Math.floor(remainingSeconds / 60);
-  const needsRefresh = remainingSeconds < 300 && !expired;
+export default function Cafe24Status({ loaderData, actionData }: Route.ComponentProps) {
+  const { isConnected, token, storeInfo, message, error } = loaderData;
+  const fetcher = useFetcher();
+  const isSubmitting = fetcher.state === "submitting";
 
-  // 토큰 갱신 핸들러
-  const handleRefreshToken = async () => {
-    setIsRefreshing(true);
-    try {
-      const response = await fetch("/api/integrations/cafe24/refresh", {
-        method: "POST",
-      });
-      const result = await response.json();
-      if (result.success) {
-        setNotification({ type: "success", message: "토큰이 갱신되었습니다!" });
-        // 페이지 새로고침으로 데이터 갱신
-        setTimeout(() => window.location.reload(), 1000);
-      } else {
-        setNotification({ type: "error", message: result.error || "토큰 갱신 실패" });
-      }
-    } catch (err) {
-      setNotification({ type: "error", message: "토큰 갱신 중 오류가 발생했습니다." });
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  // 인증 시작 핸들러
-  const handleStartAuth = () => {
-    window.location.href = "/api/integrations/cafe24/auth/start";
-  };
+  // 토큰 만료 여부 확인
+  const isTokenExpired = token?.expires_at 
+    ? new Date(token.expires_at) < new Date() 
+    : false;
 
   return (
-    <div className="container mx-auto py-8 space-y-6">
+    <div className="flex flex-1 flex-col gap-6 p-6">
+      {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Cafe24 연동</h1>
-          <p className="text-muted-foreground">썬데이허그 Cafe24 쇼핑몰 API 연동 상태</p>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Store className="h-6 w-6" />
+            Cafe24 연동
+          </h1>
+          <p className="text-muted-foreground">
+            Cafe24 쇼핑몰과 연동하여 주문, 상품 데이터를 동기화합니다
+          </p>
         </div>
-        <Badge variant={tokenData && !expired ? "default" : "secondary"}>
-          {tokenData && !expired ? "연결됨" : "연결 안됨"}
-        </Badge>
       </div>
 
-      {/* 알림 메시지 */}
-      {notification && (
-        <Card className={notification.type === "success" ? "border-green-500 bg-green-50 dark:bg-green-950" : "border-destructive bg-red-50 dark:bg-red-950"}>
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-2">
-              {notification.type === "success" ? (
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
-              ) : (
-                <XCircle className="h-5 w-5 text-destructive" />
-              )}
-              <span className={notification.type === "success" ? "text-green-700 dark:text-green-300" : "text-destructive"}>
-                {notification.message}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+      {/* 성공/에러 메시지 */}
+      {(message || actionData?.message) && (
+        <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+          <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+          <AlertTitle className="text-green-700 dark:text-green-400">성공</AlertTitle>
+          <AlertDescription className="text-green-600 dark:text-green-300">
+            {message || actionData?.message}
+          </AlertDescription>
+        </Alert>
       )}
 
-      {/* 설정 오류 경고 */}
-      {!configValid && (
-        <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
-              <div>
-                <p className="font-medium text-yellow-700 dark:text-yellow-300">환경 변수 설정 필요</p>
-                <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-1">
-                  다음 환경 변수가 설정되지 않았습니다:
-                </p>
-                <ul className="mt-2 list-disc list-inside text-sm text-yellow-600 dark:text-yellow-400">
-                  {missingConfig.map((key) => (
-                    <li key={key}>
-                      <code className="bg-yellow-100 dark:bg-yellow-900 px-1 rounded">
-                        CAFE24_{key.toUpperCase().replace("ID", "_ID").replace("SECRET", "_SECRET").replace("SERVER", "_SERVER")}
-                      </code>
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-2">
-                  Vercel 대시보드에서 환경 변수를 추가해주세요.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {(error || actionData?.error) && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>오류</AlertTitle>
+          <AlertDescription>
+            {error || actionData?.error}
+          </AlertDescription>
+        </Alert>
       )}
 
-      {error && (
-        <Card className="border-destructive">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-destructive">
-              <XCircle className="h-5 w-5" />
-              <span>{error}</span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 토큰 상태 카드 */}
+      {/* 연동 상태 카드 */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <ShoppingBag className="h-5 w-5" />
-            API 토큰 상태
+            연동 상태
+            {isConnected ? (
+              <Badge className="bg-green-500">연동됨</Badge>
+            ) : (
+              <Badge variant="secondary">미연동</Badge>
+            )}
           </CardTitle>
           <CardDescription>
-            쇼핑몰 ID: {mallId}
+            {isConnected 
+              ? "Cafe24 쇼핑몰과 연동되어 있습니다" 
+              : "Cafe24 쇼핑몰과 연동되지 않았습니다"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {tokenData ? (
+          {isConnected && token ? (
             <>
-              {/* 연결 상태 */}
-              <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
-                <div className="flex items-center gap-3">
-                  {expired ? (
-                    <XCircle className="h-8 w-8 text-destructive" />
-                  ) : needsRefresh ? (
-                    <AlertTriangle className="h-8 w-8 text-yellow-500" />
-                  ) : (
-                    <CheckCircle2 className="h-8 w-8 text-green-500" />
-                  )}
-                  <div>
-                    <p className="font-medium">
-                      {expired ? "토큰 만료됨" : needsRefresh ? "갱신 필요" : "연결됨"}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {expired 
-                        ? "재인증이 필요합니다" 
-                        : `남은 시간: ${remainingMinutes}분 ${remainingSeconds % 60}초`}
-                    </p>
+              {/* 쇼핑몰 정보 */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">쇼핑몰 ID</p>
+                  <p className="font-medium">{token.mall_id}</p>
+                </div>
+                {storeInfo && (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">쇼핑몰명</p>
+                    <p className="font-medium">{storeInfo.shop_name}</p>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">연동 권한</p>
+                  <div className="flex flex-wrap gap-1">
+                    {token.scope?.split(",").map((scope) => (
+                      <Badge key={scope} variant="outline" className="text-xs">
+                        {scope.trim()}
+                      </Badge>
+                    ))}
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={handleRefreshToken}
-                    disabled={isRefreshing || !tokenData.refresh_token}
-                  >
-                    <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
-                    토큰 갱신
-                  </Button>
-                  <Button 
-                    variant={expired ? "default" : "outline"}
-                    size="sm"
-                    onClick={handleStartAuth}
-                    disabled={!configValid}
-                  >
-                    <KeyRound className="h-4 w-4 mr-2" />
-                    재인증
-                  </Button>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">토큰 만료</p>
+                  <p className={`font-medium ${isTokenExpired ? "text-red-500" : ""}`}>
+                    {new Date(token.expires_at).toLocaleString("ko-KR")}
+                    {isTokenExpired && " (만료됨)"}
+                  </p>
                 </div>
               </div>
 
-              {/* 토큰 상세 정보 */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Access Token</p>
-                  <code className="block p-2 bg-muted rounded text-xs break-all">
-                    {tokenData.access_token.substring(0, 30)}...
-                  </code>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Refresh Token</p>
-                  <code className="block p-2 bg-muted rounded text-xs break-all">
-                    {tokenData.refresh_token.substring(0, 30)}...
-                  </code>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">발급 시간</p>
-                  <p className="flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    {tokenData.issued_at 
-                      ? new Date(tokenData.issued_at).toLocaleString("ko-KR")
-                      : "-"}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">만료 시간</p>
-                  <p className="flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    {expiresAt 
-                      ? expiresAt.toLocaleString("ko-KR")
-                      : "-"}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">권한 범위 (Scope)</p>
-                  <p className="text-sm">{tokenData.scope || "N/A"}</p>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">마지막 업데이트</p>
-                  <p className="text-sm">
-                    {new Date(tokenData.updated_at).toLocaleString("ko-KR")}
-                  </p>
-                </div>
+              {/* 토큰 만료 경고 */}
+              {isTokenExpired && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>토큰 만료</AlertTitle>
+                  <AlertDescription>
+                    토큰이 만료되었습니다. 연동을 다시 해주세요.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* 액션 버튼 */}
+              <div className="flex gap-2 pt-4">
+                <Button asChild variant="outline">
+                  <a 
+                    href={`https://${token.mall_id}.cafe24.com/admin`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Cafe24 관리자
+                  </a>
+                </Button>
+                
+                <Button asChild>
+                  <Link to="/api/integrations/cafe24/auth/start">
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    재연동
+                  </Link>
+                </Button>
+
+                <fetcher.Form method="post">
+                  <input type="hidden" name="actionType" value="disconnect" />
+                  <input type="hidden" name="mallId" value={token.mall_id} />
+                  <Button 
+                    type="submit" 
+                    variant="destructive"
+                    disabled={isSubmitting}
+                  >
+                    <Link2Off className="h-4 w-4 mr-2" />
+                    {isSubmitting ? "해제 중..." : "연동 해제"}
+                  </Button>
+                </fetcher.Form>
               </div>
             </>
           ) : (
-            <div className="text-center py-8">
-              <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-lg font-medium">토큰이 등록되지 않았습니다</p>
-              <p className="text-muted-foreground mb-4">
-                Cafe24 API 연동을 위해 인증이 필요합니다.
+            <>
+              <p className="text-muted-foreground">
+                Cafe24 쇼핑몰을 연동하면 다음 기능을 사용할 수 있습니다:
               </p>
-              <Button onClick={handleStartAuth} disabled={!configValid}>
-                <KeyRound className="h-4 w-4 mr-2" />
-                Cafe24 인증하기
+              <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                <li>주문 데이터 자동 동기화</li>
+                <li>상품 정보 조회</li>
+                <li>재고 현황 확인</li>
+                <li>고객 정보 조회</li>
+              </ul>
+              
+              <Button asChild className="mt-4">
+                <Link to="/api/integrations/cafe24/auth/start">
+                  <Link2 className="h-4 w-4 mr-2" />
+                  Cafe24 연동 시작
+                </Link>
               </Button>
-            </div>
+            </>
           )}
         </CardContent>
       </Card>
 
-      {/* API 사용법 */}
+      {/* 기능 안내 카드 */}
+      {isConnected && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card className="cursor-pointer hover:bg-muted/50 transition-colors">
+            <Link to="/dashboard/orders">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <ShoppingBag className="h-5 w-5 text-blue-500" />
+                  주문 동기화
+                </CardTitle>
+                <CardDescription>
+                  Cafe24 주문을 대시보드로 가져옵니다
+                </CardDescription>
+              </CardHeader>
+            </Link>
+          </Card>
+          
+          <Card className="opacity-50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Store className="h-5 w-5 text-gray-400" />
+                상품 동기화 (준비중)
+              </CardTitle>
+              <CardDescription>
+                Cafe24 상품 정보를 동기화합니다
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      )}
+
+      {/* 설정 안내 */}
       <Card>
         <CardHeader>
-          <CardTitle>API 사용법</CardTitle>
-          <CardDescription>대시보드에서 Cafe24 토큰을 사용하는 방법</CardDescription>
+          <CardTitle>연동 설정 안내</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div>
-              <p className="font-medium mb-2">1. 토큰 조회 (자동 갱신)</p>
-              <code className="block p-3 bg-muted rounded text-sm">
-                GET /api/integrations/cafe24/token?auto_refresh=true
-              </code>
-            </div>
-            <div>
-              <p className="font-medium mb-2">2. 토큰 수동 갱신</p>
-              <code className="block p-3 bg-muted rounded text-sm">
-                POST /api/integrations/cafe24/refresh
-              </code>
-            </div>
-            <div>
-              <p className="font-medium mb-2">응답 예시</p>
-              <pre className="p-3 bg-muted rounded text-xs overflow-x-auto">
-{`{
-  "success": true,
-  "data": {
-    "mall_id": "sundayhugkr",
-    "access_token": "xxx...",
-    "authorization_header": "Bearer xxx...",
-    "is_expired": false,
-    "remaining_seconds": 3200
-  }
-}`}
-              </pre>
+        <CardContent className="space-y-4">
+          <div>
+            <h4 className="font-medium mb-2">1. Cafe24 개발자센터 설정</h4>
+            <p className="text-sm text-muted-foreground">
+              <a 
+                href="https://developers.cafe24.com" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Cafe24 개발자센터
+              </a>
+              에서 앱을 등록하고 Client ID/Secret을 발급받으세요.
+            </p>
+          </div>
+          
+          <div>
+            <h4 className="font-medium mb-2">2. Redirect URI 등록</h4>
+            <code className="block p-2 bg-muted rounded text-sm">
+              https://sundayhug-app-dashboard.vercel.app/api/integrations/cafe24/auth/callback
+            </code>
+          </div>
+          
+          <div>
+            <h4 className="font-medium mb-2">3. 필요한 권한 스코프</h4>
+            <div className="flex flex-wrap gap-1">
+              {["mall.read_store", "mall.read_order", "mall.read_product", "mall.read_category", "mall.read_customer"].map((scope) => (
+                <Badge key={scope} variant="outline">
+                  {scope}
+                </Badge>
+              ))}
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* 필요한 환경 변수 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>필요한 환경 변수</CardTitle>
-          <CardDescription>Vercel에서 설정해야 하는 환경 변수 목록</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between items-center p-2 bg-muted rounded">
-              <code>CAFE24_CLIENT_ID</code>
-              <Badge variant={configStatus.clientId ? "default" : "destructive"}>
-                {configStatus.clientId ? "설정됨" : "미설정"}
-              </Badge>
-            </div>
-            <div className="flex justify-between items-center p-2 bg-muted rounded">
-              <code>CAFE24_CLIENT_SECRET</code>
-              <Badge variant={configStatus.clientSecret ? "default" : "destructive"}>
-                {configStatus.clientSecret ? "설정됨" : "미설정"}
-              </Badge>
-            </div>
-            <div className="flex justify-between items-center p-2 bg-muted rounded">
-              <code>CAFE24_AUTH_SERVER</code>
-              <Badge variant={configStatus.authServer ? "default" : "destructive"}>
-                {configStatus.authServer ? "설정됨" : "미설정"}
-              </Badge>
-            </div>
+          
+          <div>
+            <h4 className="font-medium mb-2">4. 환경변수 설정 (Vercel)</h4>
+            <ul className="text-sm text-muted-foreground space-y-1">
+              <li><code>CAFE24_CLIENT_ID</code> - 앱 Client ID</li>
+              <li><code>CAFE24_CLIENT_SECRET</code> - 앱 Client Secret</li>
+              <li><code>CAFE24_MALL_ID</code> - 쇼핑몰 ID (예: sundayhugkr)</li>
+            </ul>
           </div>
         </CardContent>
       </Card>
     </div>
   );
 }
+
