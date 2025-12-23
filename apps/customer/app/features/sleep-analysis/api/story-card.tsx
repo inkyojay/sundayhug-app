@@ -3,6 +3,10 @@
  *
  * POST /api/sleep/:id/story-card
  * Generates a single Instagram story card (1080x1920)
+ * 
+ * 점수 기준 분기:
+ * - 80점 이상: 사진 있는 축하 카드
+ * - 80점 미만: 안전 수면 팁 카드 (사진 없음)
  */
 import type { Route } from "./+types/story-card";
 
@@ -29,9 +33,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   // Dynamic imports for server-only modules
   const { getSleepAnalysis } = await import("../lib/sleep-analysis.server");
-  const { generateStoryCardImage, getDefaultComment } = await import(
-    "../lib/story-card.server"
-  );
+  const { generateStoryCardImage } = await import("../lib/story-card.server");
 
   try {
     console.log(`[StoryCard] Starting generation for analysis ${id}...`);
@@ -55,33 +57,27 @@ export async function action({ request, params }: Route.ActionArgs) {
       );
     }
 
-    // 2. 점수와 코멘트 추출 (0점도 유효한 값이므로 typeof 체크)
+    // 2. 점수 추출 (0점도 유효한 값이므로 typeof 체크)
     const score = typeof report.safetyScore === 'number' ? report.safetyScore : 70;
-    const comment = report.scoreComment || getDefaultComment(score);
-    const summary = report.summary || "";
     
-    console.log(`[StoryCard] Extracted - score: ${score}, comment: ${comment?.substring(0, 30)}..., summary: ${summary?.substring(0, 30)}...`);
-
-    // 3. 이미지 URL (선택적)
+    // 3. 이미지 URL (80점 이상일 때만 사용)
     const imageUrl = result.image_url || undefined;
+    
+    console.log(`[StoryCard] Score: ${score}, HasImage: ${!!imageUrl}`);
 
-    // 4. 스토리 카드 생성
-    console.log(`[StoryCard] Generating card with score ${score}...`);
+    // 4. 스토리 카드 생성 (점수에 따라 자동 분기)
     const storyCardUrl = await generateStoryCardImage({
       score,
-      comment,
-      summary,
       imageUrl,
     });
 
-    console.log(`[StoryCard] Story card generated: ${storyCardUrl}`);
+    console.log(`[StoryCard] Card generated: ${storyCardUrl}`);
 
     return data({
       success: true,
       data: {
         storyCardUrl,
         score,
-        comment,
       },
     });
   } catch (error) {
@@ -104,4 +100,3 @@ export async function loader() {
     message: "POST /api/sleep/:id/story-card",
   });
 }
-

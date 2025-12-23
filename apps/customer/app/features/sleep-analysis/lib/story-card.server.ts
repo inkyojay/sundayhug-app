@@ -3,19 +3,48 @@
  *
  * 인스타그램 스토리용 한 장짜리 결과 카드 생성
  * 크기: 1080x1920 (인스타 스토리 최적화)
- * HCTI (htmlcsstoimage.com) API 사용
+ * 
+ * 점수 기준 분기:
+ * - 80점 이상: 사진 있는 축하 카드
+ * - 80점 미만: 안전 수면 팁 카드 (사진 없음)
  */
 
 export interface StoryCardData {
   score: number;
-  comment: string;
-  summary?: string; // 종합분석 요약 (선택)
-  imageUrl?: string; // 분석한 아기 사진 URL (선택)
-  babyName?: string; // 아기 이름 (선택)
+  imageUrl?: string;
 }
 
 interface HCTIResponse {
   url: string;
+}
+
+// 안전 수면 팁 목록 (80점 미만일 때 랜덤 1개 표시)
+const SAFETY_TIPS = [
+  "아기는 베개 없이 단단한 매트리스에서 자야 해요",
+  "아기 침대에 인형, 이불은 질식 위험이 있어요",
+  "아기는 등을 대고 바로 눕혀 재우세요",
+  "적정 실내 온도는 20-22°C예요",
+  "아기 모니터 전선은 손이 닿지 않게 정리하세요",
+  "아기와 같은 침대에서 자는 것은 위험해요",
+];
+
+// 점수별 코멘트 (80점 이상용)
+function getHighScoreComment(score: number): string {
+  if (score >= 95) return "완벽한 수면 환경이에요!";
+  if (score >= 90) return "최고의 수면 환경이에요!";
+  if (score >= 85) return "아주 안전한 환경이에요!";
+  return "안전한 수면 환경이에요!";
+}
+
+// 점수별 배경 그라데이션
+function getGradient(score: number): { from: string; to: string } {
+  if (score >= 80) {
+    return { from: "#4ade80", to: "#22c55e" }; // 초록 (축하)
+  }
+  if (score >= 60) {
+    return { from: "#fbbf24", to: "#f59e0b" }; // 노랑 (주의)
+  }
+  return { from: "#f87171", to: "#ef4444" }; // 빨강 (위험)
 }
 
 /**
@@ -63,292 +92,108 @@ async function htmlToImage(html: string): Promise<string> {
 }
 
 /**
- * 점수에 따른 별 개수 반환 (1-5)
+ * 축하 카드 HTML (80점 이상 - 사진 있음)
  */
-function getStarCount(score: number): number {
-  if (score >= 90) return 5;
-  if (score >= 75) return 4;
-  if (score >= 60) return 3;
-  if (score >= 40) return 2;
-  return 1;
-}
-
-/**
- * 점수에 따른 배경 색상 반환 (단색)
- */
-function getScoreColor(score: number): string {
-  if (score >= 90) return "#d1fae5"; // green-100
-  if (score >= 75) return "#ecfccb"; // lime-100
-  if (score >= 60) return "#fef9c3"; // yellow-100
-  if (score >= 40) return "#ffedd5"; // orange-100
-  return "#fee2e2"; // red-100
-}
-
-/**
- * 별점 HTML 생성
- */
-function generateStarsHTML(score: number): string {
-  const starCount = getStarCount(score);
-  let stars = "";
-
-  for (let i = 0; i < 5; i++) {
-    if (i < starCount) {
-      stars += "★";
-    } else {
-      stars += "☆";
-    }
-  }
-
-  return stars;
-}
-
-/**
- * 텍스트 길이 제한 (말줄임표 처리)
- */
-function truncateText(text: string, maxLength: number): string {
-  if (!text) return "";
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength - 1) + "…";
-}
-
-/**
- * 인스타 스토리 카드 HTML 생성 (1080x1920) - 프리미엄 버전 v2
- * - 사진 크기 축소
- * - 종합분석 요약 추가
- * - 여백 최소화
- */
-function generateStoryCardHTML(data: StoryCardData): string {
-  const { score, comment, summary, imageUrl } = data;
-  const bgColor = getScoreColor(score);
-  const starsHTML = generateStarsHTML(score);
-
-  // 이미지가 없으면 기본 플레이스홀더
-  const photoContent = imageUrl
-    ? `<img src="${imageUrl}" alt="아기 사진" style="width:100%;height:100%;object-fit:cover;display:block;" />`
-    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:80px;background:rgba(17,24,39,.04);">🛏️</div>`;
-
-  // 종합분석 요약 (120자 제한)
-  const summaryText = truncateText(summary || comment, 120);
+function generateHighScoreCard(score: number, imageUrl: string): string {
+  const comment = getHighScoreComment(score);
+  const gradient = getGradient(score);
 
   return `<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
   <style>
-    *{ box-sizing:border-box; margin:0; padding:0; }
-    body{ margin:0; font-family:"Noto Sans KR", system-ui, sans-serif; }
-
-    .story{
-      width:1080px;
-      height:1920px;
-      background: ${bgColor};
-      color:#111827;
-      display:flex;
-      flex-direction:column;
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: "Noto Sans KR", sans-serif; }
+    .card {
+      width: 1080px;
+      height: 1920px;
+      background: linear-gradient(180deg, ${gradient.from} 0%, ${gradient.to} 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 80px 60px;
     }
-
-    /* 상단 헤더 */
-    .header{
-      padding:48px 56px 32px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
+    .logo {
+      font-size: 48px;
+      font-weight: 900;
+      color: white;
+      margin-bottom: 60px;
+      text-shadow: 0 4px 20px rgba(0,0,0,0.15);
     }
-    .brand{
-      display:flex;
-      align-items:center;
-      gap:14px;
-      font-weight:900;
-      font-size:38px;
-      letter-spacing:-1px;
+    .photo-frame {
+      width: 800px;
+      height: 800px;
+      border-radius: 40px;
+      overflow: hidden;
+      background: white;
+      padding: 20px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.2);
     }
-    .tag{
-      padding:14px 20px;
-      border-radius:999px;
-      background:rgba(255,255,255,.85);
-      font-weight:800;
-      font-size:22px;
-      color:rgba(17,24,39,.7);
+    .photo {
+      width: 100%;
+      height: 100%;
+      border-radius: 28px;
+      object-fit: cover;
     }
-
-    /* 사진 영역 - 여백 없이 풀사이즈 */
-    .photo-section{
-      width:100%;
-      height:580px;
-      overflow:hidden;
+    .score-section {
+      margin-top: 60px;
+      text-align: center;
     }
-
-    /* 점수 + 요약 영역 */
-    .content{
-      flex:1;
-      padding:36px 56px;
-      display:flex;
-      flex-direction:column;
-      gap:24px;
+    .score {
+      font-size: 180px;
+      font-weight: 900;
+      color: white;
+      line-height: 1;
+      text-shadow: 0 8px 30px rgba(0,0,0,0.2);
     }
-
-    /* 점수 카드 */
-    .score-card{
-      background:rgba(255,255,255,.88);
-      border-radius:32px;
-      padding:32px 40px;
-      display:flex;
-      align-items:center;
-      gap:32px;
-      box-shadow:0 20px 60px rgba(17,24,39,.1);
+    .score-label {
+      font-size: 48px;
+      color: rgba(255,255,255,0.9);
+      margin-top: 10px;
     }
-    .score-left{
-      display:flex;
-      flex-direction:column;
-      gap:8px;
+    .comment {
+      margin-top: 40px;
+      font-size: 52px;
+      font-weight: 700;
+      color: white;
+      text-shadow: 0 4px 15px rgba(0,0,0,0.15);
     }
-    .score-label{
-      font-size:22px;
-      font-weight:800;
-      color:rgba(17,24,39,.6);
+    .cta {
+      margin-top: auto;
+      text-align: center;
     }
-    .score-value{
-      font-size:96px;
-      font-weight:900;
-      letter-spacing:-3px;
-      line-height:1;
+    .cta-label {
+      font-size: 32px;
+      color: rgba(255,255,255,0.8);
+      margin-bottom: 12px;
     }
-    .score-max{
-      font-size:28px;
-      font-weight:800;
-      color:rgba(17,24,39,.5);
-    }
-    .stars{
-      font-size:26px;
-      letter-spacing:4px;
-      color:rgba(17,24,39,.7);
-    }
-    .score-right{
-      flex:1;
-      padding-left:32px;
-      border-left:2px solid rgba(17,24,39,.1);
-    }
-    .status-label{
-      font-size:20px;
-      font-weight:800;
-      color:rgba(17,24,39,.55);
-      margin-bottom:10px;
-    }
-    .status-text{
-      font-size:32px;
-      font-weight:900;
-      letter-spacing:-1px;
-      line-height:1.35;
-    }
-
-    /* 종합분석 카드 */
-    .summary-card{
-      background:rgba(255,255,255,.88);
-      border-radius:32px;
-      padding:32px 36px;
-      box-shadow:0 20px 60px rgba(17,24,39,.1);
-    }
-    .summary-label{
-      font-size:20px;
-      font-weight:800;
-      color:rgba(17,24,39,.55);
-      margin-bottom:16px;
-      display:flex;
-      align-items:center;
-      gap:10px;
-    }
-    .summary-text{
-      font-size:30px;
-      font-weight:700;
-      line-height:1.55;
-      letter-spacing:-.5px;
-      color:rgba(17,24,39,.85);
-    }
-
-    /* 하단 CTA */
-    .cta{
-      margin-top:auto;
-      padding:40px 56px 52px;
-    }
-    .cta-box{
-      background:rgba(255,255,255,.92);
-      border-radius:28px;
-      padding:28px 36px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      box-shadow:0 16px 50px rgba(17,24,39,.1);
-    }
-    .cta-text{
-      display:flex;
-      flex-direction:column;
-      gap:6px;
-    }
-    .cta-title{
-      font-size:28px;
-      font-weight:900;
-      letter-spacing:-.5px;
-    }
-    .cta-url{
-      font-size:24px;
-      font-weight:800;
-      color:rgba(17,24,39,.6);
-    }
-    .cta-btn{
-      padding:18px 24px;
-      border-radius:20px;
-      background:rgba(17,24,39,.08);
-      font-size:24px;
-      font-weight:900;
-      color:rgba(17,24,39,.85);
+    .cta-url {
+      font-size: 40px;
+      font-weight: 700;
+      color: white;
     }
   </style>
 </head>
 <body>
-  <div class="story">
-    <!-- 헤더 -->
-    <div class="header">
-      <div class="brand">🌙 Sunday Hug</div>
-      <div class="tag">수면 환경 분석</div>
+  <div class="card">
+    <div class="logo">🌙 Sunday Hug</div>
+    
+    <div class="photo-frame">
+      <img class="photo" src="${imageUrl}" alt="아기 사진" />
     </div>
-
-    <!-- 사진 (여백 없음) -->
-    <div class="photo-section">
-      ${photoContent}
+    
+    <div class="score-section">
+      <div class="score">${score}</div>
+      <div class="score-label">점</div>
     </div>
-
-    <!-- 점수 + 요약 -->
-    <div class="content">
-      <!-- 점수 카드 -->
-      <div class="score-card">
-        <div class="score-left">
-          <div class="score-label">안전 점수</div>
-          <div class="score-value">${score}<span class="score-max"> / 100</span></div>
-          <div class="stars">${starsHTML}</div>
-        </div>
-        <div class="score-right">
-          <div class="status-label">오늘의 상태</div>
-          <div class="status-text">${comment}</div>
-        </div>
-      </div>
-
-      <!-- 종합분석 요약 -->
-      <div class="summary-card">
-        <div class="summary-label">📋 종합 분석</div>
-        <div class="summary-text">${summaryText}</div>
-      </div>
-    </div>
-
-    <!-- 하단 CTA -->
+    
+    <div class="comment">${comment}</div>
+    
     <div class="cta">
-      <div class="cta-box">
-        <div class="cta-text">
-          <div class="cta-title">나도 분석받기</div>
-          <div class="cta-url">app.sundayhug.com/sleep</div>
-        </div>
-        <div class="cta-btn">공유하기 →</div>
-      </div>
+      <div class="cta-label">나도 분석받기</div>
+      <div class="cta-url">app.sundayhug.com/sleep</div>
     </div>
   </div>
 </body>
@@ -356,31 +201,150 @@ function generateStoryCardHTML(data: StoryCardData): string {
 }
 
 /**
- * 인스타 스토리 카드 이미지 생성
+ * 팁 카드 HTML (80점 미만 - 사진 없음)
+ */
+function generateLowScoreCard(score: number): string {
+  const gradient = getGradient(score);
+  const randomTip = SAFETY_TIPS[Math.floor(Math.random() * SAFETY_TIPS.length)];
+
+  return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: "Noto Sans KR", sans-serif; }
+    .card {
+      width: 1080px;
+      height: 1920px;
+      background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 100px 80px;
+    }
+    .logo {
+      font-size: 48px;
+      font-weight: 900;
+      color: white;
+      margin-bottom: 100px;
+    }
+    .score-section {
+      text-align: center;
+      margin-bottom: 80px;
+    }
+    .score {
+      font-size: 240px;
+      font-weight: 900;
+      background: linear-gradient(180deg, ${gradient.from} 0%, ${gradient.to} 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+    }
+    .score-label {
+      font-size: 48px;
+      color: rgba(255,255,255,0.6);
+      margin-top: 10px;
+    }
+    .divider {
+      width: 200px;
+      height: 4px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 2px;
+      margin: 60px 0;
+    }
+    .tip-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .tip-label {
+      font-size: 36px;
+      font-weight: 700;
+      color: ${gradient.from};
+      margin-bottom: 40px;
+    }
+    .tip-text {
+      font-size: 52px;
+      font-weight: 700;
+      color: white;
+      line-height: 1.5;
+      max-width: 800px;
+    }
+    .cta {
+      margin-top: auto;
+      text-align: center;
+      padding: 50px 80px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 30px;
+      width: 100%;
+    }
+    .cta-title {
+      font-size: 36px;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 16px;
+    }
+    .cta-url {
+      font-size: 40px;
+      font-weight: 900;
+      color: ${gradient.from};
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">🌙 Sunday Hug</div>
+    
+    <div class="score-section">
+      <div class="score">${score}</div>
+      <div class="score-label">점</div>
+    </div>
+    
+    <div class="divider"></div>
+    
+    <div class="tip-section">
+      <div class="tip-label">💡 안전 수면 팁</div>
+      <div class="tip-text">"${randomTip}"</div>
+    </div>
+    
+    <div class="cta">
+      <div class="cta-title">우리 아기 수면 환경 분석받기</div>
+      <div class="cta-url">app.sundayhug.com/sleep</div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+/**
+ * 스토리 카드 이미지 생성 (점수에 따라 분기)
  */
 export async function generateStoryCardImage(
   data: StoryCardData
 ): Promise<string> {
-  console.log("[StoryCard] Generating story card image...", {
-    score: data.score,
-    hasImage: !!data.imageUrl,
-    hasSummary: !!data.summary,
-  });
+  const { score, imageUrl } = data;
+  
+  console.log("[StoryCard] Generating card...", { score, hasImage: !!imageUrl });
 
-  const html = generateStoryCardHTML(data);
-  const imageUrl = await htmlToImage(html);
+  let html: string;
+  
+  // 80점 이상이고 이미지가 있으면 축하 카드, 아니면 팁 카드
+  if (score >= 80 && imageUrl) {
+    console.log("[StoryCard] Generating HIGH score card (photo)");
+    html = generateHighScoreCard(score, imageUrl);
+  } else {
+    console.log("[StoryCard] Generating LOW score card (tip)");
+    html = generateLowScoreCard(score);
+  }
 
-  console.log("[StoryCard] Story card generated:", imageUrl);
-  return imageUrl;
-}
-
-/**
- * 점수에 따른 기본 코멘트 반환
- */
-export function getDefaultComment(score: number): string {
-  if (score >= 90) return "최고의 수면 환경이에요! 🎉";
-  if (score >= 75) return "안전한 수면 환경이에요! 👍";
-  if (score >= 60) return "몇 가지 개선이 필요해요";
-  if (score >= 40) return "주의가 필요해요 ⚠️";
-  return "즉시 개선이 필요해요! 🚨";
+  const cardUrl = await htmlToImage(html);
+  console.log("[StoryCard] Card generated:", cardUrl);
+  
+  return cardUrl;
 }
