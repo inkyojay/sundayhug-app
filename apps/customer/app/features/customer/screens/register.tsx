@@ -139,23 +139,24 @@ export async function action({ request }: Route.ActionArgs) {
       return data({ success: false, error: "회원가입 처리 중 오류가 발생했습니다." });
     }
 
-    // profiles 테이블 업데이트
-    console.log("[회원가입] profiles 업데이트 시도:", authData.user.id);
+    // profiles 테이블 업데이트 (upsert 사용 - 없으면 생성, 있으면 업데이트)
+    console.log("[회원가입] profiles upsert 시도:", authData.user.id);
     
     const { error: profileError } = await supabase
       .from("profiles")
-      .update({
+      .upsert({
+        id: authData.user.id,
+        email: email,
         name: name,
         phone: normalizedPhone,
         phone_verified: true,
-      })
-      .eq("id", authData.user.id);
+      }, { onConflict: "id" });
     
     if (profileError) {
-      console.error("[회원가입] profiles 업데이트 오류:", profileError);
+      console.error("[회원가입] profiles upsert 오류:", profileError);
       // profiles 업데이트 실패해도 회원가입은 성공으로 처리
     } else {
-      console.log("[회원가입] profiles 업데이트 완료");
+      console.log("[회원가입] profiles upsert 완료");
     }
 
     return data({ success: true }, { headers });
