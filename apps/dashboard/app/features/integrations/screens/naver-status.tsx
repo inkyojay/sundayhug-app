@@ -36,12 +36,7 @@ import {
   CardTitle,
 } from "~/core/components/ui/card";
 
-import {
-  type NaverToken,
-  getNaverToken,
-  disconnectNaver,
-  refreshNaverToken,
-} from "../lib/naver.server";
+import type { NaverToken } from "../lib/naver.server";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: `네이버 스마트스토어 연동 | Sundayhug Admin` }];
@@ -52,6 +47,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   const success = url.searchParams.get("success");
   const error = url.searchParams.get("error");
 
+  // 동적 import로 서버 전용 모듈 로드
+  const { getNaverToken } = await import("../lib/naver.server");
+  
   // 토큰 조회
   const token = await getNaverToken();
   
@@ -75,6 +73,9 @@ export async function loader({ request }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const actionType = formData.get("actionType") as string;
+
+  // 동적 import로 서버 전용 모듈 로드
+  const { refreshNaverToken, disconnectNaver } = await import("../lib/naver.server");
 
   if (actionType === "connect") {
     // 토큰 발급
