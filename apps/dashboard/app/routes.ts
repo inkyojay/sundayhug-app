@@ -139,6 +139,12 @@ export default [
         // 주문 관리
         route("/orders", "features/orders/screens/orders.tsx"),
         
+        // 주문 관리 (직접연동) - 플레이오토 제외
+        route("/orders-direct", "features/orders-direct/screens/orders-direct.tsx"),
+        
+        // 고객 분석
+        route("/customer-analytics", "features/customer-analytics/screens/customer-analytics.tsx"),
+        
         // 보증서 관리 (관리자용)
         ...prefix("/warranty", [
           index("features/warranty/screens/warranty-list.tsx"),

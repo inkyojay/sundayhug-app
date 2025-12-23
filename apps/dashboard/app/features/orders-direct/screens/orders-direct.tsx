@@ -1,0 +1,558 @@
+/**
+ * 주문 관리 (직접연동)
+ * 
+ * 플레이오토 제외한 직접 연동(카페24, 네이버) 주문만 표시
+ * 향후 플레이오토 제거 대비용
+ */
+import type { Route } from "./+types/orders-direct";
+
+import {
+  ShoppingCartIcon,
+  SearchIcon,
+  RefreshCwIcon,
+  TruckIcon,
+  PackageCheckIcon,
+  ClockIcon,
+  FilterIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CalendarIcon,
+  PackageIcon,
+  UserIcon,
+  MapPinIcon,
+  PhoneIcon,
+  StoreIcon,
+  ZapIcon,
+} from "lucide-react";
+import { useState, useEffect } from "react";
+import { useFetcher, useRevalidator } from "react-router";
+
+import { Badge } from "~/core/components/ui/badge";
+import { Button } from "~/core/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "~/core/components/ui/card";
+import { Input } from "~/core/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/core/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "~/core/components/ui/collapsible";
+
+export const meta: Route.MetaFunction = () => {
+  return [{ title: "주문 관리 (직접연동) | 관리자 대시보드" }];
+};
+
+export async function loader({ request }: Route.LoaderArgs) {
+  const url = new URL(request.url);
+  const page = parseInt(url.searchParams.get("page") || "1");
+  const limit = 50;
+  const statusFilter = url.searchParams.get("status") || "all";
+  const shopFilter = url.searchParams.get("shop") || "all";
+  const searchQuery = url.searchParams.get("q") || "";
+
+  const { createAdminClient } = await import("~/core/lib/supa-admin.server");
+  const adminClient = createAdminClient();
+
+  // 통계 조회 (플레이오토 제외)
+  const [statusStats, shopStats] = await Promise.all([
+    adminClient
+      .from("orders")
+      .select("ord_status")
+      .neq("shop_cd", "playauto")
+      .then(({ data }) => {
+        const stats: Record<string, number> = {};
+        data?.forEach((order: any) => {
+          stats[order.ord_status] = (stats[order.ord_status] || 0) + 1;
+        });
+        return stats;
+      }),
+    adminClient
+      .from("orders")
+      .select("shop_cd")
+      .neq("shop_cd", "playauto")
+      .then(({ data }) => {
+        const shops: Record<string, number> = {};
+        data?.forEach((order: any) => {
+          if (order.shop_cd) {
+            shops[order.shop_cd] = (shops[order.shop_cd] || 0) + 1;
+          }
+        });
+        return shops;
+      }),
+  ]);
+
+  // 주문 목록 조회 (플레이오토 제외)
+  let query = adminClient
+    .from("orders")
+    .select(`
+      id,
+      uniq,
+      shop_ord_no,
+      ord_status,
+      shop_cd,
+      shop_name,
+      shop_sale_name,
+      shop_opt_name,
+      sale_price,
+      sale_cnt,
+      to_name,
+      to_tel,
+      to_htel,
+      to_addr,
+      ord_time,
+      invoice_no,
+      deli_name,
+      customer_id
+    `)
+    .neq("shop_cd", "playauto")
+    .order("ord_time", { ascending: false });
+
+  if (statusFilter !== "all") {
+    query = query.eq("ord_status", statusFilter);
+  }
+  if (shopFilter !== "all") {
+    query = query.eq("shop_cd", shopFilter);
+  }
+  if (searchQuery) {
+    query = query.or(`to_name.ilike.%${searchQuery}%,shop_ord_no.ilike.%${searchQuery}%,to_tel.ilike.%${searchQuery}%`);
+  }
+
+  // 페이지네이션
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+  query = query.range(from, to);
+
+  const { data: orders, error } = await query;
+
+  // 전체 개수 조회
+  let countQuery = adminClient
+    .from("orders")
+    .select("id", { count: "exact", head: true })
+    .neq("shop_cd", "playauto");
+  
+  if (statusFilter !== "all") {
+    countQuery = countQuery.eq("ord_status", statusFilter);
+  }
+  if (shopFilter !== "all") {
+    countQuery = countQuery.eq("shop_cd", shopFilter);
+  }
+  if (searchQuery) {
+    countQuery = countQuery.or(`to_name.ilike.%${searchQuery}%,shop_ord_no.ilike.%${searchQuery}%,to_tel.ilike.%${searchQuery}%`);
+  }
+
+  const { count } = await countQuery;
+
+  return {
+    orders: orders || [],
+    totalCount: count || 0,
+    statusStats,
+    shopStats,
+    currentPage: page,
+    totalPages: Math.ceil((count || 0) / limit),
+    statusFilter,
+    shopFilter,
+    searchQuery,
+  };
+}
+
+// 주문 상태 뱃지
+function getStatusBadge(status: string) {
+  const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+    "결제완료": { label: "결제완료", variant: "default" },
+    "상품준비": { label: "상품준비", variant: "secondary" },
+    "배송중": { label: "배송중", variant: "outline" },
+    "배송완료": { label: "배송완료", variant: "secondary" },
+    "취소": { label: "취소", variant: "destructive" },
+    "반품": { label: "반품", variant: "destructive" },
+    "교환": { label: "교환", variant: "destructive" },
+  };
+  const config = statusMap[status] || { label: status, variant: "outline" as const };
+  return <Badge variant={config.variant}>{config.label}</Badge>;
+}
+
+// 쇼핑몰 뱃지
+function getShopBadge(shopCd: string) {
+  const shopMap: Record<string, { label: string; color: string }> = {
+    "cafe24": { label: "Cafe24", color: "bg-blue-100 text-blue-800" },
+    "naver": { label: "네이버", color: "bg-green-100 text-green-800" },
+  };
+  const config = shopMap[shopCd] || { label: shopCd, color: "bg-gray-100 text-gray-800" };
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-medium ${config.color}`}>
+      {config.label}
+    </span>
+  );
+}
+
+export default function OrdersDirectPage() {
+  const loaderData = Route.useLoaderData();
+  const revalidator = useRevalidator();
+  const cafe24Fetcher = useFetcher();
+  const naverFetcher = useFetcher();
+  
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  const [searchInput, setSearchInput] = useState(loaderData.searchQuery);
+
+  const isSyncingCafe24 = cafe24Fetcher.state === "submitting";
+  const isSyncingNaver = naverFetcher.state === "submitting";
+
+  // 주문 펼치기/접기
+  const toggleOrder = (orderId: string) => {
+    setExpandedOrders(prev => {
+      const next = new Set(prev);
+      if (next.has(orderId)) {
+        next.delete(orderId);
+      } else {
+        next.add(orderId);
+      }
+      return next;
+    });
+  };
+
+  // 카페24 동기화
+  const handleSyncCafe24 = () => {
+    cafe24Fetcher.submit(null, {
+      method: "POST",
+      action: "/api/integrations/cafe24/sync-orders",
+    });
+  };
+
+  // 네이버 동기화
+  const handleSyncNaver = () => {
+    naverFetcher.submit(null, {
+      method: "POST",
+      action: "/api/integrations/naver/sync-orders",
+    });
+  };
+
+  // 동기화 완료 시 새로고침
+  useEffect(() => {
+    if (cafe24Fetcher.state === "idle" && cafe24Fetcher.data) {
+      revalidator.revalidate();
+    }
+  }, [cafe24Fetcher.state, cafe24Fetcher.data]);
+
+  useEffect(() => {
+    if (naverFetcher.state === "idle" && naverFetcher.data) {
+      revalidator.revalidate();
+    }
+  }, [naverFetcher.state, naverFetcher.data]);
+
+  return (
+    <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <ZapIcon className="h-6 w-6 text-yellow-500" />
+            주문 관리 (직접연동)
+          </h1>
+          <p className="text-muted-foreground">
+            카페24, 네이버 스마트스토어에서 직접 수집한 주문
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSyncCafe24}
+            disabled={isSyncingCafe24}
+          >
+            {isSyncingCafe24 ? (
+              <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <StoreIcon className="h-4 w-4 mr-2" />
+            )}
+            Cafe24 동기화
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSyncNaver}
+            disabled={isSyncingNaver}
+          >
+            {isSyncingNaver ? (
+              <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <StoreIcon className="h-4 w-4 mr-2" />
+            )}
+            네이버 동기화
+          </Button>
+        </div>
+      </div>
+
+      {/* 동기화 결과 메시지 */}
+      {cafe24Fetcher.data && (
+        <div className={`p-3 rounded-lg text-sm ${(cafe24Fetcher.data as any).success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+          {(cafe24Fetcher.data as any).message || (cafe24Fetcher.data as any).error}
+        </div>
+      )}
+      {naverFetcher.data && (
+        <div className={`p-3 rounded-lg text-sm ${(naverFetcher.data as any).success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+          {(naverFetcher.data as any).message || (naverFetcher.data as any).error}
+        </div>
+      )}
+
+      {/* 통계 카드 */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">전체 주문</CardTitle>
+            <ShoppingCartIcon className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{loaderData.totalCount}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">결제완료</CardTitle>
+            <ClockIcon className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{loaderData.statusStats["결제완료"] || 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">배송중</CardTitle>
+            <TruckIcon className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{loaderData.statusStats["배송중"] || 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">배송완료</CardTitle>
+            <PackageCheckIcon className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{loaderData.statusStats["배송완료"] || 0}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 채널별 통계 */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {Object.entries(loaderData.shopStats).map(([shop, count]) => (
+          <Card key={shop}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{getShopBadge(shop)}</CardTitle>
+              <StoreIcon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{count as number}건</div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* 필터 & 검색 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <FilterIcon className="h-5 w-5" />
+            필터 & 검색
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form className="flex flex-wrap gap-4" method="GET">
+            <Select name="status" defaultValue={loaderData.statusFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="주문 상태" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체 상태</SelectItem>
+                <SelectItem value="결제완료">결제완료</SelectItem>
+                <SelectItem value="상품준비">상품준비</SelectItem>
+                <SelectItem value="배송중">배송중</SelectItem>
+                <SelectItem value="배송완료">배송완료</SelectItem>
+                <SelectItem value="취소">취소</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select name="shop" defaultValue={loaderData.shopFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="쇼핑몰" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체 쇼핑몰</SelectItem>
+                <SelectItem value="cafe24">Cafe24</SelectItem>
+                <SelectItem value="naver">네이버</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex gap-2 flex-1">
+              <Input
+                name="q"
+                placeholder="주문자명, 주문번호, 전화번호 검색"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="max-w-xs"
+              />
+              <Button type="submit" variant="secondary">
+                <SearchIcon className="h-4 w-4 mr-2" />
+                검색
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* 주문 목록 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>주문 목록</CardTitle>
+          <CardDescription>
+            {loaderData.totalCount}건 중 {loaderData.orders.length}건 표시
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {loaderData.orders.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                주문이 없습니다. 동기화 버튼을 눌러 주문을 가져오세요.
+              </div>
+            ) : (
+              loaderData.orders.map((order: any) => (
+                <Collapsible
+                  key={order.id}
+                  open={expandedOrders.has(order.id)}
+                  onOpenChange={() => toggleOrder(order.id)}
+                >
+                  <CollapsibleTrigger asChild>
+                    <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg cursor-pointer hover:bg-muted transition-colors">
+                      <div className="flex items-center gap-4">
+                        {expandedOrders.has(order.id) ? (
+                          <ChevronDownIcon className="h-4 w-4" />
+                        ) : (
+                          <ChevronRightIcon className="h-4 w-4" />
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            {getShopBadge(order.shop_cd)}
+                            <span className="font-medium">{order.shop_ord_no}</span>
+                            {getStatusBadge(order.ord_status)}
+                          </div>
+                          <div className="text-sm text-muted-foreground flex items-center gap-3 mt-1">
+                            <span className="flex items-center gap-1">
+                              <UserIcon className="h-3 w-3" />
+                              {order.to_name}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <CalendarIcon className="h-3 w-3" />
+                              {order.ord_time ? new Date(order.ord_time).toLocaleDateString("ko-KR") : "-"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-medium">
+                          {order.sale_price?.toLocaleString()}원
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          수량: {order.sale_cnt}
+                        </div>
+                      </div>
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="p-4 bg-background border rounded-lg mt-1 space-y-3">
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                          <h4 className="font-medium mb-2 flex items-center gap-2">
+                            <PackageIcon className="h-4 w-4" />
+                            상품 정보
+                          </h4>
+                          <div className="text-sm space-y-1">
+                            <p><strong>상품명:</strong> {order.shop_sale_name}</p>
+                            <p><strong>옵션:</strong> {order.shop_opt_name || "-"}</p>
+                            <p><strong>수량:</strong> {order.sale_cnt}개</p>
+                            <p><strong>금액:</strong> {order.sale_price?.toLocaleString()}원</p>
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="font-medium mb-2 flex items-center gap-2">
+                            <MapPinIcon className="h-4 w-4" />
+                            배송 정보
+                          </h4>
+                          <div className="text-sm space-y-1">
+                            <p><strong>수령인:</strong> {order.to_name}</p>
+                            <p className="flex items-center gap-1">
+                              <PhoneIcon className="h-3 w-3" />
+                              {order.to_tel || order.to_htel || "-"}
+                            </p>
+                            <p><strong>주소:</strong> {order.to_addr || "-"}</p>
+                            {order.invoice_no && (
+                              <p>
+                                <strong>송장:</strong> {order.deli_name} {order.invoice_no}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {order.customer_id && (
+                        <div className="pt-2 border-t">
+                          <Badge variant="outline" className="text-xs">
+                            고객 ID: {order.customer_id.slice(0, 8)}...
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              ))
+            )}
+          </div>
+
+          {/* 페이지네이션 */}
+          {loaderData.totalPages > 1 && (
+            <div className="flex justify-center gap-2 mt-6">
+              {loaderData.currentPage > 1 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const params = new URLSearchParams(window.location.search);
+                    params.set("page", String(loaderData.currentPage - 1));
+                    window.location.search = params.toString();
+                  }}
+                >
+                  이전
+                </Button>
+              )}
+              <span className="flex items-center px-3 text-sm">
+                {loaderData.currentPage} / {loaderData.totalPages}
+              </span>
+              {loaderData.currentPage < loaderData.totalPages && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const params = new URLSearchParams(window.location.search);
+                    params.set("page", String(loaderData.currentPage + 1));
+                    window.location.search = params.toString();
+                  }}
+                >
+                  다음
+                </Button>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
