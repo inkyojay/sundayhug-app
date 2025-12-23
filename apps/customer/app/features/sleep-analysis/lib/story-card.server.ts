@@ -73,14 +73,14 @@ function getStarCount(score: number): number {
 }
 
 /**
- * 점수에 따른 그라데이션 색상 반환
+ * 점수에 따른 배경 색상 반환 (단색)
  */
-function getScoreGradient(score: number): { from: string; to: string } {
-  if (score >= 90) return { from: "#10b981", to: "#059669" }; // green
-  if (score >= 75) return { from: "#84cc16", to: "#65a30d" }; // lime
-  if (score >= 60) return { from: "#eab308", to: "#ca8a04" }; // yellow
-  if (score >= 40) return { from: "#f97316", to: "#ea580c" }; // orange
-  return { from: "#ef4444", to: "#dc2626" }; // red
+function getScoreColor(score: number): string {
+  if (score >= 90) return "#d1fae5"; // green-100
+  if (score >= 75) return "#ecfccb"; // lime-100
+  if (score >= 60) return "#fef9c3"; // yellow-100
+  if (score >= 40) return "#ffedd5"; // orange-100
+  return "#fee2e2"; // red-100
 }
 
 /**
@@ -92,10 +92,9 @@ function generateStarsHTML(score: number): string {
 
   for (let i = 0; i < 5; i++) {
     if (i < starCount) {
-      stars += '<span style="color: #fbbf24; font-size: 48px;">★</span>';
+      stars += "★";
     } else {
-      stars +=
-        '<span style="color: rgba(255,255,255,0.3); font-size: 48px;">★</span>';
+      stars += "☆";
     }
   }
 
@@ -103,171 +102,216 @@ function generateStarsHTML(score: number): string {
 }
 
 /**
- * 인스타 스토리 카드 HTML 생성 (1080x1920)
+ * 인스타 스토리 카드 HTML 생성 (1080x1920) - 프리미엄 버전
  */
 function generateStoryCardHTML(data: StoryCardData): string {
-  const { score, comment, imageUrl, babyName } = data;
-  const gradient = getScoreGradient(score);
+  const { score, comment, imageUrl } = data;
+  const bgColor = getScoreColor(score);
   const starsHTML = generateStarsHTML(score);
 
-  // 이미지가 있으면 표시, 없으면 아이콘
-  const imageSection = imageUrl
-    ? `
-      <div style="
-        width: 320px;
-        height: 320px;
-        border-radius: 50%;
-        overflow: hidden;
-        border: 8px solid rgba(255,255,255,0.3);
-        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        margin-bottom: 48px;
-      ">
-        <img src="${imageUrl}" style="width: 100%; height: 100%; object-fit: cover;" />
-      </div>
-    `
-    : `
-      <div style="
-        width: 200px;
-        height: 200px;
-        border-radius: 50%;
-        background: rgba(255,255,255,0.15);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 48px;
-        border: 4px solid rgba(255,255,255,0.2);
-      ">
-        <span style="font-size: 80px;">🛏️</span>
-      </div>
-    `;
+  // 이미지가 없으면 기본 플레이스홀더
+  const photoContent = imageUrl
+    ? `<img src="${imageUrl}" alt="아기 사진" />`
+    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:120px;">🛏️</div>`;
 
-  return `
-<!DOCTYPE html>
-<html>
+  return `<!DOCTYPE html>
+<html lang="ko">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
-</head>
-<body style="margin: 0; padding: 0;">
-  <div style="
-    width: 1080px;
-    height: 1920px;
-    background: linear-gradient(180deg, ${gradient.from} 0%, ${gradient.to} 50%, #1e293b 100%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    font-family: 'Noto Sans KR', sans-serif;
-    color: white;
-    position: relative;
-    overflow: hidden;
-  ">
-    <!-- 배경 데코 -->
-    <div style="
-      position: absolute;
-      top: -100px;
-      right: -100px;
-      width: 400px;
-      height: 400px;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.1);
-    "></div>
-    <div style="
-      position: absolute;
-      bottom: 200px;
-      left: -150px;
-      width: 300px;
-      height: 300px;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.05);
-    "></div>
+  <title>Sunday Hug · 수면 환경 분석 결과</title>
+  <style>
+    :root{
+      --bg: ${bgColor};
+      --ink:#111827;
+      --muted: rgba(17,24,39,.62);
+      --card:#ffffffcc;
+      --stroke: rgba(17,24,39,.10);
+      --shadow: 0 26px 70px rgba(17,24,39,.12);
+      --accent: rgba(255,255,255,.55);
+    }
 
-    <!-- 로고 -->
-    <div style="
-      margin-top: 80px;
-      margin-bottom: 32px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    ">
-      <span style="font-size: 32px;">🌙</span>
-      <span style="font-size: 36px; font-weight: 700; letter-spacing: -1px;">Sunday Hug</span>
-    </div>
+    *{ box-sizing:border-box; margin:0; padding:0; }
+    body{ margin:0; background:#eef2ff; font-family:"Noto Sans KR", system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
 
-    <!-- 타이틀 -->
-    <div style="
-      font-size: 42px;
-      font-weight: 500;
-      color: rgba(255,255,255,0.9);
-      margin-bottom: 60px;
-    ">수면 환경 분석 결과</div>
+    .story{
+      width:1080px;
+      height:1920px;
+      position:relative;
+      overflow:hidden;
+      background: var(--bg);
+      color:var(--ink);
+    }
 
-    <!-- 아기 사진 (선택) -->
-    ${imageSection}
+    .glow{
+      position:absolute; inset:-140px;
+      background:
+        radial-gradient(620px 620px at 18% 18%, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 68%),
+        radial-gradient(720px 720px at 86% 34%, rgba(255,255,255,.42) 0%, rgba(255,255,255,0) 72%),
+        radial-gradient(760px 760px at 40% 92%, rgba(255,255,255,.26) 0%, rgba(255,255,255,0) 74%);
+      pointer-events:none;
+      opacity:.65;
+    }
 
-    <!-- 점수 영역 -->
-    <div style="
-      background: rgba(255,255,255,0.15);
+    .wrap{
+      position:relative;
+      height:100%;
+      padding:74px 72px 62px;
+      display:flex;
+      flex-direction:column;
+      gap:22px;
+    }
+
+    .top{ display:flex; align-items:center; justify-content:space-between; }
+    .brand{ display:flex; align-items:center; gap:12px; font-weight:900; letter-spacing:-.8px; font-size:34px; }
+    .tag{
+      padding:12px 16px;
+      border-radius:999px;
+      background: rgba(255,255,255,.84);
+      border:1px solid var(--stroke);
+      font-weight:900;
+      color: rgba(17,24,39,.70);
+      font-size:20px;
+    }
+
+    .title{ margin-top:6px; font-size:56px; font-weight:900; letter-spacing:-2px; line-height:1.08; }
+    .sub{ margin-top:10px; font-size:26px; color:var(--muted); letter-spacing:-.4px; line-height:1.35; }
+
+    .stage{ position:relative; flex:1; display:flex; flex-direction:column; gap:18px; }
+
+    .card{
+      background: var(--card);
+      border:1px solid var(--stroke);
+      border-radius:34px;
+      box-shadow: var(--shadow);
       backdrop-filter: blur(10px);
-      border-radius: 40px;
-      padding: 48px 80px;
-      text-align: center;
-      margin-bottom: 48px;
-      border: 2px solid rgba(255,255,255,0.2);
-    ">
-      <!-- 점수 -->
-      <div style="
-        font-size: 160px;
-        font-weight: 900;
-        line-height: 1;
-        margin-bottom: 8px;
-        text-shadow: 0 4px 20px rgba(0,0,0,0.3);
-      ">${score}</div>
-      <div style="
-        font-size: 36px;
-        color: rgba(255,255,255,0.7);
-        margin-bottom: 24px;
-      ">/ 100점</div>
+    }
 
-      <!-- 별점 -->
-      <div style="display: flex; gap: 8px; justify-content: center;">
-        ${starsHTML}
+    .photoCard{ padding:18px; }
+    .photo{
+      width:100%;
+      height:820px;
+      border-radius:26px;
+      overflow:hidden;
+      background: rgba(17,24,39,.04);
+      border:1px solid rgba(17,24,39,.08);
+    }
+    .photo img{ width:100%; height:100%; object-fit:cover; display:block; }
+
+    .kpiRow{ display:flex; gap:16px; align-items:stretch; }
+    .kpi{ flex:1; padding:22px 24px; display:flex; flex-direction:column; justify-content:center; gap:8px; }
+    .kpi .label{ font-size:20px; font-weight:900; color: rgba(17,24,39,.62); letter-spacing:-.2px; }
+    .kpi .score{ font-size:86px; font-weight:900; letter-spacing:-2px; line-height:1; }
+    .kpi .stars{ font-size:22px; font-weight:900; letter-spacing:2px; color: rgba(17,24,39,.72); }
+
+    .grade{
+      width:300px;
+      padding:22px 24px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      gap:10px;
+      background: rgba(255,255,255,.86);
+      border:1px solid rgba(17,24,39,.10);
+      border-radius:34px;
+      box-shadow: var(--shadow);
+    }
+    .grade .big{ font-size:34px; font-weight:900; letter-spacing:-.8px; }
+    .grade .small{ font-size:20px; font-weight:800; color: rgba(17,24,39,.60); }
+
+    .comment{ padding:26px 28px; }
+    .comment .h{ font-size:22px; font-weight:900; color: rgba(17,24,39,.62); letter-spacing:-.2px; margin-bottom:12px; }
+    .comment .q{ font-size:34px; font-weight:900; letter-spacing:-.9px; line-height:1.45; }
+    .comment .sig{ margin-top:14px; display:flex; justify-content:space-between; align-items:center; color: rgba(17,24,39,.58); font-weight:900; }
+
+    .cta{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:18px;
+      padding:26px 28px;
+      background: rgba(255,255,255,.90);
+      border:1px solid rgba(17,24,39,.10);
+      border-radius:30px;
+      box-shadow: 0 18px 55px rgba(17,24,39,.10);
+    }
+    .cta .left{ display:flex; flex-direction:column; gap:8px; }
+    .cta .h{ font-size:24px; font-weight:900; letter-spacing:-.5px; }
+    .cta .u{ font-size:22px; font-weight:900; color: rgba(17,24,39,.62); }
+    .btn{
+      padding:16px 18px;
+      border-radius:22px;
+      background: rgba(17,24,39,.06);
+      border:1px solid rgba(17,24,39,.12);
+      font-weight:900;
+      letter-spacing:-.3px;
+      font-size:22px;
+      color: rgba(17,24,39,.90);
+      white-space:nowrap;
+    }
+
+    .foot{ text-align:center; margin-top:10px; font-size:18px; color: rgba(17,24,39,.50); font-weight:700; }
+  </style>
+</head>
+<body>
+  <div class="story">
+    <div class="glow" aria-hidden="true"></div>
+
+    <div class="wrap">
+      <div class="top">
+        <div class="brand"><span aria-hidden="true">🌙</span>Sunday Hug</div>
+        <div class="tag">수면 환경 분석 결과</div>
       </div>
-    </div>
 
-    <!-- 코멘트 -->
-    <div style="
-      max-width: 800px;
-      text-align: center;
-      font-size: 36px;
-      font-weight: 500;
-      line-height: 1.5;
-      color: rgba(255,255,255,0.95);
-      padding: 0 60px;
-      margin-bottom: auto;
-    ">"${comment}"</div>
+      <div>
+        <div class="title">프리미엄 귀여움<br/>수면 환경 체크</div>
+        <div class="sub">오늘의 환경 스코어로 우리 아기 잠자리 컨디션을 깔끔하게 확인해요.</div>
+      </div>
 
-    <!-- 하단 CTA -->
-    <div style="
-      width: 100%;
-      background: rgba(0,0,0,0.3);
-      padding: 48px;
-      text-align: center;
-    ">
-      <div style="
-        font-size: 28px;
-        color: rgba(255,255,255,0.7);
-        margin-bottom: 16px;
-      ">나도 우리 아기 수면 환경 분석받기</div>
-      <div style="
-        font-size: 36px;
-        font-weight: 700;
-        color: white;
-      ">app.sundayhug.com/sleep</div>
+      <div class="stage">
+        <div class="card photoCard">
+          <div class="photo">
+            ${photoContent}
+          </div>
+        </div>
+
+        <div class="kpiRow">
+          <div class="card kpi">
+            <div class="label">오늘의 점수</div>
+            <div class="score">${score}<span style="font-size:26px; font-weight:900; color:rgba(17,24,39,.55);"> / 100</span></div>
+            <div class="stars">${starsHTML}</div>
+          </div>
+          <div class="grade">
+            <div class="big">오늘의 상태</div>
+            <div class="small">점수 기반 코멘트를 확인해요</div>
+          </div>
+        </div>
+
+        <div class="card comment">
+          <div class="h">오늘의 코멘트</div>
+          <div class="q">${comment}</div>
+          <div class="sig">
+            <span>Sunday Hug</span>
+            <span aria-hidden="true">♡</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="cta">
+          <div class="left">
+            <div class="h">나도 분석받기</div>
+            <div class="u">app.sundayhug.com/sleep</div>
+          </div>
+          <div class="btn">스토리로 공유하기 →</div>
+        </div>
+        <div class="foot">* 인스타그램 스토리(1080×1920) · 단색 배경 버전</div>
+      </div>
     </div>
   </div>
 </body>
-</html>
-`;
+</html>`;
 }
 
 /**
@@ -278,6 +322,7 @@ export async function generateStoryCardImage(
 ): Promise<string> {
   console.log("[StoryCard] Generating story card image...", {
     score: data.score,
+    hasImage: !!data.imageUrl,
   });
 
   const html = generateStoryCardHTML(data);
@@ -297,4 +342,3 @@ export function getDefaultComment(score: number): string {
   if (score >= 40) return "주의가 필요한 환경이에요 ⚠️";
   return "즉시 개선이 필요한 환경이에요! 🚨";
 }
-

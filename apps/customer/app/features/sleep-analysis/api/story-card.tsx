@@ -55,10 +55,12 @@ export async function action({ request, params }: Route.ActionArgs) {
       );
     }
 
-    // 2. 점수와 코멘트 추출
-    const score = report.safetyScore || 70;
+    // 2. 점수와 코멘트 추출 (0점도 유효한 값이므로 ?? 사용)
+    const score = typeof report.safetyScore === 'number' ? report.safetyScore : 70;
     const comment =
-      report.scoreComment || report.summary?.substring(0, 50) || getDefaultComment(score);
+      report.scoreComment || report.summary?.substring(0, 80) || getDefaultComment(score);
+    
+    console.log(`[StoryCard] Extracted - score: ${score}, comment: ${comment?.substring(0, 30)}...`);
 
     // 3. 이미지 URL (선택적)
     const imageUrl = result.image_url || undefined;
