@@ -52,6 +52,12 @@ export default [
       route("/generate-thumbnail", "features/blog/api/generate-thumbnail.tsx"),
       route("/generate-slug", "features/blog/api/generate-slug.tsx"),
     ]),
+    // Cafe24 연동 API
+    ...prefix("/integrations/cafe24", [
+      route("/auth/start", "features/integrations/api/cafe24-auth-start.tsx"),
+      route("/auth/callback", "features/integrations/api/cafe24-auth-callback.tsx"),
+      route("/sync-orders", "features/integrations/api/cafe24-sync-orders.tsx"),
+    ]),
   ]),
 
   // ========================================
