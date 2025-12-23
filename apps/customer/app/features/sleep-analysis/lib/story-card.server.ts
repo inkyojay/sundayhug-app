@@ -1,8 +1,8 @@
 /**
  * Story Card Generator (Server-side)
  *
- * 인스타그램 스토리용 한 장짜리 결과 카드 생성
- * 크기: 1080x1920 (인스타 스토리 최적화)
+ * 정사각형 결과 카드 생성
+ * 크기: 1080x1080 (1:1 비율)
  * 
  * 점수 기준 분기:
  * - 80점 이상: 사진 있는 축하 카드
@@ -25,26 +25,14 @@ const SAFETY_TIPS = [
   "아기는 등을 대고 바로 눕혀 재우세요",
   "적정 실내 온도는 20-22°C예요",
   "아기 모니터 전선은 손이 닿지 않게 정리하세요",
-  "아기와 같은 침대에서 자는 것은 위험해요",
 ];
 
 // 점수별 코멘트 (80점 이상용)
 function getHighScoreComment(score: number): string {
-  if (score >= 95) return "완벽한 수면 환경이에요!";
-  if (score >= 90) return "최고의 수면 환경이에요!";
-  if (score >= 85) return "아주 안전한 환경이에요!";
-  return "안전한 수면 환경이에요!";
-}
-
-// 점수별 배경 그라데이션
-function getGradient(score: number): { from: string; to: string } {
-  if (score >= 80) {
-    return { from: "#4ade80", to: "#22c55e" }; // 초록 (축하)
-  }
-  if (score >= 60) {
-    return { from: "#fbbf24", to: "#f59e0b" }; // 노랑 (주의)
-  }
-  return { from: "#f87171", to: "#ef4444" }; // 빨강 (위험)
+  if (score >= 95) return "완벽해요!";
+  if (score >= 90) return "최고예요!";
+  if (score >= 85) return "아주 좋아요!";
+  return "안전해요!";
 }
 
 /**
@@ -92,11 +80,10 @@ async function htmlToImage(html: string): Promise<string> {
 }
 
 /**
- * 축하 카드 HTML (80점 이상 - 사진 있음)
+ * 축하 카드 HTML (80점 이상 - 사진 있음) - 1:1 비율
  */
 function generateHighScoreCard(score: number, imageUrl: string): string {
   const comment = getHighScoreComment(score);
-  const gradient = getGradient(score);
 
   return `<!DOCTYPE html>
 <html lang="ko">
@@ -108,92 +95,85 @@ function generateHighScoreCard(score: number, imageUrl: string): string {
     body { font-family: "Noto Sans KR", sans-serif; }
     .card {
       width: 1080px;
-      height: 1920px;
-      background: linear-gradient(180deg, ${gradient.from} 0%, ${gradient.to} 100%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 80px 60px;
-    }
-    .logo {
-      font-size: 48px;
-      font-weight: 900;
-      color: white;
-      margin-bottom: 60px;
-      text-shadow: 0 4px 20px rgba(0,0,0,0.15);
-    }
-    .photo-frame {
-      width: 800px;
-      height: 800px;
-      border-radius: 40px;
+      height: 1080px;
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      position: relative;
       overflow: hidden;
-      background: white;
-      padding: 20px;
-      box-shadow: 0 30px 80px rgba(0,0,0,0.2);
     }
     .photo {
+      position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
-      border-radius: 28px;
       object-fit: cover;
     }
-    .score-section {
-      margin-top: 60px;
-      text-align: center;
+    .overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 50px;
+      background: linear-gradient(0deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+    }
+    .logo {
+      font-size: 28px;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 20px;
+      opacity: 0.9;
+    }
+    .bottom {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+    .score-box {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
     }
     .score {
-      font-size: 180px;
+      font-size: 120px;
       font-weight: 900;
       color: white;
       line-height: 1;
-      text-shadow: 0 8px 30px rgba(0,0,0,0.2);
     }
     .score-label {
-      font-size: 48px;
-      color: rgba(255,255,255,0.9);
-      margin-top: 10px;
+      font-size: 32px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.8);
+    }
+    .right {
+      text-align: right;
     }
     .comment {
-      margin-top: 40px;
-      font-size: 52px;
+      font-size: 36px;
       font-weight: 700;
-      color: white;
-      text-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      color: #4ade80;
+      margin-bottom: 8px;
     }
-    .cta {
-      margin-top: auto;
-      text-align: center;
-    }
-    .cta-label {
-      font-size: 32px;
-      color: rgba(255,255,255,0.8);
-      margin-bottom: 12px;
-    }
-    .cta-url {
-      font-size: 40px;
-      font-weight: 700;
-      color: white;
+    .url {
+      font-size: 24px;
+      color: rgba(255,255,255,0.7);
     }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="logo">🌙 Sunday Hug</div>
-    
-    <div class="photo-frame">
-      <img class="photo" src="${imageUrl}" alt="아기 사진" />
-    </div>
-    
-    <div class="score-section">
-      <div class="score">${score}</div>
-      <div class="score-label">점</div>
-    </div>
-    
-    <div class="comment">${comment}</div>
-    
-    <div class="cta">
-      <div class="cta-label">나도 분석받기</div>
-      <div class="cta-url">app.sundayhug.com/sleep</div>
+    <img class="photo" src="${imageUrl}" alt="" />
+    <div class="overlay">
+      <div class="logo">🌙 Sunday Hug</div>
+      <div class="bottom">
+        <div class="score-box">
+          <span class="score">${score}</span>
+          <span class="score-label">점</span>
+        </div>
+        <div class="right">
+          <div class="comment">${comment}</div>
+          <div class="url">app.sundayhug.com/sleep</div>
+        </div>
+      </div>
     </div>
   </div>
 </body>
@@ -201,11 +181,13 @@ function generateHighScoreCard(score: number, imageUrl: string): string {
 }
 
 /**
- * 팁 카드 HTML (80점 미만 - 사진 없음)
+ * 팁 카드 HTML (80점 미만 - 사진 없음) - 1:1 비율
  */
 function generateLowScoreCard(score: number): string {
-  const gradient = getGradient(score);
   const randomTip = SAFETY_TIPS[Math.floor(Math.random() * SAFETY_TIPS.length)];
+  
+  // 점수별 색상
+  const scoreColor = score >= 60 ? "#fbbf24" : "#f87171";
 
   return `<!DOCTYPE html>
 <html lang="ko">
@@ -217,102 +199,82 @@ function generateLowScoreCard(score: number): string {
     body { font-family: "Noto Sans KR", sans-serif; }
     .card {
       width: 1080px;
-      height: 1920px;
-      background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 100px 80px;
-    }
-    .logo {
-      font-size: 48px;
-      font-weight: 900;
-      color: white;
-      margin-bottom: 100px;
-    }
-    .score-section {
-      text-align: center;
-      margin-bottom: 80px;
-    }
-    .score {
-      font-size: 240px;
-      font-weight: 900;
-      background: linear-gradient(180deg, ${gradient.from} 0%, ${gradient.to} 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      line-height: 1;
-    }
-    .score-label {
-      font-size: 48px;
-      color: rgba(255,255,255,0.6);
-      margin-top: 10px;
-    }
-    .divider {
-      width: 200px;
-      height: 4px;
-      background: rgba(255,255,255,0.2);
-      border-radius: 2px;
-      margin: 60px 0;
-    }
-    .tip-section {
-      flex: 1;
+      height: 1080px;
+      background: #0f172a;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      padding: 80px;
+    }
+    .logo {
+      font-size: 32px;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 50px;
+    }
+    .score-box {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 50px;
+    }
+    .score {
+      font-size: 180px;
+      font-weight: 900;
+      color: ${scoreColor};
+      line-height: 1;
+    }
+    .score-label {
+      font-size: 48px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.5);
+    }
+    .tip-section {
       text-align: center;
+      margin-bottom: 60px;
     }
     .tip-label {
-      font-size: 36px;
+      font-size: 28px;
       font-weight: 700;
-      color: ${gradient.from};
-      margin-bottom: 40px;
+      color: ${scoreColor};
+      margin-bottom: 24px;
     }
     .tip-text {
-      font-size: 52px;
+      font-size: 40px;
       font-weight: 700;
       color: white;
-      line-height: 1.5;
-      max-width: 800px;
+      line-height: 1.4;
     }
     .cta {
-      margin-top: auto;
+      padding: 30px 50px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 20px;
       text-align: center;
-      padding: 50px 80px;
-      background: rgba(255,255,255,0.08);
-      border-radius: 30px;
-      width: 100%;
     }
     .cta-title {
-      font-size: 36px;
-      font-weight: 700;
-      color: white;
-      margin-bottom: 16px;
+      font-size: 24px;
+      color: rgba(255,255,255,0.7);
+      margin-bottom: 8px;
     }
     .cta-url {
-      font-size: 40px;
-      font-weight: 900;
-      color: ${gradient.from};
+      font-size: 28px;
+      font-weight: 700;
+      color: ${scoreColor};
     }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="logo">🌙 Sunday Hug</div>
-    
-    <div class="score-section">
-      <div class="score">${score}</div>
-      <div class="score-label">점</div>
+    <div class="score-box">
+      <span class="score">${score}</span>
+      <span class="score-label">점</span>
     </div>
-    
-    <div class="divider"></div>
-    
     <div class="tip-section">
       <div class="tip-label">💡 안전 수면 팁</div>
-      <div class="tip-text">"${randomTip}"</div>
+      <div class="tip-text">${randomTip}</div>
     </div>
-    
     <div class="cta">
       <div class="cta-title">우리 아기 수면 환경 분석받기</div>
       <div class="cta-url">app.sundayhug.com/sleep</div>
@@ -330,16 +292,16 @@ export async function generateStoryCardImage(
 ): Promise<string> {
   const { score, imageUrl } = data;
   
-  console.log("[StoryCard] Generating card...", { score, hasImage: !!imageUrl });
+  console.log("[StoryCard] Generating 1:1 card...", { score, hasImage: !!imageUrl });
 
   let html: string;
   
   // 80점 이상이고 이미지가 있으면 축하 카드, 아니면 팁 카드
   if (score >= 80 && imageUrl) {
-    console.log("[StoryCard] Generating HIGH score card (photo)");
+    console.log("[StoryCard] HIGH score card (with photo)");
     html = generateHighScoreCard(score, imageUrl);
   } else {
-    console.log("[StoryCard] Generating LOW score card (tip)");
+    console.log("[StoryCard] LOW score card (tip only)");
     html = generateLowScoreCard(score);
   }
 
