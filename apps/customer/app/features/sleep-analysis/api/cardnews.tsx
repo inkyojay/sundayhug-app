@@ -8,22 +8,6 @@ import type { Route } from "./+types/cardnews";
 
 import { data } from "react-router";
 
-import adminClient from "~/core/lib/supa-admin-client.server";
-
-import { getSleepAnalysis } from "../lib/sleep-analysis.server";
-import { downloadImageFromUrl, uploadImageToStorage } from "../lib/storage.server";
-import {
-  generateAllCardNewsSlides,
-  formatDateForCardNews,
-  type CardNewsData,
-} from "../lib/placid.server";
-import {
-  generateBadCardImages,
-  generateGoodCardImages,
-  generatePinOverlayImage,
-  type BadCardData,
-  type GoodCardData,
-} from "../lib/card-image.server";
 import type { AnalysisReport, CardNewsText } from "../schema";
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -36,6 +20,17 @@ export async function action({ request, params }: Route.ActionArgs) {
   if (!id) {
     return data({ success: false, error: "Analysis ID is required" }, { status: 400 });
   }
+
+  // Dynamic imports for server-only modules
+  const { default: adminClient } = await import("~/core/lib/supa-admin-client.server");
+  const { getSleepAnalysis } = await import("../lib/sleep-analysis.server");
+  const { uploadImageToStorage } = await import("../lib/storage.server");
+  const { generateAllCardNewsSlides, formatDateForCardNews } = await import("../lib/placid.server");
+  const { generateBadCardImages, generateGoodCardImages, generatePinOverlayImage } = await import("../lib/card-image.server");
+
+  type CardNewsData = Awaited<ReturnType<typeof import("../lib/placid.server")>>["CardNewsData"];
+  type BadCardData = Awaited<ReturnType<typeof import("../lib/card-image.server")>>["BadCardData"];
+  type GoodCardData = Awaited<ReturnType<typeof import("../lib/card-image.server")>>["GoodCardData"];
 
   try {
     console.log(`[CardNews] Starting generation for analysis ${id}...`);
