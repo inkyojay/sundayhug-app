@@ -287,8 +287,9 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
     return d.toISOString().split("T")[0];
   })();
 
-  queryParams.set("start_date", startDate);
-  queryParams.set("end_date", endDate);
+  // Cafe24 API는 order_date_from, order_date_to 사용
+  queryParams.set("order_date_from", startDate);
+  queryParams.set("order_date_to", endDate);
   
   if (params.orderStatus) {
     queryParams.set("order_status", params.orderStatus);
@@ -303,9 +304,13 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
   // embed로 상세 정보 포함
   queryParams.set("embed", "items,receivers");
 
-  const result = await cafe24Fetch<{ orders: Cafe24Order[]; count: number }>(
-    `/admin/orders?${queryParams.toString()}`
-  );
+  const endpoint = `/admin/orders?${queryParams.toString()}`;
+  console.log(`🔍 Cafe24 API 호출: ${endpoint}`);
+  console.log(`📅 날짜 범위: ${startDate} ~ ${endDate}`);
+
+  const result = await cafe24Fetch<{ orders: Cafe24Order[]; count: number }>(endpoint);
+
+  console.log(`📦 Cafe24 API 응답:`, JSON.stringify(result, null, 2).slice(0, 1000));
 
   if (!result.success) {
     return { success: false, error: result.error };
