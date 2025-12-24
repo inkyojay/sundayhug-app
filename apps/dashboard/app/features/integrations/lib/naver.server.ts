@@ -401,8 +401,8 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
     return toKSTString(d);
   })();
 
-  console.log(`🔍 [DEBUG] 네이버 주문 조회 시작`);
-  console.log(`📅 [DEBUG] 날짜: ${startDate} ~ ${endDate}`);
+  console.log(`🔍 [DEBUG v3] 네이버 주문 조회 시작 - KST 형식`);
+  console.log(`📅 [DEBUG v3] 날짜: ${startDate} ~ ${endDate}`);
 
   const proxyUrl = getProxyUrl();
   const proxyApiKey = getProxyApiKey();
