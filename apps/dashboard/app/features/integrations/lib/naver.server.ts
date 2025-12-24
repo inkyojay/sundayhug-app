@@ -386,12 +386,12 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
   count?: number;
   error?: string;
 }> {
-  // 기본값: 최근 7일 (YYYY-MM-DD 형식)
-  const endDate = params.orderDateTo || new Date().toISOString().split('T')[0];
+  // 기본값: 최근 7일 (ISO-8601 전체 형식: 2025-12-17T00:00:00+09:00)
+  const endDate = params.orderDateTo || new Date().toISOString();
   const startDate = params.orderDateFrom || (() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
-    return d.toISOString().split('T')[0];
+    return d.toISOString();
   })();
 
   console.log(`🔍 [DEBUG] 네이버 주문 조회 시작`);
