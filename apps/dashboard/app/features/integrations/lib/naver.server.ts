@@ -377,7 +377,7 @@ export interface GetOrdersParams {
 
 /**
  * 주문 목록 조회
- * GET /v1/pay-order/seller/product-orders/last-changed-statuses
+ * 프록시 서버의 /api/orders 엔드포인트 사용 (이미 검증된 엔드포인트)
  * 참고: https://apicenter.commerce.naver.com/docs/commerce-api/current/%EC%A3%BC%EB%AC%B8-%EC%A1%B0%ED%9A%8C
  */
 export async function getOrders(params: GetOrdersParams = {}): Promise<{
@@ -386,38 +386,98 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
   count?: number;
   error?: string;
 }> {
-  // 기본값: 최근 7일 (ISO 8601 full format with timezone)
-  const endDate = params.orderDateTo || new Date().toISOString();
+  // 기본값: 최근 7일 (YYYY-MM-DD 형식)
+  const endDate = params.orderDateTo || new Date().toISOString().split('T')[0];
   const startDate = params.orderDateFrom || (() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
-    return d.toISOString();
+    return d.toISOString().split('T')[0];
   })();
 
   console.log(`🔍 [DEBUG] 네이버 주문 조회 시작`);
   console.log(`📅 [DEBUG] 날짜: ${startDate} ~ ${endDate}`);
 
-  // 변경 상품 주문 내역 조회 (GET) - /external 접두사 제거!
-  // 문서: https://apicenter.commerce.naver.com/docs/commerce-api/2.65.0/seller-get-last-changed-status-pay-order-seller
+  const proxyUrl = getProxyUrl();
+  const proxyApiKey = getProxyApiKey();
+  const token = await getValidToken();
+
+  if (!token) {
+    console.error(`❌ [DEBUG] 토큰 없음`);
+    return { success: false, error: "유효한 네이버 토큰이 없습니다" };
+  }
+
+  console.log(`🔑 [DEBUG] 토큰 유효: ${token.access_token.slice(0, 20)}...`);
+
+  // 프록시 서버가 있으면 /api/orders 사용 (이미 검증된 엔드포인트)
+  if (proxyUrl) {
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token.access_token}`,
+      };
+      
+      if (proxyApiKey) {
+        headers["X-Proxy-Api-Key"] = proxyApiKey;
+      }
+
+      const queryParams = new URLSearchParams();
+      queryParams.set("lastChangedFrom", startDate);
+      queryParams.set("lastChangedTo", endDate);
+      
+      const ordersUrl = `${proxyUrl}/api/orders?${queryParams.toString()}`;
+      console.log(`🌐 [DEBUG] 프록시 /api/orders 호출: ${ordersUrl}`);
+      
+      const response = await fetch(ordersUrl, {
+        method: "GET",
+        headers,
+      });
+
+      const responseText = await response.text();
+      console.log(`📥 [DEBUG] 응답 (${response.status}): ${responseText.slice(0, 500)}`);
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        console.error(`❌ [DEBUG] JSON 파싱 실패: ${responseText.slice(0, 200)}`);
+        return { success: false, error: "API 응답 파싱 실패" };
+      }
+
+      if (!response.ok) {
+        console.error(`❌ [DEBUG] API 에러: ${response.status}`, data);
+        return { success: false, error: data.message || `API 호출 실패 (${response.status})` };
+      }
+
+      const orders = data.data || [];
+      console.log(`✅ [DEBUG] 성공! 주문 수: ${orders.length}`);
+      return { success: true, orders: orders as NaverOrder[], count: orders.length };
+      
+    } catch (error) {
+      console.error(`❌ [DEBUG] 요청 에러:`, error);
+      return { success: false, error: "API 호출 중 오류가 발생했습니다" };
+    }
+  }
+
+  // 직접 호출 (프록시 없이)
   const queryParams = new URLSearchParams();
   queryParams.set("lastChangedFrom", startDate);
   queryParams.set("lastChangedTo", endDate);
 
-  const endpoint = `/v1/pay-order/seller/product-orders/last-changed-statuses?${queryParams.toString()}`;
-  console.log(`🌐 [FIX] API 엔드포인트: GET ${endpoint}`);
+  const endpoint = `/external/v1/pay-order/seller/orders?${queryParams.toString()}`;
+  console.log(`🌐 [DEBUG] 직접 호출: GET ${endpoint}`);
 
-  const result = await naverFetch<{ data: { lastChangeStatuses: any[] } }>(
+  const result = await naverFetch<{ data: NaverOrder[] }>(
     endpoint,
     { method: "GET" }
   );
 
   if (result.success) {
-    const orders = result.data?.data?.lastChangeStatuses || [];
-    console.log(`✅ [FIX] 성공! 주문 수: ${orders.length}`);
+    const orders = result.data?.data || [];
+    console.log(`✅ [DEBUG] 성공! 주문 수: ${orders.length}`);
     return { success: true, orders: orders as NaverOrder[], count: orders.length };
   }
 
-  console.log(`❌ [FIX] 실패: ${result.error}`);
+  console.log(`❌ [DEBUG] 실패: ${result.error}`);
   return { success: false, error: result.error };
 }
 
