@@ -248,6 +248,7 @@ app.post("/api/proxy", verifyApiKey, async (req, res) => {
     const url = `https://api.commerce.naver.com${path}`;
     
     console.log(`[프록시] ${method} ${url}`);
+    console.log(`[프록시] headers:`, JSON.stringify(headers));
     
     const fetchOptions = {
       method,
@@ -262,7 +263,26 @@ app.post("/api/proxy", verifyApiKey, async (req, res) => {
     }
     
     const response = await fetch(url, fetchOptions);
-    const data = await response.json();
+    const responseText = await response.text();
+    
+    console.log(`[프록시] 응답 status: ${response.status}`);
+    console.log(`[프록시] 응답 contentType: ${response.headers.get('content-type')}`);
+    console.log(`[프록시] 응답 body (처음 500자): ${responseText.slice(0, 500)}`);
+    
+    // JSON 파싱 시도
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      // JSON 파싱 실패 - HTML 또는 다른 형식
+      console.error(`[프록시 JSON 파싱 실패] 원본 응답: ${responseText.slice(0, 1000)}`);
+      return res.status(response.status || 500).json({ 
+        error: "네이버 API가 JSON이 아닌 응답을 반환했습니다",
+        status: response.status,
+        contentType: response.headers.get('content-type'),
+        rawResponse: responseText.slice(0, 500)
+      });
+    }
     
     if (!response.ok) {
       console.error(`[프록시 실패] ${response.status}`, data);
