@@ -151,6 +151,7 @@ app.post("/api/token", verifyApiKey, async (req, res) => {
 /**
  * 주문 조회 API (프록시)
  * GET /api/orders
+ * 문서: https://apicenter.commerce.naver.com/docs/commerce-api/current/seller-get-product-orders-with-conditions-pay-order-seller
  */
 app.get("/api/orders", verifyApiKey, async (req, res) => {
   try {
@@ -162,7 +163,8 @@ app.get("/api/orders", verifyApiKey, async (req, res) => {
     
     // 쿼리 파라미터 전달
     const queryString = new URLSearchParams(req.query).toString();
-    const url = `https://api.commerce.naver.com/external/v1/pay-order/seller/orders?${queryString}`;
+    // 올바른 엔드포인트: /v1/pay-order/seller/product-orders (external 없음, product-orders)
+    const url = `https://api.commerce.naver.com/v1/pay-order/seller/product-orders?${queryString}`;
     
     console.log(`[주문 조회] URL: ${url}`);
     
@@ -174,7 +176,20 @@ app.get("/api/orders", verifyApiKey, async (req, res) => {
       },
     });
     
-    const data = await response.json();
+    const responseText = await response.text();
+    console.log(`[주문 조회] 응답 status: ${response.status}`);
+    console.log(`[주문 조회] 응답 body (처음 500자): ${responseText.slice(0, 500)}`);
+    
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error(`[주문 조회 JSON 파싱 실패] 원본: ${responseText.slice(0, 1000)}`);
+      return res.status(response.status || 500).json({ 
+        error: "JSON 파싱 실패",
+        rawResponse: responseText.slice(0, 500)
+      });
+    }
     
     if (!response.ok) {
       console.error(`[주문 조회 실패] ${response.status}`, data);
