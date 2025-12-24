@@ -377,7 +377,7 @@ export interface GetOrdersParams {
 
 /**
  * 주문 목록 조회
- * GET /external/v1/pay-order/seller/product-orders/search
+ * 여러 API 시도: last-changed-statuses, ready, search
  */
 export async function getOrders(params: GetOrdersParams = {}): Promise<{
   success: boolean;
@@ -385,7 +385,7 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
   count?: number;
   error?: string;
 }> {
-  // 기본값: 최근 7일
+  // 기본값: 최근 7일 (ISO 8601 full format with timezone)
   const endDate = params.orderDateTo || new Date().toISOString();
   const startDate = params.orderDateFrom || (() => {
     const d = new Date();
@@ -393,38 +393,72 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
     return d.toISOString();
   })();
 
-  console.log(`🔍 [H1] 네이버 주문 조회 시작 - 날짜: ${startDate} ~ ${endDate}`);
+  console.log(`🔍 [DEBUG] 네이버 주문 조회 시작`);
+  console.log(`📅 [DEBUG] 날짜: ${startDate} ~ ${endDate}`);
 
-  // 네이버 커머스 API - 상품주문 목록 조회 (검색)
-  // 참고: https://apicenter.commerce.naver.com/ko/basic/commerce-api
-  const queryParams = new URLSearchParams();
-  queryParams.set("lastChangedFrom", startDate);
-  queryParams.set("lastChangedTo", endDate);
+  // 시도 1: 발주확인 전 주문 목록 (GET)
+  console.log(`🌐 [H3] 시도 1: GET /external/v1/pay-order/seller/product-orders/ready`);
+  let result = await naverFetch<{ data: { contents: NaverOrder[] } }>(
+    `/external/v1/pay-order/seller/product-orders/ready`,
+    { method: "GET" }
+  );
+  
+  if (result.success) {
+    const orders = result.data?.data?.contents || [];
+    console.log(`✅ [H3] 시도 1 성공! 주문 수: ${orders.length}`);
+    return { success: true, orders, count: orders.length };
+  }
+  console.log(`❌ [H3] 시도 1 실패: ${result.error}`);
 
-  const endpoint = `/external/v1/pay-order/seller/product-orders/search?${queryParams.toString()}`;
-  console.log(`🌐 [H1] API 엔드포인트: GET ${endpoint}`);
+  // 시도 2: 발송대기 주문 목록 (GET)
+  console.log(`🌐 [H4] 시도 2: GET /external/v1/pay-order/seller/product-orders/ready-to-ship`);
+  result = await naverFetch<{ data: { contents: NaverOrder[] } }>(
+    `/external/v1/pay-order/seller/product-orders/ready-to-ship`,
+    { method: "GET" }
+  );
+  
+  if (result.success) {
+    const orders = result.data?.data?.contents || [];
+    console.log(`✅ [H4] 시도 2 성공! 주문 수: ${orders.length}`);
+    return { success: true, orders, count: orders.length };
+  }
+  console.log(`❌ [H4] 시도 2 실패: ${result.error}`);
 
-  const result = await naverFetch<{ data: { contents: NaverOrder[] } }>(
-    endpoint,
+  // 시도 3: 변경된 주문 목록 (POST with body)
+  console.log(`🌐 [H5] 시도 3: POST /external/v1/pay-order/seller/product-orders/last-changed-statuses`);
+  const postResult = await naverFetch<{ data: { lastChangeStatuses: any[] } }>(
+    `/external/v1/pay-order/seller/product-orders/last-changed-statuses`,
     {
-      method: "GET",
+      method: "POST",
+      body: {
+        lastChangedFrom: startDate,
+        lastChangedTo: endDate,
+      },
     }
   );
-
-  console.log(`📥 [H1] API 응답: success=${result.success}, error=${result.error}, hasData=${!!result.data}`);
-
-  if (!result.success) {
-    return { success: false, error: result.error };
+  
+  if (postResult.success) {
+    const orders = postResult.data?.data?.lastChangeStatuses || [];
+    console.log(`✅ [H5] 시도 3 성공! 주문 수: ${orders.length}`);
+    return { success: true, orders: orders as NaverOrder[], count: orders.length };
   }
+  console.log(`❌ [H5] 시도 3 실패: ${postResult.error}`);
 
-  const orders = result.data?.data?.contents || [];
-  console.log(`✅ [H1] 조회된 주문 수: ${orders.length}`);
+  // 시도 4: 주문 목록 전체 조회 시도
+  console.log(`🌐 [H6] 시도 4: GET /external/v2/pay-order/seller/orders`);
+  result = await naverFetch<{ data: { contents: NaverOrder[] } }>(
+    `/external/v2/pay-order/seller/orders`,
+    { method: "GET" }
+  );
+  
+  if (result.success) {
+    const orders = result.data?.data?.contents || [];
+    console.log(`✅ [H6] 시도 4 성공! 주문 수: ${orders.length}`);
+    return { success: true, orders, count: orders.length };
+  }
+  console.log(`❌ [H6] 시도 4 실패: ${result.error}`);
 
-  return {
-    success: true,
-    orders,
-    count: orders.length,
-  };
+  return { success: false, error: "모든 API 엔드포인트 시도 실패. 네이버 API 설정을 확인해주세요." };
 }
 
 /**
