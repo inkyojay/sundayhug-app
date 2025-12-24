@@ -102,6 +102,47 @@ naver-proxy/                             # Railway 프록시 서버
 
 ---
 
+## 2025-12-24 (수) - 네이버 주문 동기화 안정화/성능 개선
+
+### 요약
+- **문제**: 네이버 주문 조회 API가 `from/to` 파라미터를 **ISO-8601(+09:00)** 형태로 요구하고, 또한 **from~to 최대 24시간 제한**이 있어 7일/30일 조회 시 400 오류/동기화 실패가 발생.
+- **해결**: 날짜 정규화 + 24시간 윈도우 분할 조회 + DB 저장/고객 매칭 로직 배치화로 **성공/성능을 동시에 개선**.
+
+### 해결 상세
+1. **날짜 포맷 정규화**
+   - UI에서 들어오는 `YYYY-MM-DD`를 네이버 요구 포맷으로 변환:
+     - `from`: `YYYY-MM-DDT00:00:00.000+09:00`
+     - `to`: `YYYY-MM-DDT23:59:59.999+09:00`
+
+2. **API 제약 대응: from~to 최대 24시간**
+   - 조회 기간을 **24시간 단위로 분할**해 순차 호출 후 결과를 합산.
+   - 참고 문서: https://apicenter.commerce.naver.com/docs/commerce-api/current/seller-get-product-orders-with-conditions-pay-order-seller
+
+3. **응답 구조 매핑**
+   - `data.contents[].content.order / content.productOrder` 구조를 파싱해 내부 `orders` 스키마에 맞게 매핑.
+
+4. **성능 개선 (가장 큰 효과)**
+   - 기존: 주문 1건당 `upsert + select + customer match + link` 반복 → 수십 초~수 분 소요
+   - 개선:
+     - 주문 저장: **batch upsert** (1회)
+     - 고객 매칭/연결: 고객(이름+전화) 단위로 **집계 후 batch insert/update** + `orders.customer_id`는 **update-only**로 연결
+   - 런타임 기준(예시): 78건 동기화 **~87초 → ~8~9초** 수준으로 개선
+
+5. **NOT NULL 제약 관련 오류 수정**
+   - `customers.phone` NOT NULL, `orders.sol_no` NOT NULL 등으로 인해 bulk 작업이 insert 경로로 떨어질 때 실패하던 케이스를 보완:
+     - customers upsert에 `name/phone/normalized_phone` 포함
+     - orders.customer_id 연결은 upsert 금지 → `update ... in(id)`로만 수행
+
+### 변경 파일
+```
+apps/dashboard/app/features/integrations/lib/naver.server.ts
+apps/dashboard/app/features/integrations/api/naver-sync-orders.tsx
+apps/dashboard/app/features/customer-analytics/lib/customer-matcher.server.ts
+naver-proxy/index.js
+```
+
+---
+
 ## 2025-12-22 (일) - 회원 관리 및 관리자 승인 시스템
 
 ### 작업 내용
