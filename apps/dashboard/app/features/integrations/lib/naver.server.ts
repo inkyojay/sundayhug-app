@@ -421,8 +421,9 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
       }
 
       const queryParams = new URLSearchParams();
-      queryParams.set("lastChangedFrom", startDate);
-      queryParams.set("lastChangedTo", endDate);
+      // 네이버 API 파라미터: from, to (YYYY-MM-DD 형식)
+      queryParams.set("from", startDate);
+      queryParams.set("to", endDate);
       
       const ordersUrl = `${proxyUrl}/api/orders?${queryParams.toString()}`;
       console.log(`🌐 [DEBUG] 프록시 /api/orders 호출: ${ordersUrl}`);
