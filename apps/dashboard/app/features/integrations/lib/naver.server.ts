@@ -386,23 +386,55 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
   count?: number;
   error?: string;
 }> {
-  // 기본값: 최근 7일 (ISO-8601 형식 + 한국 시간대: 2024-06-07T19:00:00.000+09:00)
+  // 기본값: 최근 7일 (ISO-8601 +09:00 예시: 2024-06-07T19:00:00.000+09:00)
+  // 문서: https://apicenter.commerce.naver.com/docs/commerce-api/current/seller-get-product-orders-with-conditions-pay-order-seller
   const toKSTString = (date: Date): string => {
     const kstOffset = 9 * 60 * 60 * 1000; // +09:00 in ms
     const kstDate = new Date(date.getTime() + kstOffset);
-    const iso = kstDate.toISOString().replace('Z', '+09:00');
-    return iso;
+    return kstDate.toISOString().replace("Z", "+09:00");
   };
-  
-  const endDate = params.orderDateTo || toKSTString(new Date());
-  const startDate = params.orderDateFrom || (() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 7);
-    return toKSTString(d);
-  })();
 
-  console.log(`🔍 [DEBUG v3] 네이버 주문 조회 시작 - KST 형식`);
-  console.log(`📅 [DEBUG v3] 날짜: ${startDate} ~ ${endDate}`);
+  const normalizeNaverDateTime = (input: string, role: "from" | "to"): string => {
+    // 1) UI에서 흔히 오는 YYYY-MM-DD → 문서 요구 date-time(+09:00)로 변환
+    if (/^\d{4}-\d{2}-\d{2}$/.test(input)) {
+      return role === "from"
+        ? `${input}T00:00:00.000+09:00`
+        : `${input}T23:59:59.999+09:00`;
+    }
+
+    // 2) timezone 없는 date-time이면 +09:00를 붙임 (예: 2024-06-07T19:00:00.000)
+    if (/^\d{4}-\d{2}-\d{2}T/.test(input) && !/(Z|[+-]\d{2}:\d{2})$/.test(input)) {
+      return `${input}+09:00`;
+    }
+
+    // 3) Z 또는 offset 포함 ISO면 파싱 후 +09:00로 정규화
+    const d = new Date(input);
+    if (!Number.isNaN(d.getTime())) return toKSTString(d);
+
+    // 4) 최후: 그대로(서버가 추가 검증 로그로 잡도록)
+    return input;
+  };
+
+  const rawEnd = params.orderDateTo || toKSTString(new Date());
+  const rawStart =
+    params.orderDateFrom ||
+    (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      return toKSTString(d);
+    })();
+
+  const endDate = normalizeNaverDateTime(rawEnd, "to");
+  const startDate = normalizeNaverDateTime(rawStart, "from");
+
+  console.log(`🔍 [DEBUG v4] 네이버 주문 조회 시작 - from/to ISO-8601(+09:00) 정규화`);
+  console.log(`🧭 [DEBUG v4] rawFrom/rawTo: ${rawStart} ~ ${rawEnd}`);
+  console.log(`📅 [DEBUG v4] from/to: ${startDate} ~ ${endDate}`);
+  // #region agent log
+  if (process.env.DEBUG_NDJSON_INGEST === "1") {
+    fetch("http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({location:"naver.server.ts:getOrders",message:"normalized from/to",data:{rawStart,rawEnd,startDate,endDate},timestamp:Date.now(),sessionId:"debug-session",runId:"pre-fix",hypothesisId:"H1"})}).catch(()=>{});
+  }
+  // #endregion
 
   const proxyUrl = getProxyUrl();
   const proxyApiKey = getProxyApiKey();
@@ -428,7 +460,7 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
       }
 
       const queryParams = new URLSearchParams();
-      // 네이버 API 파라미터: from, to (YYYY-MM-DD 형식)
+      // 네이버 API 파라미터: from(required), to(optional) — date-time (ISO-8601)
       queryParams.set("from", startDate);
       queryParams.set("to", endDate);
       
