@@ -16,6 +16,19 @@ interface OrderData {
   shop_cd: string;
 }
 
+interface CustomerKeyAgg {
+  key: string;
+  name: string;
+  phone: string;
+  normalized_phone: string;
+  first_order_date: string;
+  last_order_date: string;
+  total_orders_inc: number;
+  total_amount_inc: number;
+  channels: string[];
+  orderIds: string[];
+}
+
 /**
  * 전화번호 정규화 (하이픈, 공백 제거)
  */
@@ -124,6 +137,189 @@ export async function linkOrderToCustomer(
   } catch (err) {
     console.error("[CustomerMatcher] Error linking order:", err);
   }
+}
+
+/**
+ * 주문 배열을 "고객(이름+전화번호)" 단위로 집계해 한 번에 customers 업데이트/생성하고,
+ * orders.customer_id 연결을 배치로 처리합니다.
+ *
+ * - 성능 개선 목적: 주문당 N번 쿼리 → 고객당/배치 쿼리
+ * - 주의: name/normalized_phone UNIQUE 제약이 존재해야 합니다.
+ */
+export async function matchOrCreateCustomersBulk(
+  adminClient: SupabaseClient,
+  orders: OrderData[]
+): Promise<{
+  customerIdByOrderId: Map<string, string>;
+  matchedCustomers: number;
+  createdCustomers: number;
+  skippedOrders: number;
+}> {
+  const customerIdByOrderId = new Map<string, string>();
+
+  // 1) 고객 키 집계
+  const aggByKey = new Map<string, CustomerKeyAgg>();
+  for (const order of orders) {
+    const name = order.to_name?.trim();
+    const phone = (order.to_tel || order.to_htel || "").trim();
+    const normalizedPhone = normalizePhone(phone);
+    if (!name || !normalizedPhone) continue;
+
+    const key = `${name}::${normalizedPhone}`;
+    const ordTime = order.ord_time || new Date().toISOString();
+    const sale = Number(order.sale_price || 0);
+
+    const prev = aggByKey.get(key);
+    if (!prev) {
+      aggByKey.set(key, {
+        key,
+        name,
+        phone,
+        normalized_phone: normalizedPhone,
+        first_order_date: ordTime,
+        last_order_date: ordTime,
+        total_orders_inc: 1,
+        total_amount_inc: sale,
+        channels: [order.shop_cd],
+        orderIds: [order.id],
+      });
+      continue;
+    }
+
+    prev.total_orders_inc += 1;
+    prev.total_amount_inc += sale;
+    prev.last_order_date = prev.last_order_date > ordTime ? prev.last_order_date : ordTime;
+    prev.first_order_date = prev.first_order_date < ordTime ? prev.first_order_date : ordTime;
+    if (!prev.channels.includes(order.shop_cd)) prev.channels.push(order.shop_cd);
+    prev.orderIds.push(order.id);
+  }
+
+  const aggs = Array.from(aggByKey.values());
+  const skippedOrders = orders.length - aggs.reduce((sum, a) => sum + a.orderIds.length, 0);
+  if (aggs.length === 0) {
+    return { customerIdByOrderId, matchedCustomers: 0, createdCustomers: 0, skippedOrders: orders.length };
+  }
+
+  // 2) 기존 customers 조회 (normalized_phone IN으로 좁히고, name까지 JS에서 필터)
+  const normalizedPhones = Array.from(new Set(aggs.map((a) => a.normalized_phone)));
+  const { data: existingCustomers, error: existingErr } = await adminClient
+    .from("customers")
+    .select("id,name,normalized_phone,total_orders,total_amount,channels,first_order_date,last_order_date")
+    .in("normalized_phone", normalizedPhones);
+
+  if (existingErr) {
+    console.error("[CustomerMatcher] Bulk: error fetching existing customers:", existingErr);
+    return { customerIdByOrderId, matchedCustomers: 0, createdCustomers: 0, skippedOrders: orders.length };
+  }
+
+  const existingByKey = new Map<string, any>();
+  for (const c of existingCustomers || []) {
+    const k = `${c.name}::${c.normalized_phone}`;
+    existingByKey.set(k, c);
+  }
+
+  // 3) 새 고객 insert (배치)
+  const toInsert = aggs
+    .filter((a) => !existingByKey.has(a.key))
+    .map((a) => ({
+      name: a.name,
+      phone: a.phone || "",
+      normalized_phone: a.normalized_phone,
+      first_order_date: a.first_order_date,
+      last_order_date: a.last_order_date,
+      total_orders: a.total_orders_inc,
+      total_amount: a.total_amount_inc,
+      channels: a.channels,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+
+  let createdCustomers = 0;
+  if (toInsert.length > 0) {
+    const { data: inserted, error: insertErr } = await adminClient
+      .from("customers")
+      .insert(toInsert)
+      .select("id,name,normalized_phone");
+
+    if (insertErr) {
+      // 동시성(UNIQUE) 가능성: 일부 실패하더라도 아래에서 재조회로 커버
+      console.warn("[CustomerMatcher] Bulk: insert customers failed (will retry via re-fetch):", insertErr);
+    } else {
+      createdCustomers = inserted?.length || 0;
+      for (const c of inserted || []) {
+        existingByKey.set(`${c.name}::${c.normalized_phone}`, c);
+      }
+    }
+  }
+
+  // 4) 기존 고객 업데이트는 "고객당 1회"로 배치 upsert(id conflict)
+  const toUpdate = aggs
+    .map((a) => {
+      const existing = existingByKey.get(a.key);
+      if (!existing?.id) return null;
+      const channels = Array.isArray(existing.channels) ? [...existing.channels] : [];
+      for (const ch of a.channels) if (!channels.includes(ch)) channels.push(ch);
+      return {
+        id: existing.id,
+        last_order_date: existing.last_order_date && existing.last_order_date > a.last_order_date
+          ? existing.last_order_date
+          : a.last_order_date,
+        first_order_date: existing.first_order_date && existing.first_order_date < a.first_order_date
+          ? existing.first_order_date
+          : a.first_order_date,
+        total_orders: Number(existing.total_orders || 0) + a.total_orders_inc,
+        total_amount: Number(existing.total_amount || 0) + a.total_amount_inc,
+        channels,
+        updated_at: new Date().toISOString(),
+      };
+    })
+    .filter(Boolean) as any[];
+
+  if (toUpdate.length > 0) {
+    const { error: updErr } = await adminClient.from("customers").upsert(toUpdate, { onConflict: "id" });
+    if (updErr) {
+      console.error("[CustomerMatcher] Bulk: update customers failed:", updErr);
+    }
+  }
+
+  // 5) customer id 매핑 확보를 위해 재조회(삽입 실패/동시성 케이스 커버)
+  const { data: customersAfter, error: afterErr } = await adminClient
+    .from("customers")
+    .select("id,name,normalized_phone")
+    .in("normalized_phone", normalizedPhones);
+
+  if (afterErr) {
+    console.error("[CustomerMatcher] Bulk: re-fetch customers failed:", afterErr);
+    return { customerIdByOrderId, matchedCustomers: 0, createdCustomers, skippedOrders };
+  }
+
+  const finalByKey = new Map<string, string>();
+  for (const c of customersAfter || []) {
+    finalByKey.set(`${c.name}::${c.normalized_phone}`, c.id);
+  }
+
+  // 6) orders.customer_id 연결(배치 upsert on id)
+  const linkRows: { id: string; customer_id: string; updated_at: string }[] = [];
+  for (const a of aggs) {
+    const customerId = finalByKey.get(a.key);
+    if (!customerId) continue;
+    for (const orderId of a.orderIds) {
+      customerIdByOrderId.set(orderId, customerId);
+      linkRows.push({ id: orderId, customer_id: customerId, updated_at: new Date().toISOString() });
+    }
+  }
+
+  if (linkRows.length > 0) {
+    const { error: linkErr } = await adminClient.from("orders").upsert(linkRows, { onConflict: "id" });
+    if (linkErr) console.error("[CustomerMatcher] Bulk: link orders failed:", linkErr);
+  }
+
+  return {
+    customerIdByOrderId,
+    matchedCustomers: finalByKey.size,
+    createdCustomers,
+    skippedOrders,
+  };
 }
 
 /**

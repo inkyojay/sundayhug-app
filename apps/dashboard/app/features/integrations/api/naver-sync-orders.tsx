@@ -58,8 +58,8 @@ export async function action({ request }: Route.ActionArgs) {
     const { createAdminClient } = await import("~/core/lib/supa-admin.server");
     const adminClient = createAdminClient();
 
-    // 고객 매칭 유틸리티 import
-    const { matchOrCreateCustomer, linkOrderToCustomer } = await import(
+    // 고객 매칭 유틸리티 import (배치 처리)
+    const { matchOrCreateCustomersBulk } = await import(
       "~/features/customer-analytics/lib/customer-matcher.server"
     );
 
@@ -68,74 +68,68 @@ export async function action({ request }: Route.ActionArgs) {
     let customerMatchedCount = 0;
     const upsertT0 = Date.now();
 
-    for (const order of orders) {
-      try {
-        // orders 테이블에 upsert
-        const { data: upsertedOrder, error: upsertError } = await adminClient
-          .from("orders")
-          .upsert({
-            // 네이버 주문 고유번호를 uniq로 사용
-            uniq: `NAVER-${order.productOrderId}`,
-            ori_uniq: order.orderId,
-            shop_cd: "naver",
-            shop_name: "네이버스마트스토어",
-            shop_ord_no: order.orderId,
-            shop_ord_no_real: order.productOrderId,
-            ord_status: mapNaverOrderStatus(order.productOrderStatus),
-            ord_time: order.orderDate ? new Date(order.orderDate) : null,
-            pay_time: order.paymentDate ? new Date(order.paymentDate) : null,
-            order_name: order.ordererName,
-            order_tel: order.ordererTel,
-            to_name: order.receiverName,
-            to_tel: order.receiverTel,
-            to_addr1: order.receiverAddress,
-            ship_msg: order.deliveryMemo,
-            invoice_no: order.trackingNumber,
-            carr_name: order.deliveryCompanyCode,
-            shop_sale_name: order.productName,
-            shop_opt_name: order.productOption,
-            sale_cnt: order.quantity,
-            pay_amt: order.totalPaymentAmount,
-            ship_cost: order.deliveryFee,
-            sol_no: 0, // 네이버는 PlayAuto와 무관
-            synced_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }, { onConflict: "uniq" })
-          .select("id, to_name, to_tel, pay_amt, ord_time, shop_cd")
-          .single();
+    // 2-1) 주문 배치 upsert
+    const nowIso = new Date().toISOString();
+    const rows = orders.map((order) => ({
+      uniq: `NAVER-${order.productOrderId}`,
+      ori_uniq: order.orderId,
+      shop_cd: "naver",
+      shop_name: "네이버스마트스토어",
+      shop_ord_no: order.orderId,
+      shop_ord_no_real: order.productOrderId,
+      ord_status: mapNaverOrderStatus(order.productOrderStatus),
+      ord_time: order.orderDate ? new Date(order.orderDate) : null,
+      pay_time: order.paymentDate ? new Date(order.paymentDate) : null,
+      order_name: order.ordererName,
+      order_tel: order.ordererTel,
+      to_name: order.receiverName,
+      to_tel: order.receiverTel,
+      to_addr1: order.receiverAddress,
+      ship_msg: order.deliveryMemo,
+      invoice_no: order.trackingNumber,
+      carr_name: order.deliveryCompanyCode,
+      shop_sale_name: order.productName,
+      shop_opt_name: order.productOption,
+      sale_cnt: order.quantity,
+      pay_amt: order.totalPaymentAmount,
+      ship_cost: order.deliveryFee,
+      sol_no: 0,
+      synced_at: nowIso,
+      updated_at: nowIso,
+    }));
 
-        if (upsertError) {
-          console.error(`❌ 주문 저장 실패 (${order.productOrderId}):`, upsertError);
-          failedCount++;
-        } else {
-          syncedCount++;
+    const upsertBatchT0 = Date.now();
+    const { data: upsertedOrders, error: upsertBatchError } = await adminClient
+      .from("orders")
+      .upsert(rows, { onConflict: "uniq" })
+      .select("id, uniq, to_name, to_tel, pay_amt, ord_time, shop_cd");
+    const upsertBatchMs = Date.now() - upsertBatchT0;
 
-          // 고객 매칭 처리
-          if (upsertedOrder) {
-            try {
-              const customerId = await matchOrCreateCustomer(adminClient, {
-                id: upsertedOrder.id,
-                to_name: upsertedOrder.to_name,
-                to_tel: upsertedOrder.to_tel,
-                sale_price: upsertedOrder.pay_amt,
-                ord_time: upsertedOrder.ord_time,
-                shop_cd: upsertedOrder.shop_cd,
-              });
-
-              if (customerId) {
-                await linkOrderToCustomer(adminClient, upsertedOrder.id, customerId);
-                customerMatchedCount++;
-              }
-            } catch (matchErr) {
-              console.warn("고객 매칭 실패:", matchErr);
-            }
-          }
-        }
-      } catch (err) {
-        console.error(`❌ 주문 처리 중 오류 (${order.productOrderId}):`, err);
-        failedCount++;
-      }
+    if (upsertBatchError) {
+      console.error("❌ 주문 배치 저장 실패:", upsertBatchError);
+      return data({ success: false, error: "주문 저장 실패" }, { status: 500 });
     }
+
+    syncedCount = upsertedOrders?.length || 0;
+    failedCount = Math.max(0, orders.length - syncedCount);
+    console.log(`🧱 [PERF] orders upsert(batch): ${syncedCount}/${orders.length} rows (${upsertBatchMs}ms)`);
+
+    // 2-2) 고객 매칭/연결 배치 처리 (고객당 1회 집계 업데이트 + orders.customer_id 배치)
+    const customerT0 = Date.now();
+    const matchingInput = (upsertedOrders || []).map((o) => ({
+      id: o.id,
+      to_name: o.to_name,
+      to_tel: o.to_tel,
+      sale_price: o.pay_amt,
+      ord_time: o.ord_time,
+      shop_cd: o.shop_cd,
+    }));
+    const bulkRes = await matchOrCreateCustomersBulk(adminClient, matchingInput);
+    const customerMs = Date.now() - customerT0;
+    customerMatchedCount = matchingInput.length - bulkRes.skippedOrders;
+    console.log(
+      `🧱 [PERF] customer match/link(batch): orders=${matchingInput.length}, matchedCustomers=${bulkRes.matchedCustomers}, createdCustomers=${bulkRes.createdCustomers} (${customerMs}ms)`
+    );
     const upsertMs = Date.now() - upsertT0;
 
     const duration = Date.now() - syncStartTime;
