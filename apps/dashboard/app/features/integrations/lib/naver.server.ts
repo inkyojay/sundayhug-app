@@ -377,7 +377,8 @@ export interface GetOrdersParams {
 
 /**
  * 주문 목록 조회
- * 여러 API 시도: last-changed-statuses, ready, search
+ * GET /v1/pay-order/seller/product-orders/last-changed-statuses
+ * 참고: https://apicenter.commerce.naver.com/docs/commerce-api/current/%EC%A3%BC%EB%AC%B8-%EC%A1%B0%ED%9A%8C
  */
 export async function getOrders(params: GetOrdersParams = {}): Promise<{
   success: boolean;
@@ -396,69 +397,28 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
   console.log(`🔍 [DEBUG] 네이버 주문 조회 시작`);
   console.log(`📅 [DEBUG] 날짜: ${startDate} ~ ${endDate}`);
 
-  // 시도 1: 발주확인 전 주문 목록 (GET)
-  console.log(`🌐 [H3] 시도 1: GET /external/v1/pay-order/seller/product-orders/ready`);
-  let result = await naverFetch<{ data: { contents: NaverOrder[] } }>(
-    `/external/v1/pay-order/seller/product-orders/ready`,
+  // 변경 상품 주문 내역 조회 (GET) - /external 접두사 제거!
+  // 문서: https://apicenter.commerce.naver.com/docs/commerce-api/2.65.0/seller-get-last-changed-status-pay-order-seller
+  const queryParams = new URLSearchParams();
+  queryParams.set("lastChangedFrom", startDate);
+  queryParams.set("lastChangedTo", endDate);
+
+  const endpoint = `/v1/pay-order/seller/product-orders/last-changed-statuses?${queryParams.toString()}`;
+  console.log(`🌐 [FIX] API 엔드포인트: GET ${endpoint}`);
+
+  const result = await naverFetch<{ data: { lastChangeStatuses: any[] } }>(
+    endpoint,
     { method: "GET" }
   );
-  
-  if (result.success) {
-    const orders = result.data?.data?.contents || [];
-    console.log(`✅ [H3] 시도 1 성공! 주문 수: ${orders.length}`);
-    return { success: true, orders, count: orders.length };
-  }
-  console.log(`❌ [H3] 시도 1 실패: ${result.error}`);
 
-  // 시도 2: 발송대기 주문 목록 (GET)
-  console.log(`🌐 [H4] 시도 2: GET /external/v1/pay-order/seller/product-orders/ready-to-ship`);
-  result = await naverFetch<{ data: { contents: NaverOrder[] } }>(
-    `/external/v1/pay-order/seller/product-orders/ready-to-ship`,
-    { method: "GET" }
-  );
-  
   if (result.success) {
-    const orders = result.data?.data?.contents || [];
-    console.log(`✅ [H4] 시도 2 성공! 주문 수: ${orders.length}`);
-    return { success: true, orders, count: orders.length };
-  }
-  console.log(`❌ [H4] 시도 2 실패: ${result.error}`);
-
-  // 시도 3: 변경된 주문 목록 (POST with body)
-  console.log(`🌐 [H5] 시도 3: POST /external/v1/pay-order/seller/product-orders/last-changed-statuses`);
-  const postResult = await naverFetch<{ data: { lastChangeStatuses: any[] } }>(
-    `/external/v1/pay-order/seller/product-orders/last-changed-statuses`,
-    {
-      method: "POST",
-      body: {
-        lastChangedFrom: startDate,
-        lastChangedTo: endDate,
-      },
-    }
-  );
-  
-  if (postResult.success) {
-    const orders = postResult.data?.data?.lastChangeStatuses || [];
-    console.log(`✅ [H5] 시도 3 성공! 주문 수: ${orders.length}`);
+    const orders = result.data?.data?.lastChangeStatuses || [];
+    console.log(`✅ [FIX] 성공! 주문 수: ${orders.length}`);
     return { success: true, orders: orders as NaverOrder[], count: orders.length };
   }
-  console.log(`❌ [H5] 시도 3 실패: ${postResult.error}`);
 
-  // 시도 4: 주문 목록 전체 조회 시도
-  console.log(`🌐 [H6] 시도 4: GET /external/v2/pay-order/seller/orders`);
-  result = await naverFetch<{ data: { contents: NaverOrder[] } }>(
-    `/external/v2/pay-order/seller/orders`,
-    { method: "GET" }
-  );
-  
-  if (result.success) {
-    const orders = result.data?.data?.contents || [];
-    console.log(`✅ [H6] 시도 4 성공! 주문 수: ${orders.length}`);
-    return { success: true, orders, count: orders.length };
-  }
-  console.log(`❌ [H6] 시도 4 실패: ${result.error}`);
-
-  return { success: false, error: "모든 API 엔드포인트 시도 실패. 네이버 API 설정을 확인해주세요." };
+  console.log(`❌ [FIX] 실패: ${result.error}`);
+  return { success: false, error: result.error };
 }
 
 /**
