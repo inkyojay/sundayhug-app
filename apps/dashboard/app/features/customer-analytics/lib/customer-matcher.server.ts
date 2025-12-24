@@ -204,7 +204,7 @@ export async function matchOrCreateCustomersBulk(
   const normalizedPhones = Array.from(new Set(aggs.map((a) => a.normalized_phone)));
   const { data: existingCustomers, error: existingErr } = await adminClient
     .from("customers")
-    .select("id,name,normalized_phone,total_orders,total_amount,channels,first_order_date,last_order_date")
+    .select("id,name,phone,normalized_phone,total_orders,total_amount,channels,first_order_date,last_order_date")
     .in("normalized_phone", normalizedPhones);
 
   if (existingErr) {
@@ -261,6 +261,10 @@ export async function matchOrCreateCustomersBulk(
       for (const ch of a.channels) if (!channels.includes(ch)) channels.push(ch);
       return {
         id: existing.id,
+        // NOT NULL 컬럼 보호: insert로 떨어지더라도 제약 위반 방지
+        name: existing.name || a.name,
+        phone: (existing.phone ?? a.phone ?? "").toString(),
+        normalized_phone: existing.normalized_phone || a.normalized_phone,
         last_order_date: existing.last_order_date && existing.last_order_date > a.last_order_date
           ? existing.last_order_date
           : a.last_order_date,
@@ -276,6 +280,7 @@ export async function matchOrCreateCustomersBulk(
     .filter(Boolean) as any[];
 
   if (toUpdate.length > 0) {
+    // upsert가 insert로 떨어져도 NOT NULL 필드를 포함하므로 안전
     const { error: updErr } = await adminClient.from("customers").upsert(toUpdate, { onConflict: "id" });
     if (updErr) {
       console.error("[CustomerMatcher] Bulk: update customers failed:", updErr);
@@ -299,18 +304,27 @@ export async function matchOrCreateCustomersBulk(
   }
 
   // 6) orders.customer_id 연결(배치 upsert on id)
-  const linkRows: { id: string; customer_id: string; updated_at: string }[] = [];
+  const orderIdsByCustomerId = new Map<string, string[]>();
   for (const a of aggs) {
     const customerId = finalByKey.get(a.key);
     if (!customerId) continue;
     for (const orderId of a.orderIds) {
       customerIdByOrderId.set(orderId, customerId);
-      linkRows.push({ id: orderId, customer_id: customerId, updated_at: new Date().toISOString() });
+      const prev = orderIdsByCustomerId.get(customerId) || [];
+      prev.push(orderId);
+      orderIdsByCustomerId.set(customerId, prev);
     }
   }
 
-  if (linkRows.length > 0) {
-    const { error: linkErr } = await adminClient.from("orders").upsert(linkRows, { onConflict: "id" });
+  // ⚠️ orders는 NOT NULL 컬럼이 많아서 upsert가 insert로 떨어지면 제약 위반 위험.
+  // 안전하게 "update ... in(id)" 로만 처리 (insert 불가).
+  const linkNow = new Date().toISOString();
+  for (const [customerId, orderIds] of orderIdsByCustomerId.entries()) {
+    if (orderIds.length === 0) continue;
+    const { error: linkErr } = await adminClient
+      .from("orders")
+      .update({ customer_id: customerId, updated_at: linkNow })
+      .in("id", orderIds);
     if (linkErr) console.error("[CustomerMatcher] Bulk: link orders failed:", linkErr);
   }
 
