@@ -163,8 +163,8 @@ app.get("/api/orders", verifyApiKey, async (req, res) => {
     
     // 쿼리 파라미터 전달
     const queryString = new URLSearchParams(req.query).toString();
-    // 올바른 엔드포인트: /v1/pay-order/seller/product-orders (external 없음, product-orders)
-    const url = `https://api.commerce.naver.com/v1/pay-order/seller/product-orders?${queryString}`;
+    // 올바른 엔드포인트: /external/v1/pay-order/seller/product-orders
+    const url = `https://api.commerce.naver.com/external/v1/pay-order/seller/product-orders?${queryString}`;
     
     console.log(`[주문 조회] URL: ${url}`);
     
