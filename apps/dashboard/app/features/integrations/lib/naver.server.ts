@@ -447,6 +447,68 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
 
   console.log(`🔑 [DEBUG] 토큰 유효: ${token.access_token.slice(0, 20)}...`);
 
+  const extractItems = (resp: any): any[] => {
+    if (Array.isArray(resp?.data?.contents)) return resp.data.contents;
+    if (Array.isArray(resp?.contents)) return resp.contents;
+    if (Array.isArray(resp?.data)) return resp.data;
+    if (Array.isArray(resp?.data?.data?.contents)) return resp.data.data.contents;
+    return [];
+  };
+
+  const mapItemToNaverOrder = (item: any): NaverOrder => {
+    // 문서 응답 구조(조건형 상품 주문 상세 내역): { productOrderId, content: { order, productOrder, delivery? } }
+    const content = item?.content ?? item;
+    const order = content?.order ?? item?.order ?? {};
+    const productOrder = content?.productOrder ?? item?.productOrder ?? item ?? {};
+    const delivery = content?.delivery ?? productOrder?.delivery ?? {};
+    const shippingAddress = productOrder?.shippingAddress ?? {};
+
+    const baseAddress = shippingAddress?.baseAddress ?? "";
+    const detailedAddress = shippingAddress?.detailedAddress ?? "";
+    const receiverAddress = [baseAddress, detailedAddress].filter(Boolean).join(" ");
+
+    return {
+      productOrderId: item?.productOrderId ?? productOrder?.productOrderId ?? "",
+      orderId: order?.orderId ?? item?.orderId ?? productOrder?.orderId ?? "",
+      orderDate: order?.orderDate ?? item?.orderDate ?? productOrder?.placeOrderDate ?? "",
+      paymentDate: order?.paymentDate ?? item?.paymentDate ?? "",
+      orderStatus: order?.orderStatus ?? item?.orderStatus ?? "",
+      productOrderStatus: productOrder?.productOrderStatus ?? item?.productOrderStatus ?? "",
+      productId: String(productOrder?.productId ?? item?.productId ?? ""),
+      productName: productOrder?.productName ?? item?.productName ?? "",
+      productOption: productOrder?.productOption ?? item?.productOption ?? "",
+      quantity: Number(productOrder?.quantity ?? item?.quantity ?? 0),
+      unitPrice: Number(productOrder?.unitPrice ?? item?.unitPrice ?? 0),
+      totalProductAmount: Number(productOrder?.totalProductAmount ?? item?.totalProductAmount ?? 0),
+      deliveryFee: Number(productOrder?.deliveryFeeAmount ?? item?.deliveryFee ?? 0),
+      totalPaymentAmount: Number(productOrder?.totalPaymentAmount ?? item?.totalPaymentAmount ?? 0),
+      ordererName: order?.ordererName ?? item?.ordererName ?? "",
+      ordererTel: order?.ordererTel ?? item?.ordererTel ?? "",
+      receiverName: shippingAddress?.name ?? item?.receiverName ?? "",
+      receiverTel: shippingAddress?.tel1 ?? item?.receiverTel ?? "",
+      receiverAddress,
+      deliveryMemo: productOrder?.shippingMemo ?? item?.deliveryMemo ?? "",
+      trackingNumber: delivery?.trackingNumber ?? item?.trackingNumber ?? "",
+      deliveryCompanyCode: delivery?.deliveryCompany ?? item?.deliveryCompanyCode ?? "",
+    };
+  };
+
+  const parseIso = (s: string): Date | null => {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+
+  // 네이버 제약: from/to 최대 24시간 차이
+  const fromDate = parseIso(startDate);
+  const toDate = parseIso(endDate);
+  if (!fromDate || !toDate) {
+    console.error("❌ [DEBUG v4] from/to 파싱 실패", { startDate, endDate });
+    return { success: false, error: "from/to 날짜 파싱 실패" };
+  }
+
+  const MAX_WINDOW_MS = 24 * 60 * 60 * 1000;
+  const allOrders: NaverOrder[] = [];
+
   // 프록시 서버가 있으면 /api/orders 사용 (이미 검증된 엔드포인트)
   if (proxyUrl) {
     try {
@@ -459,38 +521,65 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
         headers["X-Proxy-Api-Key"] = proxyApiKey;
       }
 
-      const queryParams = new URLSearchParams();
-      // 네이버 API 파라미터: from(required), to(optional) — date-time (ISO-8601)
-      queryParams.set("from", startDate);
-      queryParams.set("to", endDate);
-      
-      const ordersUrl = `${proxyUrl}/api/orders?${queryParams.toString()}`;
-      console.log(`🌐 [DEBUG] 프록시 /api/orders 호출: ${ordersUrl}`);
-      
-      const response = await fetch(ordersUrl, {
-        method: "GET",
-        headers,
-      });
+      let cursor = fromDate.getTime();
+      const endMs = toDate.getTime();
+      let windowIndex = 0;
 
-      const responseText = await response.text();
-      console.log(`📥 [DEBUG] 응답 (${response.status}): ${responseText.slice(0, 500)}`);
+      while (cursor <= endMs) {
+        const windowFrom = new Date(cursor);
+        const windowTo = new Date(Math.min(cursor + MAX_WINDOW_MS - 1, endMs));
+        const windowFromStr = toKSTString(windowFrom);
+        const windowToStr = toKSTString(windowTo);
 
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        console.error(`❌ [DEBUG] JSON 파싱 실패: ${responseText.slice(0, 200)}`);
-        return { success: false, error: "API 응답 파싱 실패" };
+        const queryParams = new URLSearchParams();
+        queryParams.set("from", windowFromStr);
+        queryParams.set("to", windowToStr);
+
+        const ordersUrl = `${proxyUrl}/api/orders?${queryParams.toString()}`;
+        console.log(`🌐 [DEBUG v4] 윈도우 ${windowIndex}: ${windowFromStr} ~ ${windowToStr}`);
+        console.log(`🌐 [DEBUG v4] 프록시 /api/orders 호출: ${ordersUrl}`);
+
+        const response = await fetch(ordersUrl, { method: "GET", headers });
+        const responseText = await response.text();
+        console.log(`📥 [DEBUG v4] 응답 (${response.status}) head: ${responseText.slice(0, 300)}`);
+
+        let data: any;
+        try {
+          data = JSON.parse(responseText);
+        } catch {
+          console.error(`❌ [DEBUG v4] JSON 파싱 실패 head: ${responseText.slice(0, 300)}`);
+          return { success: false, error: "API 응답 파싱 실패" };
+        }
+
+        if (!response.ok) {
+          console.error(`❌ [DEBUG v4] API 에러: ${response.status}`, data);
+          return { success: false, error: data.message || `API 호출 실패 (${response.status})` };
+        }
+
+        const items = extractItems(data);
+        console.log(
+          `✅ [DEBUG v4] 윈도우 ${windowIndex} 아이템 수: ${items.length} (keys: ${Object.keys(data || {}).join(",")})`
+        );
+
+        if (items.length > 0) {
+          // 첫 1개만 형태 확인 로그(PII/토큰 제외)
+          const sample = items[0];
+          console.log(
+            `🧩 [DEBUG v4] sample keys: ${Object.keys(sample || {}).slice(0, 30).join(",")}`
+          );
+        }
+
+        for (const it of items) {
+          allOrders.push(mapItemToNaverOrder(it));
+        }
+
+        // 다음 24시간 윈도우
+        cursor += MAX_WINDOW_MS;
+        windowIndex++;
       }
 
-      if (!response.ok) {
-        console.error(`❌ [DEBUG] API 에러: ${response.status}`, data);
-        return { success: false, error: data.message || `API 호출 실패 (${response.status})` };
-      }
-
-      const orders = data.data || [];
-      console.log(`✅ [DEBUG] 성공! 주문 수: ${orders.length}`);
-      return { success: true, orders: orders as NaverOrder[], count: orders.length };
+      console.log(`✅ [DEBUG v4] 전체 주문 수(윈도우 합산): ${allOrders.length}`);
+      return { success: true, orders: allOrders, count: allOrders.length };
       
     } catch (error) {
       console.error(`❌ [DEBUG] 요청 에러:`, error);
