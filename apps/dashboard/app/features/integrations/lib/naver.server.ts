@@ -386,6 +386,7 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
   count?: number;
   error?: string;
 }> {
+  const perfStart = Date.now();
   // 기본값: 최근 7일 (ISO-8601 +09:00 예시: 2024-06-07T19:00:00.000+09:00)
   // 문서: https://apicenter.commerce.naver.com/docs/commerce-api/current/seller-get-product-orders-with-conditions-pay-order-seller
   const toKSTString = (date: Date): string => {
@@ -524,8 +525,14 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
       let cursor = fromDate.getTime();
       const endMs = toDate.getTime();
       let windowIndex = 0;
+      const windowTimesMs: number[] = [];
+      const windowItemCounts: number[] = [];
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({location:"naver.server.ts:getOrders",message:"windowed fetch start",data:{windowHours:24,from:startDate,to:endDate},timestamp:Date.now(),sessionId:"debug-session",runId:"pre-fix",hypothesisId:"H1"})}).catch(()=>{});
+      // #endregion
 
       while (cursor <= endMs) {
+        const windowT0 = Date.now();
         const windowFrom = new Date(cursor);
         const windowTo = new Date(Math.min(cursor + MAX_WINDOW_MS - 1, endMs));
         const windowFromStr = toKSTString(windowFrom);
@@ -560,6 +567,8 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
         console.log(
           `✅ [DEBUG v4] 윈도우 ${windowIndex} 아이템 수: ${items.length} (keys: ${Object.keys(data || {}).join(",")})`
         );
+        windowTimesMs.push(Date.now() - windowT0);
+        windowItemCounts.push(items.length);
 
         if (items.length > 0) {
           // 첫 1개만 형태 확인 로그(PII/토큰 제외)
@@ -578,7 +587,15 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
         windowIndex++;
       }
 
-      console.log(`✅ [DEBUG v4] 전체 주문 수(윈도우 합산): ${allOrders.length}`);
+      const perfMs = Date.now() - perfStart;
+      const maxWinMs = windowTimesMs.length ? Math.max(...windowTimesMs) : 0;
+      const avgWinMs = windowTimesMs.length
+        ? Math.round(windowTimesMs.reduce((a, b) => a + b, 0) / windowTimesMs.length)
+        : 0;
+      console.log(`✅ [DEBUG v4] 전체 주문 수(윈도우 합산): ${allOrders.length} (총 ${perfMs}ms)`);
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({location:"naver.server.ts:getOrders",message:"windowed fetch done",data:{windows:windowTimesMs.length,totalOrders:allOrders.length,perfMs,maxWinMs,avgWinMs,itemsPerWindow:windowItemCounts.slice(0,10)},timestamp:Date.now(),sessionId:"debug-session",runId:"pre-fix",hypothesisId:"H1"})}).catch(()=>{});
+      // #endregion
       return { success: true, orders: allOrders, count: allOrders.length };
       
     } catch (error) {

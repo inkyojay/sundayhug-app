@@ -24,10 +24,15 @@ export async function action({ request }: Route.ActionArgs) {
     const { getOrders } = await import("../lib/naver.server");
     
     // 1. 주문 목록 조회
+    const fetchT0 = Date.now();
     const ordersResult = await getOrders({
       orderDateFrom: startDate || undefined,
       orderDateTo: endDate || undefined,
     });
+    const fetchMs = Date.now() - fetchT0;
+    // #region agent log
+    fetch("http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({location:"naver-sync-orders.tsx:action",message:"orders fetched",data:{inputStartDate:startDate||null,inputEndDate:endDate||null,success:ordersResult.success,count:ordersResult.count||0,fetchMs},timestamp:Date.now(),sessionId:"debug-session",runId:"pre-fix",hypothesisId:"H2"})}).catch(()=>{});
+    // #endregion
 
     if (!ordersResult.success) {
       console.error("❌ 주문 조회 실패:", ordersResult.error);
@@ -61,6 +66,7 @@ export async function action({ request }: Route.ActionArgs) {
     let syncedCount = 0;
     let failedCount = 0;
     let customerMatchedCount = 0;
+    const upsertT0 = Date.now();
 
     for (const order of orders) {
       try {
@@ -130,9 +136,13 @@ export async function action({ request }: Route.ActionArgs) {
         failedCount++;
       }
     }
+    const upsertMs = Date.now() - upsertT0;
 
     const duration = Date.now() - syncStartTime;
     console.log(`✅ 네이버 주문 동기화 완료: ${syncedCount}건 성공, ${failedCount}건 실패, ${customerMatchedCount}건 고객 매칭 (${duration}ms)`);
+    // #region agent log
+    fetch("http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({location:"naver-sync-orders.tsx:action",message:"sync done",data:{syncedCount,failedCount,customerMatchedCount,durationMs:duration,upsertMs},timestamp:Date.now(),sessionId:"debug-session",runId:"pre-fix",hypothesisId:"H2"})}).catch(()=>{});
+    // #endregion
 
     // 3. 동기화 로그 저장
     await adminClient.from("order_sync_logs").insert({
