@@ -287,6 +287,9 @@ async function naverFetch<T>(
     return { success: false, error: "유효한 네이버 토큰이 없습니다. 연동을 다시 해주세요." };
   }
 
+  console.log(`🔑 [H2] 토큰 유효: ${token.access_token.slice(0, 20)}...`);
+  console.log(`🔗 [H2] 프록시 URL: ${proxyUrl || '없음 (직접 호출)'}`);
+
   try {
     let response: Response;
     
@@ -301,22 +304,29 @@ async function naverFetch<T>(
         headers["X-Proxy-Api-Key"] = proxyApiKey;
       }
       
+      const proxyBody = {
+        method,
+        path: endpoint,
+        headers: {
+          "Authorization": `${token.token_type} ${token.access_token}`,
+        },
+        body,
+      };
+      
+      console.log(`📤 [H2] 프록시 요청: POST ${proxyUrl}/api/proxy`);
+      console.log(`📤 [H2] 프록시 body: ${JSON.stringify(proxyBody)}`);
+      
       // 범용 프록시 API 사용
       response = await fetch(`${proxyUrl}/api/proxy`, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          method,
-          path: endpoint,
-          headers: {
-            "Authorization": `${token.token_type} ${token.access_token}`,
-          },
-          body,
-        }),
+        body: JSON.stringify(proxyBody),
       });
     } else {
       // 직접 호출
       const apiUrl = `${NAVER_API_BASE}${endpoint}`;
+      
+      console.log(`📤 [H2] 직접 호출: ${method} ${apiUrl}`);
       
       response = await fetch(apiUrl, {
         method,
@@ -328,7 +338,16 @@ async function naverFetch<T>(
       });
     }
 
-    const responseData = await response.json();
+    const responseText = await response.text();
+    console.log(`📥 [H2] 응답 (${response.status}): ${responseText.slice(0, 500)}`);
+
+    let responseData;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch {
+      console.error("❌ JSON 파싱 실패:", responseText);
+      return { success: false, error: "API 응답 파싱 실패" };
+    }
 
     if (!response.ok) {
       console.error("❌ 네이버 API 에러:", response.status, responseData);
@@ -358,7 +377,7 @@ export interface GetOrdersParams {
 
 /**
  * 주문 목록 조회
- * POST /external/v1/pay-order/seller/product-orders/last-changed-statuses
+ * GET /external/v1/pay-order/seller/product-orders/search
  */
 export async function getOrders(params: GetOrdersParams = {}): Promise<{
   success: boolean;
@@ -374,26 +393,37 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
     return d.toISOString();
   })();
 
-  const result = await naverFetch<{ data: { lastChangeStatuses: NaverOrder[] } }>(
-    "/external/v1/pay-order/seller/product-orders/last-changed-statuses",
+  console.log(`🔍 [H1] 네이버 주문 조회 시작 - 날짜: ${startDate} ~ ${endDate}`);
+
+  // 네이버 커머스 API - 상품주문 목록 조회 (검색)
+  // 참고: https://apicenter.commerce.naver.com/ko/basic/commerce-api
+  const queryParams = new URLSearchParams();
+  queryParams.set("lastChangedFrom", startDate);
+  queryParams.set("lastChangedTo", endDate);
+
+  const endpoint = `/external/v1/pay-order/seller/product-orders/search?${queryParams.toString()}`;
+  console.log(`🌐 [H1] API 엔드포인트: GET ${endpoint}`);
+
+  const result = await naverFetch<{ data: { contents: NaverOrder[] } }>(
+    endpoint,
     {
-      method: "POST",
-      body: {
-        lastChangedFrom: startDate,
-        lastChangedTo: endDate,
-        lastChangeType: "PAYED", // 결제 완료된 주문
-      },
+      method: "GET",
     }
   );
+
+  console.log(`📥 [H1] API 응답: success=${result.success}, error=${result.error}, hasData=${!!result.data}`);
 
   if (!result.success) {
     return { success: false, error: result.error };
   }
 
+  const orders = result.data?.data?.contents || [];
+  console.log(`✅ [H1] 조회된 주문 수: ${orders.length}`);
+
   return {
     success: true,
-    orders: result.data?.data?.lastChangeStatuses || [],
-    count: result.data?.data?.lastChangeStatuses?.length || 0,
+    orders,
+    count: orders.length,
   };
 }
 
