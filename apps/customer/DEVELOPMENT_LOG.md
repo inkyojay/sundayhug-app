@@ -1,5 +1,39 @@
 # 썬데이허그 고객 앱 (Customer App) 개발 일지
 
+## 2025-12-29 (일) - 후기 이벤트 참여 폼 설정 연동
+
+### 요약
+- **기능**: 관리자가 설정한 참여 폼 옵션을 고객 페이지에 반영
+- **개선**: 이벤트별로 다른 참여 폼 표시
+
+### 작업 내용
+
+1. **보증서 연동 섹션 조건부 표시**
+   - `selectedEvent?.show_warranty_link !== false` 조건 추가
+   - 관리자가 비활성화하면 고객 페이지에서 보증서 연동 섹션 숨김
+   - useEffect에서 보증서 모드 결정 시에도 설정 확인
+
+2. **유입 경로 질문 조건부 표시**
+   - `selectedEvent?.show_referral_source !== false` 조건 추가
+   - 관리자가 비활성화하면 유입 경로 질문 숨김
+
+3. **유입 경로 보기 항목 동적 표시**
+   - 이벤트의 `referral_source_options` 배열 사용
+   - 설정된 옵션이 없으면 기본값 사용
+
+### 파일 변경
+```
+apps/customer/app/features/customer/screens/
+└── event-review.tsx   # 조건부 표시 로직 추가
+```
+
+### 관련 DB 컬럼 (review_events)
+- `show_referral_source` - 유입 경로 질문 표시 여부
+- `show_warranty_link` - 보증서 연동 섹션 표시 여부
+- `referral_source_options` - 유입 경로 보기 항목 (JSONB)
+
+---
+
 ## 2025-12-22 (일) - Placid 카드뉴스 연동
 
 ### 작업 내용

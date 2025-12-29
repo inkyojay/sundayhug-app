@@ -9,6 +9,41 @@
 
 ---
 
+## 2025-12-29 (일) - 후기 이벤트 참여 폼 설정 기능
+
+### 요약
+- **기능**: 이벤트별 참여 폼 설정 (유입 경로 질문, 보증서 연동 표시 여부)
+- **개선**: 관리자가 이벤트마다 다른 폼 항목을 설정 가능
+
+### 작업 내용
+
+1. **DB 마이그레이션**
+   - `review_events` 테이블에 3개 컬럼 추가:
+     - `show_referral_source` (BOOLEAN) - 유입 경로 질문 표시 여부
+     - `show_warranty_link` (BOOLEAN) - 보증서 연동 섹션 표시 여부
+     - `referral_source_options` (JSONB) - 유입 경로 보기 항목 배열
+
+2. **관리자 이벤트 폼 개선 (event-form.tsx)**
+   - "참여 폼 설정" 섹션 추가
+   - 유입 경로 질문 ON/OFF 체크박스
+   - 유입 경로 보기 항목 관리 (추가/삭제/순서 변경)
+   - 보증서 연동 섹션 ON/OFF 체크박스
+
+3. **파일 변경**
+   ```
+   apps/dashboard/app/features/review/screens/admin/
+   ├── event-form.tsx       # 참여 폼 설정 UI 추가
+   ├── event-list.tsx       # 참여자 관리 링크 항상 표시
+   └── event-submissions.tsx # profiles 조인 제거 (FK 없음 문제 해결)
+   ```
+
+### 기본 유입 경로 옵션
+```json
+["네이버 검색", "인스타그램 광고", "맘카페 내 추천", "주변 지인 추천", "기타"]
+```
+
+---
+
 ## 2025-12-29 (일) - 네이버 스마트스토어 제품 동기화 완성
 
 ### 요약

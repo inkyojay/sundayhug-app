@@ -342,6 +342,13 @@ export default function EventReviewScreen() {
   // 제품 선택 시 보증서 모드 결정
   useEffect(() => {
     if (selectedProductId) {
+      // 보증서 연동이 비활성화된 경우 warrantyMode를 null로 유지
+      if (selectedEvent?.show_warranty_link === false) {
+        setWarrantyMode(null);
+        setSelectedWarrantyId(null);
+        return;
+      }
+      
       // ABC 침대 관련 보증서가 있는지 확인
       const hasWarranty = localWarranties.some((w: any) => 
         w.product_name?.includes("ABC") || w.product_name?.includes("아기침대")
@@ -356,7 +363,7 @@ export default function EventReviewScreen() {
       setWarrantyMode(null);
       setSelectedWarrantyId(null);
     }
-  }, [selectedProductId, localWarranties]);
+  }, [selectedProductId, localWarranties, selectedEvent?.show_warranty_link]);
 
   // 보증서 사진 선택
   const handleWarrantyPhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1036,8 +1043,8 @@ export default function EventReviewScreen() {
                     </div>
                   )}
 
-                  {/* 보증서 연동 섹션 */}
-                  {selectedProductId && warrantyMode && (
+                  {/* 보증서 연동 섹션 - show_warranty_link가 false가 아닌 경우에만 표시 */}
+                  {selectedProductId && warrantyMode && selectedEvent?.show_warranty_link !== false && (
                     <div className="bg-white rounded-2xl p-5 border border-gray-100">
                       <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                         <CheckCircle className="w-5 h-5 text-emerald-500" />
@@ -1309,38 +1316,41 @@ export default function EventReviewScreen() {
                     />
                   </div>
 
-                  {/* 유입경로 */}
-                  <div className="bg-white rounded-2xl p-5 border border-gray-100">
-                    <Label className="text-gray-700 font-medium mb-2 block">
-                      썬데이허그를 어떻게 알게 되셨나요? *
-                    </Label>
-                    <p className="text-sm text-gray-500 mb-3">
-                      구매하시는데 가장 큰 영향을 주신 항목을 선택해 주세요.
-                    </p>
-                    <div className="space-y-2">
-                      {referralSources.map((source) => (
-                        <button
-                          key={source.value}
-                          type="button"
-                          onClick={() => setReferralSource(source.value)}
-                          className={`w-full p-3 rounded-xl border text-left transition-colors ${
-                            referralSource === source.value
-                              ? "border-orange-400 bg-orange-50"
-                              : "border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            {referralSource === source.value ? (
-                              <CheckCircle className="w-5 h-5 text-orange-500" />
-                            ) : (
-                              <div className="w-5 h-5 rounded-full border-2 border-gray-300" />
-                            )}
-                            <span className="text-gray-900">{source.label}</span>
-                          </div>
-                        </button>
-                      ))}
+                  {/* 유입경로 - show_referral_source가 false가 아닌 경우에만 표시 */}
+                  {selectedEvent?.show_referral_source !== false && (
+                    <div className="bg-white rounded-2xl p-5 border border-gray-100">
+                      <Label className="text-gray-700 font-medium mb-2 block">
+                        썬데이허그를 어떻게 알게 되셨나요? *
+                      </Label>
+                      <p className="text-sm text-gray-500 mb-3">
+                        구매하시는데 가장 큰 영향을 주신 항목을 선택해 주세요.
+                      </p>
+                      <div className="space-y-2">
+                        {/* 이벤트 설정의 보기 옵션 사용, 없으면 기본값 */}
+                        {(selectedEvent?.referral_source_options || referralSources.map(s => s.label)).map((option: string, index: number) => (
+                          <button
+                            key={index}
+                            type="button"
+                            onClick={() => setReferralSource(option)}
+                            className={`w-full p-3 rounded-xl border text-left transition-colors ${
+                              referralSource === option
+                                ? "border-orange-400 bg-orange-50"
+                                : "border-gray-200 hover:border-gray-300"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              {referralSource === option ? (
+                                <CheckCircle className="w-5 h-5 text-orange-500" />
+                              ) : (
+                                <div className="w-5 h-5 rounded-full border-2 border-gray-300" />
+                              )}
+                              <span className="text-gray-900">{option}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* 구매자 정보 */}
                   <div className="bg-white rounded-2xl p-5 border border-gray-100">
