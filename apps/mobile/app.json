@@ -1,0 +1,41 @@
+{
+  "name": "SundayhugApp",
+  "displayName": "썬데이허그",
+  "expo": {
+    "name": "썬데이허그",
+    "slug": "sundayhug-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a1a2e"
+    },
+    "ios": {
+      "bundleIdentifier": "com.sundayhug.app",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "수면 환경 분석을 위해 카메라 접근이 필요합니다.",
+        "NSPhotoLibraryUsageDescription": "수면 환경 사진을 선택하기 위해 사진 라이브러리 접근이 필요합니다."
+      }
+    },
+    "android": {
+      "package": "com.sundayhug.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1a1a2e"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "scheme": "sundayhug"
+  }
+}
+
+
+
