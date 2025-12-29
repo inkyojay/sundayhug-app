@@ -41,19 +41,23 @@ export async function action({ request }: ActionFunctionArgs): Promise<SyncResul
 
 /**
  * 제품 동기화 처리
+ * 1단계: 상품 목록 조회 (POST /v1/products/search) - 기본 정보만
+ * 2단계: 각 상품별 원상품 상세 조회 (GET /v2/products/origin-products/{originProductNo}) - 옵션 정보 포함
  */
 async function handleProductSync(): Promise<SyncResult> {
   const startTime = Date.now();
 
   try {
     // 동적 import로 서버 전용 모듈 로드
-    const { getProductListDetailed } = await import("../lib/naver.server");
+    const { getProductListDetailed, getOriginProduct } = await import("../lib/naver.server");
     
-    // 네이버에서 전체 제품 조회 (페이지네이션)
+    // 1단계: 네이버에서 전체 제품 목록 조회 (페이지네이션)
     let allProducts: any[] = [];
     let page = 1;
     const size = 100;
     let hasMore = true;
+
+    console.log(`📦 [1단계] 상품 목록 조회 시작...`);
 
     while (hasMore) {
       const result = await getProductListDetailed({ page, size });
@@ -102,6 +106,10 @@ async function handleProductSync(): Promise<SyncResult> {
     let productsSynced = 0;
     let optionsSynced = 0;
 
+    // 중복 제거: originProductNo 기준으로 유니크하게
+    const uniqueOriginProductNos = [...new Set(allProducts.map(p => p.originProductNo))];
+    console.log(`📦 유니크 원상품 수: ${uniqueOriginProductNos.length}개`);
+
     for (const product of allProducts) {
       // 메인 제품 upsert
       const productData = {
@@ -132,22 +140,57 @@ async function handleProductSync(): Promise<SyncResult> {
       }
 
       productsSynced++;
+    }
 
-      // 옵션 정보가 있으면 저장
-      const options = product.optionInfo?.optionCombinations || [];
+    console.log(`✅ [1단계 완료] ${productsSynced}개 제품 저장됨`);
+
+    // 2단계: 각 원상품별로 상세 조회하여 옵션 정보 가져오기
+    console.log(`📦 [2단계] 원상품 상세 조회 시작 (${uniqueOriginProductNos.length}개)...`);
+
+    let processedOrigins = 0;
+    for (const originProductNo of uniqueOriginProductNos) {
+      processedOrigins++;
+      
+      // 진행률 로그 (10개마다)
+      if (processedOrigins % 10 === 0) {
+        console.log(`🔄 원상품 상세 조회 진행: ${processedOrigins}/${uniqueOriginProductNos.length}`);
+      }
+
+      // 원상품 상세 조회 (옵션 정보 포함)
+      const detailResult = await getOriginProduct(originProductNo);
+      
+      if (!detailResult.success || !detailResult.product) {
+        console.error(`⚠️ 원상품 ${originProductNo} 상세 조회 실패:`, detailResult.error);
+        continue;
+      }
+
+      const originProduct = detailResult.product as any;
+      
+      // 옵션 정보 추출 (optionCombinations 또는 optionStandards)
+      const optionInfo = originProduct.detailAttribute?.optionInfo;
+      const optionCombinations = optionInfo?.optionCombinations || [];
+      const optionStandards = optionInfo?.optionStandards || [];
+      
+      // optionCombinations가 있으면 사용, 없으면 optionStandards 사용
+      const options = optionCombinations.length > 0 ? optionCombinations : optionStandards;
+
       if (options.length > 0) {
+        console.log(`📋 원상품 ${originProductNo}: ${options.length}개 옵션 발견`);
+        
         for (const option of options) {
           const optionData = {
-            origin_product_no: product.originProductNo,
+            origin_product_no: originProductNo,
             option_combination_id: option.id,
             option_name1: option.optionName1 || null,
             option_value1: option.optionValue1 || null,
             option_name2: option.optionName2 || null,
             option_value2: option.optionValue2 || null,
+            option_name3: option.optionName3 || null,
+            option_name4: option.optionName4 || null,
             stock_quantity: option.stockQuantity || 0,
             price: option.price || 0,
             seller_management_code: option.sellerManagerCode || null,
-            use_yn: option.usable ? "Y" : "N",
+            use_yn: option.usable !== false ? "Y" : "N",
             synced_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
@@ -159,7 +202,7 @@ async function handleProductSync(): Promise<SyncResult> {
             });
 
           if (optionError) {
-            console.error("❌ 옵션 저장 실패:", optionError, option.id);
+            console.error("❌ 옵션 저장 실패:", optionError, originProductNo, option.id);
             continue;
           }
 
