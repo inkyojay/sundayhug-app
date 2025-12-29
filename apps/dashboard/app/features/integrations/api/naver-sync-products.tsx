@@ -5,14 +5,6 @@
  */
 import type { ActionFunctionArgs } from "react-router";
 
-import { 
-  getProductListDetailed,
-  getOriginProduct,
-  updateProductOptionStock,
-  type NaverProductDetailed,
-  type NaverProductOption,
-} from "../lib/naver.server";
-
 interface SyncResult {
   success: boolean;
   message?: string;
@@ -54,8 +46,11 @@ async function handleProductSync(): Promise<SyncResult> {
   const startTime = Date.now();
 
   try {
+    // 동적 import로 서버 전용 모듈 로드
+    const { getProductListDetailed } = await import("../lib/naver.server");
+    
     // 네이버에서 전체 제품 조회 (페이지네이션)
-    let allProducts: NaverProductDetailed[] = [];
+    let allProducts: any[] = [];
     let page = 1;
     const size = 100;
     let hasMore = true;
@@ -109,7 +104,22 @@ async function handleProductSync(): Promise<SyncResult> {
 
     for (const product of allProducts) {
       // 메인 제품 upsert
-      const productData = mapProductToDb(product);
+      const productData = {
+        origin_product_no: product.originProductNo,
+        channel_product_no: product.channelProductNo || null,
+        product_name: product.name,
+        sale_price: product.salePrice || 0,
+        stock_quantity: product.stockQuantity || 0,
+        product_status: product.productStatusType || null,
+        channel_product_display_status: product.channelProductDisplayStatusType || null,
+        status_type: product.productStatusType || null,
+        sale_start_date: product.saleStartDate || null,
+        sale_end_date: product.saleEndDate || null,
+        represent_image: product.representativeImage?.url || null,
+        category_id: product.detailAttribute?.naverShoppingSearchInfo?.categoryId || null,
+        synced_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
       
       const { error: productError } = await adminClient
         .from("naver_products")
@@ -126,7 +136,20 @@ async function handleProductSync(): Promise<SyncResult> {
       const options = product.optionInfo?.optionCombinations || [];
       if (options.length > 0) {
         for (const option of options) {
-          const optionData = mapOptionToDb(product.originProductNo, option);
+          const optionData = {
+            origin_product_no: product.originProductNo,
+            option_combination_id: option.id,
+            option_name1: option.optionName1 || null,
+            option_value1: option.optionValue1 || null,
+            option_name2: option.optionName2 || null,
+            option_value2: option.optionValue2 || null,
+            stock_quantity: option.stockQuantity || 0,
+            price: option.price || 0,
+            seller_management_code: option.sellerManagerCode || null,
+            use_yn: option.usable ? "Y" : "N",
+            synced_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
           
           const { error: optionError } = await adminClient
             .from("naver_product_options")
@@ -182,6 +205,9 @@ async function handleInventoryUpdate(formData: FormData): Promise<InventoryUpdat
   }
 
   try {
+    // 동적 import로 서버 전용 모듈 로드
+    const { updateProductOptionStock } = await import("../lib/naver.server");
+    
     // 네이버 API로 재고 업데이트
     const result = await updateProductOptionStock(originProductNo, [
       { optionCombinationId, stockQuantity: quantity }
@@ -223,46 +249,3 @@ async function handleInventoryUpdate(formData: FormData): Promise<InventoryUpdat
     };
   }
 }
-
-/**
- * 네이버 제품을 DB 스키마에 맞게 변환
- */
-function mapProductToDb(product: NaverProductDetailed) {
-  return {
-    origin_product_no: product.originProductNo,
-    channel_product_no: product.channelProductNo || null,
-    product_name: product.name,
-    sale_price: product.salePrice || 0,
-    stock_quantity: product.stockQuantity || 0,
-    product_status: product.productStatusType || null,
-    channel_product_display_status: product.channelProductDisplayStatusType || null,
-    status_type: product.productStatusType || null,
-    sale_start_date: product.saleStartDate || null,
-    sale_end_date: product.saleEndDate || null,
-    represent_image: product.representativeImage?.url || null,
-    category_id: product.detailAttribute?.naverShoppingSearchInfo?.categoryId || null,
-    synced_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-}
-
-/**
- * 네이버 옵션을 DB 스키마에 맞게 변환
- */
-function mapOptionToDb(originProductNo: number, option: NaverProductOption) {
-  return {
-    origin_product_no: originProductNo,
-    option_combination_id: option.id,
-    option_name1: option.optionName1 || null,
-    option_value1: option.optionValue1 || null,
-    option_name2: option.optionName2 || null,
-    option_value2: option.optionValue2 || null,
-    stock_quantity: option.stockQuantity || 0,
-    price: option.price || 0,
-    seller_management_code: option.sellerManagerCode || null,
-    use_yn: option.usable ? "Y" : "N",
-    synced_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-}
-

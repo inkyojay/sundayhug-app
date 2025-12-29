@@ -5,13 +5,6 @@
  */
 import type { ActionFunctionArgs } from "react-router";
 
-import { 
-  getProductsDetailed, 
-  updateVariantInventory,
-  type Cafe24ProductDetailed,
-  type Cafe24Variant 
-} from "../lib/cafe24.server";
-
 interface SyncResult {
   success: boolean;
   message?: string;
@@ -53,8 +46,11 @@ async function handleProductSync(): Promise<SyncResult> {
   const startTime = Date.now();
 
   try {
+    // 동적 import로 서버 전용 모듈 로드
+    const { getProductsDetailed } = await import("../lib/cafe24.server");
+    
     // Cafe24에서 전체 제품 조회 (페이지네이션)
-    let allProducts: Cafe24ProductDetailed[] = [];
+    let allProducts: any[] = [];
     let offset = 0;
     const limit = 100;
     let hasMore = true;
@@ -108,7 +104,26 @@ async function handleProductSync(): Promise<SyncResult> {
 
     for (const product of allProducts) {
       // 메인 제품 upsert
-      const productData = mapProductToDb(product);
+      const productData = {
+        product_no: product.product_no,
+        product_code: product.product_code,
+        product_name: product.product_name,
+        price: parseFloat(product.price) || 0,
+        retail_price: parseFloat(product.retail_price) || 0,
+        supply_price: parseFloat(product.supply_price) || 0,
+        display: product.display || "T",
+        selling: product.selling || "T",
+        detail_image: product.detail_image || null,
+        list_image: product.list_image || null,
+        small_image: product.small_image || null,
+        category: product.category?.length > 0 
+          ? JSON.stringify(product.category) 
+          : null,
+        created_date: product.created_date || null,
+        updated_date: product.updated_date || null,
+        synced_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
       
       const { error: productError } = await adminClient
         .from("cafe24_products")
@@ -124,7 +139,19 @@ async function handleProductSync(): Promise<SyncResult> {
       // Variants upsert
       if (product.variants && product.variants.length > 0) {
         for (const variant of product.variants) {
-          const variantData = mapVariantToDb(product.product_no, variant);
+          const variantData = {
+            product_no: product.product_no,
+            variant_code: variant.variant_code,
+            options: variant.options || [],
+            sku: variant.custom_variant_code || null,
+            additional_price: parseFloat(variant.additional_amount) || 0,
+            stock_quantity: variant.quantity || 0,
+            safety_stock: variant.safety_inventory || 0,
+            display: variant.display || "T",
+            selling: variant.selling || "T",
+            synced_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
           
           const { error: variantError } = await adminClient
             .from("cafe24_product_variants")
@@ -178,6 +205,9 @@ async function handleInventoryUpdate(formData: FormData): Promise<InventoryUpdat
   }
 
   try {
+    // 동적 import로 서버 전용 모듈 로드
+    const { updateVariantInventory } = await import("../lib/cafe24.server");
+    
     // Cafe24 API로 재고 업데이트
     const result = await updateVariantInventory(productNo, variantCode, quantity);
 
@@ -216,50 +246,3 @@ async function handleInventoryUpdate(formData: FormData): Promise<InventoryUpdat
     };
   }
 }
-
-/**
- * Cafe24 제품을 DB 스키마에 맞게 변환
- */
-function mapProductToDb(product: Cafe24ProductDetailed) {
-  return {
-    product_no: product.product_no,
-    product_code: product.product_code,
-    product_name: product.product_name,
-    price: parseFloat(product.price) || 0,
-    retail_price: parseFloat(product.retail_price) || 0,
-    supply_price: parseFloat(product.supply_price) || 0,
-    display: product.display || "T",
-    selling: product.selling || "T",
-    detail_image: product.detail_image || null,
-    list_image: product.list_image || null,
-    small_image: product.small_image || null,
-    category: product.category?.length > 0 
-      ? JSON.stringify(product.category) 
-      : null,
-    created_date: product.created_date || null,
-    updated_date: product.updated_date || null,
-    synced_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-}
-
-/**
- * Cafe24 Variant를 DB 스키마에 맞게 변환
- */
-function mapVariantToDb(productNo: number, variant: Cafe24Variant) {
-  return {
-    product_no: productNo,
-    variant_code: variant.variant_code,
-    options: variant.options || [],
-    sku: variant.custom_variant_code || null,
-    additional_price: parseFloat(variant.additional_amount) || 0,
-    stock_quantity: variant.quantity || 0,
-    safety_stock: variant.safety_inventory || 0,
-    display: variant.display || "T",
-    selling: variant.selling || "T",
-    synced_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-}
-
-
