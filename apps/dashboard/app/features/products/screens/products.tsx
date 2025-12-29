@@ -1,9 +1,20 @@
 /**
  * 제품 관리 - 제품 목록
+ * 
+ * SKU 기반 멀티채널(카페24/네이버) 매핑 및 판매현황 표시
  */
 import type { Route } from "./+types/products";
 
-import { BoxIcon, SearchIcon, RefreshCwIcon, FilterIcon } from "lucide-react";
+import { 
+  BoxIcon, 
+  SearchIcon, 
+  RefreshCwIcon, 
+  FilterIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  StoreIcon,
+  ShoppingCartIcon,
+} from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useFetcher, useRevalidator } from "react-router";
 
@@ -38,6 +49,28 @@ import makeServerClient from "~/core/lib/supa-client.server";
 export const meta: Route.MetaFunction = () => {
   return [{ title: `제품 관리 | Sundayhug Admin` }];
 };
+
+// 채널 매핑 타입
+interface ChannelMapping {
+  cafe24: {
+    variant_code: string;
+    stock_quantity: number;
+    additional_price: number;
+    product_name: string;
+  } | null;
+  naver: {
+    option_combination_id: number;
+    stock_quantity: number;
+    price: number;
+    product_name: string;
+  } | null;
+}
+
+// 판매 집계 타입
+interface SalesData {
+  cafe24: { orderCount: number; totalSales: number };
+  naver: { orderCount: number; totalSales: number };
+}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
@@ -109,6 +142,96 @@ export async function loader({ request }: Route.LoaderArgs) {
   query = query.range(offset, offset + limit - 1);
   const { data: products } = await query;
 
+  // 현재 페이지 SKU 목록
+  const skuList = (products || []).map((p: any) => p.sku).filter(Boolean);
+
+  // 채널 매핑 조회 (카페24 variants, 네이버 options)
+  const [cafe24VariantsResult, naverOptionsResult] = await Promise.all([
+    skuList.length > 0 
+      ? supabase
+          .from("cafe24_product_variants")
+          .select("sku, variant_code, stock_quantity, additional_price, product_no")
+          .in("sku", skuList)
+      : Promise.resolve({ data: [] }),
+    skuList.length > 0 
+      ? supabase
+          .from("naver_product_options")
+          .select("seller_management_code, option_combination_id, stock_quantity, price, origin_product_no")
+          .in("seller_management_code", skuList)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  // 카페24 제품명 조회
+  const cafe24ProductNos = [...new Set((cafe24VariantsResult.data || []).map((v: any) => v.product_no))];
+  const { data: cafe24Products } = cafe24ProductNos.length > 0
+    ? await supabase.from("cafe24_products").select("product_no, product_name").in("product_no", cafe24ProductNos)
+    : { data: [] };
+
+  // 네이버 제품명 조회
+  const naverProductNos = [...new Set((naverOptionsResult.data || []).map((o: any) => o.origin_product_no))];
+  const { data: naverProducts } = naverProductNos.length > 0
+    ? await supabase.from("naver_products").select("origin_product_no, product_name").in("origin_product_no", naverProductNos)
+    : { data: [] };
+
+  // SKU별 채널 매핑 맵 생성
+  const channelMappings: Record<string, ChannelMapping> = {};
+  
+  for (const variant of cafe24VariantsResult.data || []) {
+    const productName = (cafe24Products || []).find((p: any) => p.product_no === variant.product_no)?.product_name || "";
+    if (!channelMappings[variant.sku]) {
+      channelMappings[variant.sku] = { cafe24: null, naver: null };
+    }
+    channelMappings[variant.sku].cafe24 = {
+      variant_code: variant.variant_code,
+      stock_quantity: variant.stock_quantity,
+      additional_price: variant.additional_price,
+      product_name: productName,
+    };
+  }
+
+  for (const option of naverOptionsResult.data || []) {
+    const productName = (naverProducts || []).find((p: any) => p.origin_product_no === option.origin_product_no)?.product_name || "";
+    if (!channelMappings[option.seller_management_code]) {
+      channelMappings[option.seller_management_code] = { cafe24: null, naver: null };
+    }
+    channelMappings[option.seller_management_code].naver = {
+      option_combination_id: option.option_combination_id,
+      stock_quantity: option.stock_quantity,
+      price: option.price,
+      product_name: productName,
+    };
+  }
+
+  // 주문 집계 조회 (SKU별, 채널별)
+  const salesDataMap: Record<string, SalesData> = {};
+  
+  if (skuList.length > 0) {
+    const { data: orderStats } = await supabase
+      .from("orders")
+      .select("sku, shop_cd, pay_amt")
+      .in("sku", skuList);
+
+    // SKU별, 채널별 집계
+    for (const order of orderStats || []) {
+      if (!order.sku) continue;
+      
+      if (!salesDataMap[order.sku]) {
+        salesDataMap[order.sku] = {
+          cafe24: { orderCount: 0, totalSales: 0 },
+          naver: { orderCount: 0, totalSales: 0 },
+        };
+      }
+      
+      if (order.shop_cd === "cafe24") {
+        salesDataMap[order.sku].cafe24.orderCount++;
+        salesDataMap[order.sku].cafe24.totalSales += order.pay_amt || 0;
+      } else if (order.shop_cd === "naver") {
+        salesDataMap[order.sku].naver.orderCount++;
+        salesDataMap[order.sku].naver.totalSales += order.pay_amt || 0;
+      }
+    }
+  }
+
   return {
     products: products || [],
     totalCount: totalCount || 0,
@@ -121,6 +244,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       colors: colorOptions,
       sizes: sizeOptions,
     },
+    channelMappings,
+    salesDataMap,
   };
 }
 
@@ -155,9 +280,21 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Products({ loaderData }: Route.ComponentProps) {
-  const { products, totalCount, currentPage, totalPages, search, filters, filterOptions } = loaderData;
+  const { 
+    products, 
+    totalCount, 
+    currentPage, 
+    totalPages, 
+    search, 
+    filters, 
+    filterOptions,
+    channelMappings,
+    salesDataMap,
+  } = loaderData;
+  
   const [searchInput, setSearchInput] = useState(search);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
@@ -194,7 +331,7 @@ export default function Products({ loaderData }: Route.ComponentProps) {
     if (newParentSku) params.set("parentSku", newParentSku);
     if (newColor) params.set("color", newColor);
     if (newSize) params.set("size", newSize);
-    if (newPage !== "1") params.set("page", newPage);
+    if (newPage && newPage !== "1") params.set("page", newPage);
     
     const queryString = params.toString();
     return `/dashboard/products${queryString ? `?${queryString}` : ""}`;
@@ -218,7 +355,45 @@ export default function Products({ loaderData }: Route.ComponentProps) {
     fetcher.submit({}, { method: "POST" });
   };
 
+  const toggleRow = (sku: string) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(sku)) {
+      newExpanded.delete(sku);
+    } else {
+      newExpanded.add(sku);
+    }
+    setExpandedRows(newExpanded);
+  };
+
   const hasActiveFilters = search || filters.parentSku || filters.color || filters.size;
+
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat("ko-KR").format(price) + "원";
+  };
+
+  // 채널 배지 렌더링
+  const renderChannelBadges = (sku: string) => {
+    const mapping = channelMappings[sku];
+    if (!mapping) return <span className="text-muted-foreground">-</span>;
+    
+    return (
+      <div className="flex gap-1">
+        {mapping.cafe24 && (
+          <Badge variant="outline" className="text-xs bg-orange-500/10 text-orange-600 border-orange-300">
+            C24
+          </Badge>
+        )}
+        {mapping.naver && (
+          <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-300">
+            NV
+          </Badge>
+        )}
+        {!mapping.cafe24 && !mapping.naver && (
+          <span className="text-muted-foreground text-xs">미연결</span>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -236,7 +411,7 @@ export default function Products({ loaderData }: Route.ComponentProps) {
             <BoxIcon className="h-6 w-6" />
             제품 관리
           </h1>
-          <p className="text-muted-foreground">등록된 제품 목록 ({totalCount.toLocaleString()}개)</p>
+          <p className="text-muted-foreground">등록된 제품 목록 ({totalCount.toLocaleString()}개) · 행을 클릭하면 채널별 상세 정보를 볼 수 있습니다</p>
         </div>
         <Button onClick={handleSync} disabled={syncing}>
           <RefreshCwIcon className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
@@ -356,53 +531,177 @@ export default function Products({ loaderData }: Route.ComponentProps) {
         <CardHeader>
           <CardTitle>제품 목록</CardTitle>
           <CardDescription>
-            {hasActiveFilters ? "필터링된 결과" : "전체 제품 목록"}
+            {hasActiveFilters ? "필터링된 결과" : "전체 제품 목록"} · 채널 컬럼에서 C24=카페24, NV=네이버
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[40px]"></TableHead>
                 <TableHead className="w-[200px]">SKU</TableHead>
                 <TableHead>제품명</TableHead>
-                <TableHead className="w-[120px]">색상</TableHead>
+                <TableHead className="w-[100px]">채널</TableHead>
+                <TableHead className="w-[100px]">색상</TableHead>
                 <TableHead className="w-[80px]">사이즈</TableHead>
-                <TableHead className="w-[150px]">분류</TableHead>
                 <TableHead className="w-[80px]">상태</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {products.map((product: any) => (
-                <TableRow key={product.id}>
-                  <TableCell className="font-mono text-sm">{product.sku}</TableCell>
-                  <TableCell className="max-w-[250px] truncate">{product.product_name || "-"}</TableCell>
-                  <TableCell>
-                    {product.color_kr ? (
-                      <Badge variant="outline">{product.color_kr}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {product.sku_6_size ? (
-                      <Badge variant="secondary">{product.sku_6_size}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground truncate max-w-[150px]">
-                    {product.parent_sku || "-"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={product.is_active ? "default" : "secondary"}>
-                      {product.is_active ? "활성" : "비활성"}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
+                <>
+                  {/* 메인 행 */}
+                  <TableRow 
+                    key={product.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => toggleRow(product.sku)}
+                  >
+                    <TableCell>
+                      {expandedRows.has(product.sku) ? (
+                        <ChevronDownIcon className="h-4 w-4" />
+                      ) : (
+                        <ChevronRightIcon className="h-4 w-4" />
+                      )}
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">{product.sku}</TableCell>
+                    <TableCell className="max-w-[250px] truncate">{product.product_name || "-"}</TableCell>
+                    <TableCell>{renderChannelBadges(product.sku)}</TableCell>
+                    <TableCell>
+                      {product.color_kr ? (
+                        <Badge variant="outline">{product.color_kr}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {product.sku_6_size ? (
+                        <Badge variant="secondary">{product.sku_6_size}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={product.is_active ? "default" : "secondary"}>
+                        {product.is_active ? "활성" : "비활성"}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+
+                  {/* 확장 행 - 채널별 상세 정보 */}
+                  {expandedRows.has(product.sku) && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="bg-muted/30 p-0">
+                        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* 카페24 정보 */}
+                          <div className="border rounded-lg p-4 bg-orange-50/50 dark:bg-orange-950/20">
+                            <div className="flex items-center gap-2 mb-3">
+                              <StoreIcon className="h-4 w-4 text-orange-600" />
+                              <span className="font-semibold text-orange-700 dark:text-orange-400">카페24</span>
+                            </div>
+                            {channelMappings[product.sku]?.cafe24 ? (
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">제품명:</span>
+                                  <span className="font-medium truncate max-w-[200px]">
+                                    {channelMappings[product.sku].cafe24?.product_name || "-"}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Variant:</span>
+                                  <span className="font-mono">{channelMappings[product.sku].cafe24?.variant_code}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">재고:</span>
+                                  <span className={channelMappings[product.sku].cafe24?.stock_quantity === 0 ? "text-red-500 font-bold" : ""}>
+                                    {channelMappings[product.sku].cafe24?.stock_quantity}개
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">추가금액:</span>
+                                  <span>{formatPrice(channelMappings[product.sku].cafe24?.additional_price || 0)}</span>
+                                </div>
+                                {salesDataMap[product.sku]?.cafe24 && (
+                                  <>
+                                    <hr className="my-2" />
+                                    <div className="flex items-center gap-1 text-muted-foreground mb-1">
+                                      <ShoppingCartIcon className="h-3 w-3" />
+                                      <span>판매현황</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">주문 수:</span>
+                                      <span className="font-medium">{salesDataMap[product.sku].cafe24.orderCount}건</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">총 매출:</span>
+                                      <span className="font-medium text-green-600">{formatPrice(salesDataMap[product.sku].cafe24.totalSales)}</span>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">미연결</p>
+                            )}
+                          </div>
+
+                          {/* 네이버 정보 */}
+                          <div className="border rounded-lg p-4 bg-green-50/50 dark:bg-green-950/20">
+                            <div className="flex items-center gap-2 mb-3">
+                              <StoreIcon className="h-4 w-4 text-green-600" />
+                              <span className="font-semibold text-green-700 dark:text-green-400">스마트스토어</span>
+                            </div>
+                            {channelMappings[product.sku]?.naver ? (
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">제품명:</span>
+                                  <span className="font-medium truncate max-w-[200px]">
+                                    {channelMappings[product.sku].naver?.product_name || "-"}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">옵션ID:</span>
+                                  <span className="font-mono">{channelMappings[product.sku].naver?.option_combination_id}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">재고:</span>
+                                  <span className={channelMappings[product.sku].naver?.stock_quantity === 0 ? "text-red-500 font-bold" : ""}>
+                                    {channelMappings[product.sku].naver?.stock_quantity}개
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">가격:</span>
+                                  <span>{formatPrice(channelMappings[product.sku].naver?.price || 0)}</span>
+                                </div>
+                                {salesDataMap[product.sku]?.naver && (
+                                  <>
+                                    <hr className="my-2" />
+                                    <div className="flex items-center gap-1 text-muted-foreground mb-1">
+                                      <ShoppingCartIcon className="h-3 w-3" />
+                                      <span>판매현황</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">주문 수:</span>
+                                      <span className="font-medium">{salesDataMap[product.sku].naver.orderCount}건</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">총 매출:</span>
+                                      <span className="font-medium text-green-600">{formatPrice(salesDataMap[product.sku].naver.totalSales)}</span>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">미연결</p>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
               ))}
               {products.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     {hasActiveFilters ? "검색 결과가 없습니다" : "등록된 제품이 없습니다"}
                   </TableCell>
                 </TableRow>
