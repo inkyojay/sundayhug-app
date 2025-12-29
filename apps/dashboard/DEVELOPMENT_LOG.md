@@ -9,6 +9,103 @@
 
 ---
 
+## 2025-12-29 (일) - 네이버 스마트스토어 제품 동기화 완성
+
+### 요약
+- **기능**: 네이버 스마트스토어 제품 및 옵션 동기화 구현 완료
+- **최적화**: 504 Gateway Timeout 해결 (병렬 처리 + 배치 저장)
+
+### 작업 내용
+
+1. **제품 동기화 2단계 구현**
+   - **1단계**: 상품 목록 조회 (`POST /external/v1/products/search`)
+     - 기본 상품 정보 (이름, 가격, 재고, 판매자상품코드 등)
+     - 페이지네이션 처리 (100개씩)
+   - **2단계**: 원상품 상세 조회 (`GET /external/v2/products/origin-products/{originProductNo}`)
+     - 옵션 정보 추출 (`detailAttribute.optionInfo.optionCombinations`)
+     - 옵션별 재고, 가격, 판매자관리코드 저장
+
+2. **디버깅 및 수정**
+   - **API 응답 구조 수정**: 응답이 `{groupProduct, originProduct}` 형태인데 전체를 originProduct로 잘못 사용 → `response.originProduct`에서 추출하도록 수정
+   - **option_name3/4 컬럼 오류**: 테이블에 없는 컬럼 저장 시도 제거
+
+3. **성능 최적화 (504 Timeout 해결)**
+   - **병렬 처리**: 원상품 상세 조회를 순차 → **5개씩 병렬** 처리
+   - **배치 저장**: 개별 upsert → **배치 upsert** (제품 100개씩, 옵션 50개씩)
+   - **효과**: 160개 상품 동기화 시 160초+ → ~30초 수준으로 개선
+
+### DB 테이블
+```sql
+-- 네이버 제품 테이블 (이전에 생성됨)
+CREATE TABLE naver_products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  origin_product_no BIGINT NOT NULL UNIQUE,
+  channel_product_no BIGINT,
+  product_name TEXT NOT NULL,
+  seller_management_code TEXT,  -- 판매자 상품코드 (SKU 매핑용)
+  sale_price NUMERIC,
+  stock_quantity INTEGER,
+  product_status TEXT,
+  channel_product_display_status TEXT,
+  status_type TEXT,
+  sale_start_date TIMESTAMPTZ,
+  sale_end_date TIMESTAMPTZ,
+  represent_image TEXT,
+  category_id TEXT,
+  synced_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 네이버 제품 옵션 테이블
+CREATE TABLE naver_product_options (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  origin_product_no BIGINT NOT NULL,
+  option_combination_id BIGINT NOT NULL,
+  option_name1 TEXT,
+  option_value1 TEXT,
+  option_name2 TEXT,
+  option_value2 TEXT,
+  stock_quantity INTEGER,
+  price NUMERIC,
+  seller_management_code TEXT,  -- 옵션별 판매자관리코드
+  use_yn TEXT DEFAULT 'Y',
+  synced_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(origin_product_no, option_combination_id)
+);
+```
+
+### 변경 파일
+```
+apps/dashboard/app/features/
+├── integrations/
+│   ├── api/
+│   │   └── naver-sync-products.tsx   # 제품 동기화 (병렬+배치 최적화)
+│   └── lib/
+│       └── naver.server.ts           # getProductListDetailed, getOriginProduct 추가
+├── products-naver/
+│   └── screens/
+│       └── naver-products.tsx        # 스마트스토어 제품 UI
+└── users/components/
+    └── dashboard-sidebar.tsx         # "스마트스토어 제품" 메뉴 추가
+```
+
+### API 엔드포인트
+| 용도 | 메서드 | 엔드포인트 |
+|------|--------|-----------|
+| 상품 목록 조회 | POST | `/external/v1/products/search` |
+| 원상품 상세 조회 | GET | `/external/v2/products/origin-products/{originProductNo}` |
+| 옵션 재고 변경 | PUT | `/external/v1/products/origin-products/{originProductNo}/option-stock` |
+
+### 트러블슈팅
+- **`option_name3` 컬럼 없음 에러**: 테이블에 없는 컬럼 저장 시도 → 코드에서 해당 필드 제외
+- **API 응답 구조 불일치**: `detailResult.product`가 전체 응답(`{groupProduct, originProduct}`)인데 바로 사용 → `response.originProduct` 추출 후 사용
+- **504 Gateway Timeout**: Vercel 서버리스 60초 제한 초과 → 병렬 처리 + 배치 저장으로 해결
+
+---
+
 ## 2025-12-23 (월) - 네이버 스마트스토어 API 연동
 
 ### 작업 내용
