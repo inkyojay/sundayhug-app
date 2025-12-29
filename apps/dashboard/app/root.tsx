@@ -122,18 +122,10 @@ export const handle = {
  * @param children - Child components to render within the layout
  */
 export function Layout({ children }: { children: React.ReactNode }) {
-  const data = useRouteLoaderData("root");
-  
-  // 시간대 기반 기본 테마 설정 (19시~7시: dark, 그 외: light)
-  const getDefaultTheme = () => {
-    const hour = new Date().getHours();
-    const isNightTime = hour >= 19 || hour < 7;
-    return isNightTime ? "dark" : "light";
-  };
-  
+  // 대시보드는 항상 라이트 모드로 고정
   return (
     <ThemeProvider
-      specifiedTheme={data?.theme ?? getDefaultTheme()} // 사용자 설정 없으면 시간대 기반
+      specifiedTheme="light" // 항상 라이트 모드
       themeAction="/api/settings/theme" // API endpoint for changing theme
     >
       <InnerLayout>{children}</InnerLayout>
@@ -153,7 +145,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
  * @param children - Child components to render within the layout
  */
 function InnerLayout({ children }: { children: React.ReactNode }) {
-  const [theme] = useTheme();
   const data = useRouteLoaderData<typeof loader>("root");
   const { i18n } = useTranslation();
   const { pathname } = useLocation();
@@ -169,7 +160,7 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang={data?.locale ?? "en"}
-      className={cn(theme ?? "", "h-full")}
+      className="h-full" // 다크모드 클래스 제거, 항상 라이트 모드
       dir={i18n.dir()}
     >
       <head>
