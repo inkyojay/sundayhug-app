@@ -9,6 +9,99 @@
 
 ---
 
+## 2025-12-30 (월) - 제품 관리 고급 기능 (정렬/그룹핑/일괄변경/CSV/원가/변경로그)
+
+### 요약
+- **기능**: 제품 목록 및 제품 분류 페이지에 고급 관리 기능 추가
+- **UI 개선**: Airtable 스타일 테이블, 인라인 편집, 색상 팔레트 자동 적용
+
+### DB 마이그레이션
+
+1. **products 테이블**
+   - `cost_price` (NUMERIC) - 제품 원가 컬럼 추가
+   - `thumbnail_url` (TEXT) - 썸네일 URL 컬럼 추가
+
+2. **parent_products 테이블**
+   - `thumbnail_url` (TEXT) - 썸네일 URL 컬럼 추가
+
+3. **product_change_logs 테이블** (신규)
+   ```sql
+   CREATE TABLE product_change_logs (
+     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+     table_name VARCHAR(50) NOT NULL,      -- 'products' 또는 'parent_products'
+     record_id UUID NOT NULL,
+     field_name VARCHAR(100) NOT NULL,
+     old_value TEXT,
+     new_value TEXT,
+     changed_by UUID REFERENCES auth.users(id),
+     changed_at TIMESTAMPTZ DEFAULT NOW(),
+     change_type VARCHAR(20) DEFAULT 'update'  -- 'update', 'create', 'delete', 'bulk_update'
+   );
+   ```
+
+### 제품 목록 (`/dashboard/products`) 기능
+
+| 기능 | 설명 |
+|------|------|
+| **정렬** | 제품명, SKU, 사이즈, 색상, 원가 컬럼 클릭 시 정렬 |
+| **그룹핑** | 분류별, 색상별, 사이즈별, 카테고리별 그룹화 |
+| **체크박스 일괄 변경** | 다중 선택 후 분류/색상/사이즈/원가/썸네일/상태 일괄 수정 |
+| **인라인 편집** | 연필 아이콘 클릭 시 행 단위 편집 |
+| **색상 자동 팔레트** | 색상명 분석하여 배경색 자동 지정 (50+ 색상 매핑) |
+| **색상/사이즈 직접 입력** | 기존 옵션 선택 또는 새 값 직접 입력 |
+| **원가 필드** | 제품별 원가 관리 |
+| **변경 확인 알람** | 저장 전 확인 다이얼로그 |
+| **변경 로그 기록** | 모든 변경사항 DB 기록 |
+| **CSV 다운로드** | 현재 목록 CSV 내보내기 |
+| **CSV 업로드 (Upsert)** | SKU 기준 업데이트/삽입 |
+| **페이지당 개수 선택** | 50/100/500/1000개씩 보기 |
+
+### 제품 분류 (`/dashboard/parent-products`) 기능
+
+| 기능 | 설명 |
+|------|------|
+| **하위 제품 상세 표시** | 펼침 시 색상/사이즈/썸네일 카드로 표시 |
+| **정렬** | SKU, 제품명, 카테고리 컬럼 클릭 시 정렬 |
+| **그룹핑** | 카테고리별, 서브카테고리별 그룹화 |
+| **체크박스 일괄 변경** | 다중 선택 후 카테고리/서브카테고리/썸네일/설명/상태 일괄 수정 |
+| **인라인 편집** | 연필 아이콘 클릭 시 행 단위 편집 |
+| **변경 확인 알람** | 저장 전 확인 다이얼로그 |
+| **변경 로그 기록** | 모든 변경사항 DB 기록 |
+| **CSV 다운로드** | 현재 목록 CSV 내보내기 |
+| **CSV 업로드 (Upsert)** | Parent SKU 기준 업데이트/삽입 |
+
+### 컬럼 순서 (제품 목록)
+```
+이미지 → 제품명 → SKU → 사이즈 → 색상 → 원가 → 분류 → 채널 → 상태 → 액션
+```
+
+### 색상 자동 팔레트 매핑 (예시)
+| 색상명 | 배경색 |
+|--------|--------|
+| 어스브라운 | #6B4423 |
+| 데일리크림 | #FFFDD0 |
+| 네이비 | #000080 |
+| 화이트 | #FFFFFF (테두리 추가) |
+
+### 파일 변경
+```
+apps/dashboard/app/
+├── features/
+│   ├── products/screens/
+│   │   └── products.tsx              # 제품 목록 (전면 개편)
+│   └── parent-products/screens/
+│       └── parent-products.tsx       # 제품 분류 (전면 개편)
+└── core/components/ui/
+    ├── alert-dialog.tsx              # 신규 - 확인 다이얼로그
+    └── switch.tsx                    # 신규 - 토글 스위치
+```
+
+### 버그 수정
+- 보증서 삭제 시 외래키 제약조건 오류 수정 (`review_submissions` 먼저 삭제)
+- 대시보드 다크모드 제거 (항상 라이트 모드)
+
+---
+
 ## 2025-12-29 (일) - 후기 이벤트 참여 폼 설정 기능
 
 ### 요약
