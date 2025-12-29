@@ -108,6 +108,7 @@ async function handleProductSync(): Promise<SyncResult> {
         origin_product_no: product.originProductNo,
         channel_product_no: product.channelProductNo || null,
         product_name: product.name,
+        seller_management_code: product.sellerManagementCode || null,  // 판매자 상품코드
         sale_price: product.salePrice || 0,
         stock_quantity: product.stockQuantity || 0,
         product_status: product.productStatusType || null,

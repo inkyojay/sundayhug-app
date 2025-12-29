@@ -70,6 +70,7 @@ export interface NaverProductDetailed {
   stockQuantity: number;
   productStatusType: string;
   channelProductDisplayStatusType?: string;
+  sellerManagementCode?: string;  // 판매자 상품코드
   saleStartDate?: string;
   saleEndDate?: string;
   representativeImage?: {
@@ -802,6 +803,7 @@ export async function getProductListDetailed(params: GetProductsParams = {}): Pr
         stockQuantity: cp.stockQuantity || 0,
         productStatusType: cp.statusType,
         channelProductDisplayStatusType: cp.channelProductDisplayStatusType,
+        sellerManagementCode: cp.sellerManagementCode,  // 판매자 상품코드
         representativeImage: cp.representativeImage,
         detailAttribute: cp.categoryId ? {
           naverShoppingSearchInfo: { categoryId: cp.categoryId }
