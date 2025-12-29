@@ -3,9 +3,7 @@
  * 
  * Cafe24에서 제품 데이터(Variants 포함)를 가져와 DB에 저장합니다.
  */
-import { data } from "react-router";
-
-import type { Route } from "./+types/cafe24-sync-products";
+import type { ActionFunctionArgs } from "react-router";
 
 import { 
   getProductsDetailed, 
@@ -35,7 +33,7 @@ interface InventoryUpdateResult {
  * POST /api/integrations/cafe24/sync-products
  * Cafe24 제품 동기화
  */
-export async function action({ request }: Route.ActionArgs): Promise<SyncResult | InventoryUpdateResult> {
+export async function action({ request }: ActionFunctionArgs): Promise<SyncResult | InventoryUpdateResult> {
   const formData = await request.formData();
   const actionType = formData.get("action") as string;
 
@@ -264,17 +262,4 @@ function mapVariantToDb(productNo: number, variant: Cafe24Variant) {
   };
 }
 
-/**
- * GET /api/integrations/cafe24/sync-products
- * 동기화 상태 조회 (테스트용)
- */
-export async function loader({ request }: Route.LoaderArgs) {
-  return data({
-    message: "POST 요청으로 제품 동기화를 시작하세요",
-    actions: {
-      sync: "action=sync (기본) - 전체 제품 동기화",
-      updateInventory: "action=update_inventory, productNo, variantCode, quantity - 재고 업데이트",
-    },
-  });
-}
 
