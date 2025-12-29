@@ -166,6 +166,10 @@ async function handleProductSync(): Promise<SyncResult> {
 
       const originProduct = detailResult.product as any;
       
+      // #region agent log H1-H4: API 응답 구조 확인
+      fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver-sync-products.tsx:L127',message:'원상품 API 응답 구조',data:{originProductNo,topLevelKeys:Object.keys(originProduct||{}),hasDetailAttribute:!!originProduct?.detailAttribute,detailAttrKeys:Object.keys(originProduct?.detailAttribute||{}),hasOptionInfo:!!originProduct?.detailAttribute?.optionInfo,optionInfoKeys:Object.keys(originProduct?.detailAttribute?.optionInfo||{}),optionCombLen:(originProduct?.detailAttribute?.optionInfo?.optionCombinations||[]).length,optionStdLen:(originProduct?.detailAttribute?.optionInfo?.optionStandards||[]).length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H4'})}).catch(()=>{});
+      // #endregion
+      
       // 옵션 정보 추출 (optionCombinations 또는 optionStandards)
       const optionInfo = originProduct.detailAttribute?.optionInfo;
       const optionCombinations = optionInfo?.optionCombinations || [];
@@ -173,6 +177,10 @@ async function handleProductSync(): Promise<SyncResult> {
       
       // optionCombinations가 있으면 사용, 없으면 optionStandards 사용
       const options = optionCombinations.length > 0 ? optionCombinations : optionStandards;
+
+      // #region agent log H1-H4: 옵션 처리 전 확인
+      fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver-sync-products.tsx:L143',message:'옵션 처리 전',data:{originProductNo,optionsLength:options.length,firstOption:options[0]?{id:options[0].id,optionName1:options[0].optionName1,stockQuantity:options[0].stockQuantity}:null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H4'})}).catch(()=>{});
+      // #endregion
 
       if (options.length > 0) {
         console.log(`📋 원상품 ${originProductNo}: ${options.length}개 옵션 발견`);
@@ -195,11 +203,16 @@ async function handleProductSync(): Promise<SyncResult> {
             updated_at: new Date().toISOString(),
           };
           
-          const { error: optionError } = await adminClient
+          const { error: optionError, data: upsertedOption } = await adminClient
             .from("naver_product_options")
             .upsert(optionData, { 
               onConflict: "origin_product_no,option_combination_id" 
-            });
+            })
+            .select();
+
+          // #region agent log H1-H4: 옵션 저장 결과
+          fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver-sync-products.tsx:L170',message:'옵션 저장 결과',data:{originProductNo,optionId:option.id,success:!optionError,error:optionError?.message||null,upsertedCount:upsertedOption?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H4'})}).catch(()=>{});
+          // #endregion
 
           if (optionError) {
             console.error("❌ 옵션 저장 실패:", optionError, originProductNo, option.id);
@@ -213,6 +226,10 @@ async function handleProductSync(): Promise<SyncResult> {
 
     const durationMs = Date.now() - startTime;
     console.log(`✅ 네이버 제품 동기화 완료: ${productsSynced}개 제품, ${optionsSynced}개 옵션 (${durationMs}ms)`);
+
+    // #region agent log H1-H4: 최종 동기화 결과
+    fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver-sync-products.tsx:L200',message:'최종 동기화 결과',data:{productsSynced,optionsSynced,durationMs,uniqueOriginCount:uniqueOriginProductNos.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H4'})}).catch(()=>{});
+    // #endregion
 
     return {
       success: true,
