@@ -735,9 +735,9 @@ export async function getProducts(params: GetProductsParams = {}): Promise<{
 }
 
 /**
- * 상품 목록 상세 조회 (옵션 포함)
- * GET /v2/products
- * 참고: https://apicenter.commerce.naver.com/docs/commerce-api/current/read-channel-product-1-product
+ * 상품 목록 조회
+ * POST /v1/products/search
+ * 참고: https://apicenter.commerce.naver.com/docs/commerce-api/current/상품-목록-조회
  */
 export async function getProductListDetailed(params: GetProductsParams = {}): Promise<{
   success: boolean;
@@ -745,30 +745,40 @@ export async function getProductListDetailed(params: GetProductsParams = {}): Pr
   totalCount?: number;
   error?: string;
 }> {
-  const queryParams = new URLSearchParams();
-  queryParams.set("page", String(params.page || 1));
-  queryParams.set("size", String(params.size || 100));
-  
+  const page = params.page || 1;
+  const size = params.size || 100;
+
+  // 검색 조건 body
+  const searchBody: Record<string, any> = {
+    page,
+    size,
+  };
+
+  // 상품 상태 필터 (선택사항)
   if (params.productStatusType) {
-    queryParams.set("productStatusType", params.productStatusType);
+    searchBody.productStatusTypes = [params.productStatusType];
   }
 
   // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver.server.ts:getProductListDetailed',message:'상품 목록 조회 시작',data:{page:params.page,size:params.size,endpoint:'/external/v2/products'},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H1-H2'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver.server.ts:getProductListDetailed',message:'상품 목록 조회 시작',data:{page,size,endpoint:'/external/v1/products/search',body:searchBody},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'H3'})}).catch(()=>{});
   // #endregion
 
-  console.log(`📦 네이버 상품 목록 조회: /external/v2/products?${queryParams.toString()}`);
+  console.log(`📦 네이버 상품 목록 조회: POST /external/v1/products/search`, searchBody);
 
   const result = await naverFetch<{ 
     contents: NaverProductDetailed[]; 
     totalElements: number;
     totalPages: number;
   }>(
-    `/external/v2/products?${queryParams.toString()}`
+    `/external/v1/products/search`,
+    {
+      method: "POST",
+      body: searchBody,
+    }
   );
 
   // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver.server.ts:getProductListDetailed:result',message:'상품 목록 조회 결과',data:{success:result.success,error:result.error,productsCount:result.data?.contents?.length||0,totalElements:result.data?.totalElements||0},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H1-H2'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver.server.ts:getProductListDetailed:result',message:'상품 목록 조회 결과',data:{success:result.success,error:result.error,productsCount:result.data?.contents?.length||0,totalElements:result.data?.totalElements||0},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'H3'})}).catch(()=>{});
   // #endregion
 
   if (!result.success) {
