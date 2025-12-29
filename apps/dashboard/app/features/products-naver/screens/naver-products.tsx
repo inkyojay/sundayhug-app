@@ -60,6 +60,7 @@ interface NaverProduct {
   origin_product_no: number;
   channel_product_no: number | null;
   product_name: string;
+  seller_management_code: string | null;  // 판매자 상품코드 (SKU)
   sale_price: number;
   stock_quantity: number;
   product_status: string | null;
@@ -125,6 +126,7 @@ export default function NaverProducts() {
   
   const [expandedProducts, setExpandedProducts] = useState<Set<number>>(new Set());
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);  // 상태 필터
   const [inventoryModal, setInventoryModal] = useState<{
     open: boolean;
     originProductNo: number;
@@ -298,9 +300,12 @@ export default function NaverProducts() {
         </Button>
       </div>
 
-      {/* 통계 카드 */}
+      {/* 통계 카드 (클릭하여 필터링) */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
+        <Card 
+          className={`cursor-pointer transition-all hover:border-primary ${statusFilter === null ? "ring-2 ring-primary" : ""}`}
+          onClick={() => setStatusFilter(null)}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">전체 제품</CardTitle>
             <PackageIcon className="h-4 w-4 text-muted-foreground" />
@@ -309,7 +314,10 @@ export default function NaverProducts() {
             <div className="text-2xl font-bold">{stats.total}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className={`cursor-pointer transition-all hover:border-green-500 ${statusFilter === "SALE" ? "ring-2 ring-green-500" : ""}`}
+          onClick={() => setStatusFilter(statusFilter === "SALE" ? null : "SALE")}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">판매중</CardTitle>
             <CheckCircleIcon className="h-4 w-4 text-green-500" />
@@ -318,7 +326,10 @@ export default function NaverProducts() {
             <div className="text-2xl font-bold text-green-600">{stats.onSale}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className={`cursor-pointer transition-all hover:border-red-500 ${statusFilter === "OUT_OF_STOCK" ? "ring-2 ring-red-500" : ""}`}
+          onClick={() => setStatusFilter(statusFilter === "OUT_OF_STOCK" ? null : "OUT_OF_STOCK")}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">품절 옵션</CardTitle>
             <XCircleIcon className="h-4 w-4 text-red-500" />
@@ -353,9 +364,22 @@ export default function NaverProducts() {
       {/* 제품 테이블 */}
       <Card>
         <CardHeader>
-          <CardTitle>제품 목록</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            제품 목록
+            {statusFilter && (
+              <Badge variant="secondary" className="ml-2">
+                {statusFilter === "SALE" ? "판매중만" : "품절 옵션 있음"}
+                <button 
+                  className="ml-1 hover:text-destructive" 
+                  onClick={() => setStatusFilter(null)}
+                >
+                  ×
+                </button>
+              </Badge>
+            )}
+          </CardTitle>
           <CardDescription>
-            행을 클릭하면 옵션을 확인할 수 있습니다
+            행을 클릭하면 옵션을 확인할 수 있습니다. 카드를 클릭하여 필터링할 수 있습니다.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -365,6 +389,7 @@ export default function NaverProducts() {
                 <TableHead className="w-[40px]"></TableHead>
                 <TableHead className="w-[80px]">이미지</TableHead>
                 <TableHead>제품명</TableHead>
+                <TableHead className="w-[150px]">판매자 상품코드</TableHead>
                 <TableHead className="w-[120px]">판매가</TableHead>
                 <TableHead className="w-[80px]">재고</TableHead>
                 <TableHead className="w-[100px]">상태</TableHead>
@@ -372,7 +397,17 @@ export default function NaverProducts() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {products.map((product: NaverProduct) => (
+              {products
+                .filter((product: NaverProduct) => {
+                  if (!statusFilter) return true;
+                  if (statusFilter === "SALE") return product.product_status === "SALE";
+                  if (statusFilter === "OUT_OF_STOCK") {
+                    // 품절 옵션이 있는 제품만
+                    return product.options?.some((o: NaverProductOption) => o.stock_quantity <= 0);
+                  }
+                  return true;
+                })
+                .map((product: NaverProduct) => (
                 <>
                   {/* 메인 제품 행 */}
                   <TableRow 
@@ -406,6 +441,11 @@ export default function NaverProducts() {
                         #{product.origin_product_no}
                       </div>
                     </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-sm">
+                        {product.seller_management_code || "-"}
+                      </span>
+                    </TableCell>
                     <TableCell>{formatPrice(product.sale_price)}</TableCell>
                     <TableCell>
                       <span className={product.stock_quantity <= 0 ? "text-red-500 font-bold" : ""}>
@@ -425,7 +465,7 @@ export default function NaverProducts() {
                   {/* 옵션 아코디언 */}
                   {expandedProducts.has(product.origin_product_no) && product.options && product.options.length > 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="bg-muted/30 p-0">
+                      <TableCell colSpan={8} className="bg-muted/30 p-0">
                         <div className="p-4">
                           <Table>
                             <TableHeader>
@@ -491,10 +531,17 @@ export default function NaverProducts() {
                   )}
                 </>
               ))}
-              {products.length === 0 && (
+              {products.filter((product: NaverProduct) => {
+                if (!statusFilter) return true;
+                if (statusFilter === "SALE") return product.product_status === "SALE";
+                if (statusFilter === "OUT_OF_STOCK") return product.options?.some((o: NaverProductOption) => o.stock_quantity <= 0);
+                return true;
+              }).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    제품이 없습니다. "제품 동기화" 버튼을 클릭해 스마트스토어에서 제품을 가져오세요.
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    {statusFilter 
+                      ? "해당 조건의 제품이 없습니다." 
+                      : "제품이 없습니다. \"제품 동기화\" 버튼을 클릭해 스마트스토어에서 제품을 가져오세요."}
                   </TableCell>
                 </TableRow>
               )}
