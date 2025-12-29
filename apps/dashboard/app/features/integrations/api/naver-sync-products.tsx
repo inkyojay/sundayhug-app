@@ -164,14 +164,17 @@ async function handleProductSync(): Promise<SyncResult> {
         continue;
       }
 
-      const originProduct = detailResult.product as any;
+      // API 응답 구조: { groupProduct: {...}, originProduct: {...} }
+      // originProduct 안에 detailAttribute.optionInfo가 있음
+      const responseData = detailResult.product as any;
+      const originProduct = responseData.originProduct || responseData;
       
-      // #region agent log H1-H4: API 응답 구조 확인
-      fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver-sync-products.tsx:L127',message:'원상품 API 응답 구조',data:{originProductNo,topLevelKeys:Object.keys(originProduct||{}),hasDetailAttribute:!!originProduct?.detailAttribute,detailAttrKeys:Object.keys(originProduct?.detailAttribute||{}),hasOptionInfo:!!originProduct?.detailAttribute?.optionInfo,optionInfoKeys:Object.keys(originProduct?.detailAttribute?.optionInfo||{}),optionCombLen:(originProduct?.detailAttribute?.optionInfo?.optionCombinations||[]).length,optionStdLen:(originProduct?.detailAttribute?.optionInfo?.optionStandards||[]).length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H4'})}).catch(()=>{});
+      // #region agent log H1-H4: API 응답 구조 확인 (수정됨)
+      fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver-sync-products.tsx:L127',message:'원상품 API 응답 구조 (FIX)',data:{originProductNo,hasGroupProduct:!!responseData?.groupProduct,hasOriginProduct:!!responseData?.originProduct,originProductKeys:Object.keys(originProduct||{}).slice(0,10),hasDetailAttribute:!!originProduct?.detailAttribute,optionInfoKeys:Object.keys(originProduct?.detailAttribute?.optionInfo||{}),optionCombLen:(originProduct?.detailAttribute?.optionInfo?.optionCombinations||[]).length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H1-FIX'})}).catch(()=>{});
       // #endregion
       
       // 옵션 정보 추출 (optionCombinations 또는 optionStandards)
-      const optionInfo = originProduct.detailAttribute?.optionInfo;
+      const optionInfo = originProduct?.detailAttribute?.optionInfo;
       const optionCombinations = optionInfo?.optionCombinations || [];
       const optionStandards = optionInfo?.optionStandards || [];
       
