@@ -765,8 +765,28 @@ export async function getProductListDetailed(params: GetProductsParams = {}): Pr
 
   console.log(`📦 네이버 상품 목록 조회: POST /external/v1/products/search`, searchBody);
 
+  // API 응답 구조: { contents: [{ originProductNo, channelProducts: [...] }] }
+  interface SearchResponseItem {
+    originProductNo: number;
+    groupProductNo?: number;
+    channelProducts: Array<{
+      originProductNo: number;
+      channelProductNo: number;
+      channelServiceType: string;
+      categoryId?: string;
+      name: string;
+      sellerManagementCode?: string;
+      statusType: string;
+      channelProductDisplayStatusType: string;
+      salePrice: number;
+      discountedPrice?: number;
+      stockQuantity: number;
+      representativeImage?: { url: string };
+    }>;
+  }
+
   const result = await naverFetch<{ 
-    contents: NaverProductDetailed[]; 
+    contents: SearchResponseItem[]; 
     totalElements: number;
     totalPages: number;
   }>(
@@ -778,17 +798,43 @@ export async function getProductListDetailed(params: GetProductsParams = {}): Pr
   );
 
   // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver.server.ts:getProductListDetailed:result',message:'상품 목록 조회 결과',data:{success:result.success,error:result.error,productsCount:result.data?.contents?.length||0,totalElements:result.data?.totalElements||0},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'H3'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver.server.ts:getProductListDetailed:result',message:'상품 목록 조회 결과',data:{success:result.success,error:result.error,contentsCount:result.data?.contents?.length||0,totalElements:result.data?.totalElements||0,firstItem:result.data?.contents?.[0]},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v3',hypothesisId:'H4'})}).catch(()=>{});
   // #endregion
 
   if (!result.success) {
     return { success: false, error: result.error };
   }
 
+  // contents[].channelProducts[]를 플랫하게 변환
+  const flatProducts: NaverProductDetailed[] = [];
+  
+  for (const item of result.data?.contents || []) {
+    const channelProducts = item.channelProducts || [];
+    for (const cp of channelProducts) {
+      flatProducts.push({
+        originProductNo: item.originProductNo || cp.originProductNo,
+        channelProductNo: cp.channelProductNo,
+        name: cp.name,
+        salePrice: cp.salePrice || 0,
+        stockQuantity: cp.stockQuantity || 0,
+        productStatusType: cp.statusType,
+        channelProductDisplayStatusType: cp.channelProductDisplayStatusType,
+        representativeImage: cp.representativeImage,
+        detailAttribute: cp.categoryId ? {
+          naverShoppingSearchInfo: { categoryId: cp.categoryId }
+        } : undefined,
+      });
+    }
+  }
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver.server.ts:getProductListDetailed:flat',message:'플랫 변환 결과',data:{flatCount:flatProducts.length,firstFlat:flatProducts[0]},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v3',hypothesisId:'H4'})}).catch(()=>{});
+  // #endregion
+
   return {
     success: true,
-    products: result.data?.contents || [],
-    totalCount: result.data?.totalElements || 0,
+    products: flatProducts,
+    totalCount: result.data?.totalElements || flatProducts.length,
   };
 }
 
