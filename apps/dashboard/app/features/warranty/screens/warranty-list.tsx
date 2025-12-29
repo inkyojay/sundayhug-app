@@ -148,7 +148,18 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     try {
-      // adminClient 사용 (service_role key로 RLS bypass)
+      // 1. 먼저 관련 review_submissions 삭제 (외래키 제약조건)
+      const { error: reviewError } = await adminClient
+        .from("review_submissions")
+        .delete()
+        .in("warranty_id", ids);
+
+      if (reviewError) {
+        console.error("리뷰 삭제 오류:", reviewError);
+        // 리뷰가 없어도 에러는 무시하고 진행
+      }
+
+      // 2. adminClient 사용 (service_role key로 RLS bypass)
       const { error } = await adminClient
         .from("warranties")
         .delete()
