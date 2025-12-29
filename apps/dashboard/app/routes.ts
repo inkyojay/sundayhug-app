@@ -137,6 +137,9 @@ export default [
         // 카페24 제품 리스트
         route("/products-cafe24", "features/products-cafe24/screens/cafe24-products.tsx"),
         
+        // 네이버 스마트스토어 제품 리스트
+        route("/products-naver", "features/products-naver/screens/naver-products.tsx"),
+        
         // 재고 관리
         route("/inventory", "features/inventory/screens/inventory.tsx"),
         

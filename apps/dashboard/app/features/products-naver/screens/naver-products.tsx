@@ -1,14 +1,14 @@
 /**
- * 카페24 제품 리스트 페이지
+ * 네이버 스마트스토어 제품 리스트 페이지
  * 
- * - 제품 동기화 (Cafe24 API → DB)
- * - 메인 제품 + Variants 아코디언 표시
- * - Variant별 재고 수정 → Cafe24 API PUT
+ * - 제품 동기화 (네이버 API → DB)
+ * - 메인 제품 + 옵션 아코디언 표시
+ * - 옵션별 재고 수정 → 네이버 API PUT
  */
-import type { Route } from "./+types/cafe24-products";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 
 import { 
-  BoxIcon, 
+  StoreIcon, 
   RefreshCwIcon, 
   ChevronDownIcon,
   ChevronRightIcon,
@@ -19,7 +19,7 @@ import {
   EditIcon,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { useFetcher, useRevalidator } from "react-router";
+import { useFetcher, useRevalidator, useLoaderData } from "react-router";
 
 import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
@@ -51,87 +51,84 @@ import { Label } from "~/core/components/ui/label";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
-export const meta: Route.MetaFunction = () => {
-  return [{ title: `카페24 제품 리스트 | Sundayhug Admin` }];
+export const meta: MetaFunction = () => {
+  return [{ title: `스마트스토어 제품 리스트 | Sundayhug Admin` }];
 };
 
-interface Cafe24Product {
+interface NaverProduct {
   id: string;
-  product_no: number;
-  product_code: string;
+  origin_product_no: number;
+  channel_product_no: number | null;
   product_name: string;
-  price: number;
-  retail_price: number;
-  supply_price: number;
-  display: string;
-  selling: string;
-  detail_image: string | null;
-  list_image: string | null;
-  small_image: string | null;
-  category: string | null;
-  synced_at: string;
-  variants?: Cafe24Variant[];
-}
-
-interface Cafe24Variant {
-  id: string;
-  product_no: number;
-  variant_code: string;
-  options: { name: string; value: string }[];
-  sku: string | null;
-  additional_price: number;
+  sale_price: number;
   stock_quantity: number;
-  safety_stock: number;
-  display: string;
-  selling: string;
+  product_status: string | null;
+  channel_product_display_status: string | null;
+  represent_image: string | null;
+  synced_at: string;
+  options?: NaverProductOption[];
+}
+
+interface NaverProductOption {
+  id: string;
+  origin_product_no: number;
+  option_combination_id: number;
+  option_name1: string | null;
+  option_value1: string | null;
+  option_name2: string | null;
+  option_value2: string | null;
+  stock_quantity: number;
+  price: number;
+  seller_management_code: string | null;
+  use_yn: string;
   synced_at: string;
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
+export async function loader({ request }: LoaderFunctionArgs) {
   const [supabase] = makeServerClient(request);
   
   // 제품 목록 조회
   const { data: products, error: productsError } = await supabase
-    .from("cafe24_products")
+    .from("naver_products")
     .select("*")
     .order("updated_at", { ascending: false });
 
-  // Variants 조회
-  const { data: variants, error: variantsError } = await supabase
-    .from("cafe24_product_variants")
+  // 옵션 조회
+  const { data: options, error: optionsError } = await supabase
+    .from("naver_product_options")
     .select("*")
-    .order("variant_code", { ascending: true });
+    .order("option_combination_id", { ascending: true });
 
-  // 제품별로 Variants 그룹핑
-  const productsWithVariants = (products || []).map((product: Cafe24Product) => ({
+  // 제품별로 옵션 그룹핑
+  const productsWithOptions = (products || []).map((product: NaverProduct) => ({
     ...product,
-    variants: (variants || []).filter((v: Cafe24Variant) => v.product_no === product.product_no),
+    options: (options || []).filter((o: NaverProductOption) => o.origin_product_no === product.origin_product_no),
   }));
 
   // 통계 계산
   const stats = {
     total: products?.length || 0,
-    selling: products?.filter((p: Cafe24Product) => p.selling === "T").length || 0,
-    outOfStock: variants?.filter((v: Cafe24Variant) => v.stock_quantity <= 0).length || 0,
+    onSale: products?.filter((p: NaverProduct) => p.product_status === "SALE").length || 0,
+    outOfStock: options?.filter((o: NaverProductOption) => o.stock_quantity <= 0).length || 0,
     lastSyncedAt: products?.[0]?.synced_at || null,
   };
 
   return {
-    products: productsWithVariants,
+    products: productsWithOptions,
     stats,
-    error: productsError || variantsError,
+    error: productsError || optionsError,
   };
 }
 
-export default function Cafe24Products({ loaderData }: Route.ComponentProps) {
-  const { products, stats, error } = loaderData;
+export default function NaverProducts() {
+  const { products, stats, error } = useLoaderData<typeof loader>();
   
   const [expandedProducts, setExpandedProducts] = useState<Set<number>>(new Set());
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [inventoryModal, setInventoryModal] = useState<{
     open: boolean;
-    productNo: number;
-    variantCode: string;
+    originProductNo: number;
+    optionCombinationId: number;
     currentQuantity: number;
     productName: string;
     optionName: string;
@@ -182,12 +179,12 @@ export default function Cafe24Products({ loaderData }: Route.ComponentProps) {
     }
   }, [inventoryFetcher.data, inventoryFetcher.state, revalidator]);
 
-  const toggleProduct = (productNo: number) => {
+  const toggleProduct = (originProductNo: number) => {
     const newExpanded = new Set(expandedProducts);
-    if (newExpanded.has(productNo)) {
-      newExpanded.delete(productNo);
+    if (newExpanded.has(originProductNo)) {
+      newExpanded.delete(originProductNo);
     } else {
-      newExpanded.add(productNo);
+      newExpanded.add(originProductNo);
     }
     setExpandedProducts(newExpanded);
   };
@@ -195,21 +192,21 @@ export default function Cafe24Products({ loaderData }: Route.ComponentProps) {
   const handleSync = () => {
     syncFetcher.submit({}, { 
       method: "POST", 
-      action: "/api/integrations/cafe24/sync-products" 
+      action: "/api/integrations/naver/sync-products" 
     });
   };
 
   const openInventoryModal = (
-    productNo: number, 
-    variantCode: string, 
+    originProductNo: number, 
+    optionCombinationId: number, 
     currentQuantity: number,
     productName: string,
     optionName: string
   ) => {
     setInventoryModal({
       open: true,
-      productNo,
-      variantCode,
+      originProductNo,
+      optionCombinationId,
       currentQuantity,
       productName,
       optionName,
@@ -223,20 +220,26 @@ export default function Cafe24Products({ loaderData }: Route.ComponentProps) {
     inventoryFetcher.submit(
       {
         action: "update_inventory",
-        productNo: String(inventoryModal.productNo),
-        variantCode: inventoryModal.variantCode,
+        originProductNo: String(inventoryModal.originProductNo),
+        optionCombinationId: String(inventoryModal.optionCombinationId),
         quantity: newQuantity,
       },
       { 
         method: "POST", 
-        action: "/api/integrations/cafe24/sync-products" 
+        action: "/api/integrations/naver/sync-products" 
       }
     );
   };
 
-  const formatOptionName = (options: { name: string; value: string }[]) => {
-    if (!options || options.length === 0) return "기본";
-    return options.map(o => `${o.name}: ${o.value}`).join(", ");
+  const formatOptionName = (option: NaverProductOption) => {
+    const parts: string[] = [];
+    if (option.option_name1 && option.option_value1) {
+      parts.push(`${option.option_name1}: ${option.option_value1}`);
+    }
+    if (option.option_name2 && option.option_value2) {
+      parts.push(`${option.option_name2}: ${option.option_value2}`);
+    }
+    return parts.length > 0 ? parts.join(", ") : "기본";
   };
 
   const formatPrice = (price: number) => {
@@ -254,6 +257,21 @@ export default function Cafe24Products({ loaderData }: Route.ComponentProps) {
     });
   };
 
+  const getStatusBadge = (status: string | null) => {
+    switch (status) {
+      case "SALE":
+        return <Badge variant="default">판매중</Badge>;
+      case "SUSPENSION":
+        return <Badge variant="secondary">판매중지</Badge>;
+      case "WAIT":
+        return <Badge variant="outline">대기</Badge>;
+      case "CLOSE":
+        return <Badge variant="destructive">종료</Badge>;
+      default:
+        return <Badge variant="outline">{status || "알 수 없음"}</Badge>;
+    }
+  };
+
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
       {/* 동기화 결과 메시지 */}
@@ -267,11 +285,11 @@ export default function Cafe24Products({ loaderData }: Route.ComponentProps) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BoxIcon className="h-6 w-6" />
-            카페24 제품 리스트
+            <StoreIcon className="h-6 w-6 text-green-500" />
+            스마트스토어 제품 리스트
           </h1>
           <p className="text-muted-foreground">
-            Cafe24 쇼핑몰에서 동기화된 제품 목록
+            네이버 스마트스토어에서 동기화된 제품 목록
           </p>
         </div>
         <Button onClick={handleSync} disabled={syncing}>
@@ -297,7 +315,7 @@ export default function Cafe24Products({ loaderData }: Route.ComponentProps) {
             <CheckCircleIcon className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.selling}</div>
+            <div className="text-2xl font-bold text-green-600">{stats.onSale}</div>
           </CardContent>
         </Card>
         <Card>
@@ -337,7 +355,7 @@ export default function Cafe24Products({ loaderData }: Route.ComponentProps) {
         <CardHeader>
           <CardTitle>제품 목록</CardTitle>
           <CardDescription>
-            행을 클릭하면 옵션(Variants)을 확인할 수 있습니다
+            행을 클릭하면 옵션을 확인할 수 있습니다
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -348,30 +366,31 @@ export default function Cafe24Products({ loaderData }: Route.ComponentProps) {
                 <TableHead className="w-[80px]">이미지</TableHead>
                 <TableHead>제품명</TableHead>
                 <TableHead className="w-[120px]">판매가</TableHead>
-                <TableHead className="w-[80px]">상태</TableHead>
+                <TableHead className="w-[80px]">재고</TableHead>
+                <TableHead className="w-[100px]">상태</TableHead>
                 <TableHead className="w-[80px]">옵션 수</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {products.map((product: Cafe24Product) => (
+              {products.map((product: NaverProduct) => (
                 <>
                   {/* 메인 제품 행 */}
                   <TableRow 
-                    key={product.product_no}
+                    key={product.origin_product_no}
                     className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => toggleProduct(product.product_no)}
+                    onClick={() => toggleProduct(product.origin_product_no)}
                   >
                     <TableCell>
-                      {expandedProducts.has(product.product_no) ? (
+                      {expandedProducts.has(product.origin_product_no) ? (
                         <ChevronDownIcon className="h-4 w-4" />
                       ) : (
                         <ChevronRightIcon className="h-4 w-4" />
                       )}
                     </TableCell>
                     <TableCell>
-                      {product.list_image || product.small_image ? (
+                      {product.represent_image ? (
                         <img 
-                          src={product.list_image || product.small_image || ""} 
+                          src={product.represent_image} 
                           alt={product.product_name}
                           className="w-12 h-12 object-cover rounded"
                         />
@@ -384,65 +403,64 @@ export default function Cafe24Products({ loaderData }: Route.ComponentProps) {
                     <TableCell>
                       <div className="font-medium">{product.product_name}</div>
                       <div className="text-sm text-muted-foreground">
-                        {product.product_code}
+                        #{product.origin_product_no}
                       </div>
                     </TableCell>
-                    <TableCell>{formatPrice(product.price)}</TableCell>
+                    <TableCell>{formatPrice(product.sale_price)}</TableCell>
                     <TableCell>
-                      <Badge variant={product.selling === "T" ? "default" : "secondary"}>
-                        {product.selling === "T" ? "판매중" : "판매중지"}
-                      </Badge>
+                      <span className={product.stock_quantity <= 0 ? "text-red-500 font-bold" : ""}>
+                        {product.stock_quantity}개
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {getStatusBadge(product.product_status)}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">
-                        {product.variants?.length || 0}개
+                        {product.options?.length || 0}개
                       </Badge>
                     </TableCell>
                   </TableRow>
 
-                  {/* Variants 아코디언 */}
-                  {expandedProducts.has(product.product_no) && product.variants && product.variants.length > 0 && (
+                  {/* 옵션 아코디언 */}
+                  {expandedProducts.has(product.origin_product_no) && product.options && product.options.length > 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="bg-muted/30 p-0">
+                      <TableCell colSpan={7} className="bg-muted/30 p-0">
                         <div className="p-4">
                           <Table>
                             <TableHeader>
                               <TableRow>
                                 <TableHead>옵션</TableHead>
-                                <TableHead className="w-[150px]">SKU</TableHead>
-                                <TableHead className="w-[100px]">추가금액</TableHead>
+                                <TableHead className="w-[150px]">관리코드</TableHead>
+                                <TableHead className="w-[100px]">가격</TableHead>
                                 <TableHead className="w-[100px]">재고</TableHead>
-                                <TableHead className="w-[100px]">안전재고</TableHead>
-                                <TableHead className="w-[80px]">상태</TableHead>
+                                <TableHead className="w-[80px]">사용</TableHead>
                                 <TableHead className="w-[80px]">수정</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {product.variants.map((variant: Cafe24Variant) => (
-                                <TableRow key={variant.variant_code}>
+                              {product.options.map((option: NaverProductOption) => (
+                                <TableRow key={option.option_combination_id}>
                                   <TableCell className="font-medium">
-                                    {formatOptionName(variant.options)}
+                                    {formatOptionName(option)}
                                   </TableCell>
                                   <TableCell className="font-mono text-sm">
-                                    {variant.sku || "-"}
+                                    {option.seller_management_code || "-"}
                                   </TableCell>
                                   <TableCell>
-                                    {variant.additional_price > 0 
-                                      ? `+${formatPrice(variant.additional_price)}` 
-                                      : "-"}
+                                    {formatPrice(option.price)}
                                   </TableCell>
                                   <TableCell>
-                                    <span className={variant.stock_quantity <= 0 ? "text-red-500 font-bold" : ""}>
-                                      {variant.stock_quantity}개
+                                    <span className={option.stock_quantity <= 0 ? "text-red-500 font-bold" : ""}>
+                                      {option.stock_quantity}개
                                     </span>
                                   </TableCell>
-                                  <TableCell>{variant.safety_stock}개</TableCell>
                                   <TableCell>
                                     <Badge 
-                                      variant={variant.selling === "T" ? "default" : "secondary"}
+                                      variant={option.use_yn === "Y" ? "default" : "secondary"}
                                       className="text-xs"
                                     >
-                                      {variant.selling === "T" ? "판매" : "중지"}
+                                      {option.use_yn === "Y" ? "사용" : "미사용"}
                                     </Badge>
                                   </TableCell>
                                   <TableCell>
@@ -452,11 +470,11 @@ export default function Cafe24Products({ loaderData }: Route.ComponentProps) {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         openInventoryModal(
-                                          product.product_no,
-                                          variant.variant_code,
-                                          variant.stock_quantity,
+                                          product.origin_product_no,
+                                          option.option_combination_id,
+                                          option.stock_quantity,
                                           product.product_name,
-                                          formatOptionName(variant.options)
+                                          formatOptionName(option)
                                         );
                                       }}
                                     >
@@ -475,8 +493,8 @@ export default function Cafe24Products({ loaderData }: Route.ComponentProps) {
               ))}
               {products.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    제품이 없습니다. "제품 동기화" 버튼을 클릭해 Cafe24에서 제품을 가져오세요.
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    제품이 없습니다. "제품 동기화" 버튼을 클릭해 스마트스토어에서 제품을 가져오세요.
                   </TableCell>
                 </TableRow>
               )}
@@ -494,7 +512,7 @@ export default function Cafe24Products({ loaderData }: Route.ComponentProps) {
           <DialogHeader>
             <DialogTitle>재고 수량 수정</DialogTitle>
             <DialogDescription>
-              Cafe24에 재고 수량을 업데이트합니다.
+              네이버 스마트스토어에 재고 수량을 업데이트합니다.
             </DialogDescription>
           </DialogHeader>
           {inventoryModal && (

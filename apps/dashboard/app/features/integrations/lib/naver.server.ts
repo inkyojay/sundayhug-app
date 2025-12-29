@@ -62,6 +62,41 @@ export interface NaverProduct {
   saleEndDate: string;
 }
 
+export interface NaverProductDetailed {
+  originProductNo: number;
+  channelProductNo?: number;
+  name: string;
+  salePrice: number;
+  stockQuantity: number;
+  productStatusType: string;
+  channelProductDisplayStatusType?: string;
+  saleStartDate?: string;
+  saleEndDate?: string;
+  representativeImage?: {
+    url: string;
+  };
+  detailAttribute?: {
+    naverShoppingSearchInfo?: {
+      categoryId?: string;
+    };
+  };
+  optionInfo?: {
+    optionCombinations?: NaverProductOption[];
+  };
+}
+
+export interface NaverProductOption {
+  id: number;
+  optionName1?: string;
+  optionValue1?: string;
+  optionName2?: string;
+  optionValue2?: string;
+  stockQuantity: number;
+  price: number;
+  sellerManagerCode?: string;
+  usable: boolean;
+}
+
 export interface NaverClaim {
   productOrderId: string;
   claimType: string;
@@ -256,7 +291,7 @@ export async function getValidToken(accountId?: string): Promise<NaverToken | nu
   // 토큰이 없거나 만료되었으면 새로 발급
   if (!token || isTokenExpired(token)) {
     console.log("🔄 토큰 없거나 만료됨, 새로 발급 시도...");
-    token = await refreshNaverToken(token);
+    token = await refreshNaverToken(token ?? undefined);
   }
 
   return token;
@@ -697,6 +732,133 @@ export async function getProducts(params: GetProductsParams = {}): Promise<{
     products: result.data?.contents || [],
     count: result.data?.totalElements || 0,
   };
+}
+
+/**
+ * 상품 목록 상세 조회 (옵션 포함)
+ * GET /v1/products
+ * 참고: https://apicenter.commerce.naver.com/docs/commerce-api/current/read-channel-product-1-product
+ */
+export async function getProductListDetailed(params: GetProductsParams = {}): Promise<{
+  success: boolean;
+  products?: NaverProductDetailed[];
+  totalCount?: number;
+  error?: string;
+}> {
+  const queryParams = new URLSearchParams();
+  queryParams.set("page", String(params.page || 1));
+  queryParams.set("size", String(params.size || 100));
+  
+  if (params.productStatusType) {
+    queryParams.set("productStatusType", params.productStatusType);
+  }
+
+  console.log(`📦 네이버 상품 목록 조회: /external/v1/products?${queryParams.toString()}`);
+
+  const result = await naverFetch<{ 
+    contents: NaverProductDetailed[]; 
+    totalElements: number;
+    totalPages: number;
+  }>(
+    `/external/v1/products?${queryParams.toString()}`
+  );
+
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  return {
+    success: true,
+    products: result.data?.contents || [],
+    totalCount: result.data?.totalElements || 0,
+  };
+}
+
+/**
+ * 채널 상품 단건 조회 (상세 정보 + 옵션)
+ * GET /v2/products/channel-products/:channelProductNo
+ */
+export async function getChannelProduct(channelProductNo: number): Promise<{
+  success: boolean;
+  product?: NaverProductDetailed;
+  error?: string;
+}> {
+  const result = await naverFetch<NaverProductDetailed>(
+    `/external/v2/products/channel-products/${channelProductNo}`
+  );
+
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  return {
+    success: true,
+    product: result.data,
+  };
+}
+
+/**
+ * 원상품 조회 (옵션 정보 포함)
+ * GET /v2/products/origin-products/:originProductNo
+ */
+export async function getOriginProduct(originProductNo: number): Promise<{
+  success: boolean;
+  product?: NaverProductDetailed;
+  error?: string;
+}> {
+  const result = await naverFetch<NaverProductDetailed>(
+    `/external/v2/products/origin-products/${originProductNo}`
+  );
+
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  return {
+    success: true,
+    product: result.data,
+  };
+}
+
+/**
+ * 상품 옵션 재고/가격 변경
+ * PUT /v1/products/origin-products/:originProductNo/option-stock
+ * 참고: https://apicenter.commerce.naver.com/docs/commerce-api/current/update-options-product
+ */
+export async function updateProductOptionStock(
+  originProductNo: number,
+  options: {
+    optionCombinationId: number;
+    stockQuantity?: number;
+    price?: number;
+  }[]
+): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  const body = {
+    optionStockUpdateRequests: options.map(opt => ({
+      id: opt.optionCombinationId,
+      stockQuantity: opt.stockQuantity,
+      price: opt.price,
+    })),
+  };
+
+  console.log(`📦 네이버 옵션 재고 변경: originProductNo=${originProductNo}`, body);
+
+  const result = await naverFetch<any>(
+    `/external/v1/products/origin-products/${originProductNo}/option-stock`,
+    {
+      method: "PUT",
+      body,
+    }
+  );
+
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  return { success: true };
 }
 
 // ============================================================================

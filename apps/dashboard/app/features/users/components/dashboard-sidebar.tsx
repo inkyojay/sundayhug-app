@@ -152,6 +152,10 @@ const data = {
           url: "/dashboard/products-cafe24",
         },
         {
+          title: "스마트스토어 제품",
+          url: "/dashboard/products-naver",
+        },
+        {
           title: "재고 현황",
           url: "/dashboard/inventory",
         },
