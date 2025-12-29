@@ -148,6 +148,10 @@ const data = {
           url: "/dashboard/parent-products",
         },
         {
+          title: "카페24 제품",
+          url: "/dashboard/products-cafe24",
+        },
+        {
           title: "재고 현황",
           url: "/dashboard/inventory",
         },

@@ -80,6 +80,50 @@ export interface Cafe24Product {
   stock_quantity: number;
 }
 
+export interface Cafe24ProductDetailed {
+  product_no: number;
+  product_code: string;
+  product_name: string;
+  internal_product_name: string;
+  model_name: string;
+  price: string;
+  retail_price: string;
+  supply_price: string;
+  display: string;
+  selling: string;
+  product_condition: string;
+  product_used_month: number;
+  summary_description: string;
+  detail_image: string;
+  list_image: string;
+  tiny_image: string;
+  small_image: string;
+  category: {
+    category_no: number;
+    category_depth: number;
+  }[];
+  created_date: string;
+  updated_date: string;
+  variants?: Cafe24Variant[];
+}
+
+export interface Cafe24Variant {
+  variant_code: string;
+  options: {
+    name: string;
+    value: string;
+  }[];
+  display: string;
+  selling: string;
+  additional_amount: string;
+  quantity: number;
+  safety_inventory: number;
+  use_inventory: string;
+  important_inventory: string;
+  inventory_control_type: string;
+  custom_variant_code: string;
+}
+
 // ============================================================================
 // Token Management
 // ============================================================================
@@ -133,19 +177,19 @@ export async function refreshCafe24Token(token: Cafe24Token): Promise<Cafe24Toke
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 
   try {
-    const response = await fetch(tokenUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+  const response = await fetch(tokenUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
         "Authorization": `Basic ${credentials}`,
-      },
+    },
       body: new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: token.refresh_token,
       }),
-    });
+  });
 
-    if (!response.ok) {
+  if (!response.ok) {
       const errorData = await response.text();
       console.error("❌ 토큰 갱신 실패:", response.status, errorData);
       return null;
@@ -230,14 +274,14 @@ async function cafe24Fetch<T>(
   try {
     console.log(`🌐 Cafe24 API 요청: ${method} ${apiUrl}`);
     console.log(`🔑 토큰: ${token.access_token.slice(0, 10)}...`);
-    
+
     const response = await fetch(apiUrl, {
       method,
-      headers: {
+    headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token.access_token}`,
         "X-Cafe24-Api-Version": "2024-09-01",
-      },
+    },
       body: body ? JSON.stringify(body) : undefined,
     });
 
@@ -252,7 +296,7 @@ async function cafe24Fetch<T>(
       return { success: false, error: "API 응답 파싱 실패" };
     }
 
-    if (!response.ok) {
+  if (!response.ok) {
       console.error("❌ Cafe24 API 에러:", response.status, responseData);
       return { 
         success: false, 
@@ -311,7 +355,7 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
   }
   if (params.offset) {
     queryParams.set("offset", String(params.offset));
-  }
+}
 
   // embed로 상세 정보 포함
   queryParams.set("embed", "items,receivers");
@@ -414,6 +458,114 @@ export async function getProducts(params: GetProductsParams = {}): Promise<{
     success: true,
     products: result.data?.products || [],
     count: result.data?.count || 0,
+  };
+}
+
+/**
+ * 상품 상세 목록 조회 (Variants 포함)
+ * GET /admin/products (embed=variants)
+ */
+export async function getProductsDetailed(params: GetProductsParams = {}): Promise<{
+  success: boolean;
+  products?: Cafe24ProductDetailed[];
+  count?: number;
+  error?: string;
+}> {
+  const queryParams = new URLSearchParams();
+  
+  if (params.productNo?.length) {
+    queryParams.set("product_no", params.productNo.join(","));
+  }
+  if (params.productCode?.length) {
+    queryParams.set("product_code", params.productCode.join(","));
+  }
+  if (params.display) {
+    queryParams.set("display", params.display);
+  }
+  if (params.selling) {
+    queryParams.set("selling", params.selling);
+  }
+  if (params.limit) {
+    queryParams.set("limit", String(params.limit));
+  }
+  if (params.offset) {
+    queryParams.set("offset", String(params.offset));
+  }
+
+  // Variants 정보 포함
+  queryParams.set("embed", "variants");
+
+  const result = await cafe24Fetch<{ products: Cafe24ProductDetailed[] }>(
+    `/admin/products?${queryParams.toString()}`
+  );
+
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  return {
+    success: true,
+    products: result.data?.products || [],
+    count: result.data?.products?.length || 0,
+  };
+}
+
+/**
+ * 단일 상품 Variants 조회
+ * GET /admin/products/{product_no}/variants
+ */
+export async function getProductVariants(productNo: number): Promise<{
+  success: boolean;
+  variants?: Cafe24Variant[];
+  error?: string;
+}> {
+  const result = await cafe24Fetch<{ variants: Cafe24Variant[] }>(
+    `/admin/products/${productNo}/variants`
+  );
+
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  return {
+    success: true,
+    variants: result.data?.variants || [],
+  };
+}
+
+/**
+ * Variant 재고 수량 업데이트
+ * PUT /admin/products/{product_no}/variants/{variant_code}
+ */
+export async function updateVariantInventory(
+  productNo: number, 
+  variantCode: string, 
+  quantity: number
+): Promise<{
+  success: boolean;
+  variant?: Cafe24Variant;
+  error?: string;
+}> {
+  const result = await cafe24Fetch<{ variant: Cafe24Variant }>(
+    `/admin/products/${productNo}/variants/${variantCode}`,
+    {
+      method: "PUT",
+      body: {
+        shop_no: 1,
+        request: {
+          quantity: quantity,
+        },
+      },
+    }
+  );
+
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  return {
+    success: true,
+    variant: result.data?.variant,
   };
 }
 

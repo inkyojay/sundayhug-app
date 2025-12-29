@@ -293,12 +293,12 @@ function ReviewCard({
           <span className="text-white text-xs font-medium flex items-center gap-1.5">
             {isEventReview ? <Gift className="w-3 h-3" /> : <Star className="w-3 h-3" />}
             {isEventReview ? sub.event?.name || "이벤트" : "일반 후기"}
-          </span>
+            </span>
           <Badge className={`${status?.color} text-xs py-0`}>
             <StatusIcon className="w-3 h-3 mr-1" />
             {status?.label}
           </Badge>
-        </div>
+          </div>
         
         <div className="p-3">
           {/* 메인 정보 영역 */}
@@ -317,11 +317,11 @@ function ReviewCard({
                 {allImages.length > 1 && (
                   <span className="absolute -bottom-1 -right-1 bg-gray-900 text-white text-xs px-1.5 py-0.5 rounded-full">
                     +{allImages.length - 1}
-                  </span>
+            </span>
                 )}
               </button>
-            )}
-            
+        )}
+        
             {/* 정보 */}
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
@@ -336,13 +336,13 @@ function ReviewCard({
                     <span>{sub.buyer_name || profile?.name || "-"}</span>
                     <span>·</span>
                     <span>{sub.buyer_phone || profile?.phone || "-"}</span>
-                  </div>
-                  
+              </div>
+              
                   {/* 뱃지들 */}
                   <div className="flex flex-wrap items-center gap-1 mt-1.5">
                     <Badge className={`${typeConfig?.badge} text-xs py-0`}>
-                      {typeConfig?.name || sub.review_type}
-                    </Badge>
+                    {typeConfig?.name || sub.review_type}
+                  </Badge>
                     {hasWarranty && (
                       <Badge className={`text-xs py-0 ${warrantyApproved 
                         ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" 
@@ -354,12 +354,12 @@ function ReviewCard({
                     {isEventReview && sub.selected_gift && (
                       <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-xs py-0">
                         🎁 {sub.selected_gift.gift_name}
-                      </Badge>
-                    )}
+                    </Badge>
+                  )}
                   </div>
                 </div>
-              </div>
-              
+                </div>
+                
               {/* 액션 영역 */}
               <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-2">
@@ -385,29 +385,29 @@ function ReviewCard({
                 </div>
                 
                 {/* 승인/반려 버튼 */}
-                {sub.status === "pending" && (
+            {sub.status === "pending" && (
                   <div className="flex gap-1">
-                    <Button
-                      size="sm"
-                      onClick={() => onApprove(sub.id)}
+                <Button
+                  size="sm"
+                  onClick={() => onApprove(sub.id)}
                       className="h-7 px-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs"
-                      disabled={isProcessing}
-                    >
+                  disabled={isProcessing}
+                >
                       <CheckCircle className="w-3 h-3 mr-1" />
-                      승인
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onReject(sub.id)}
+                  승인
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onReject(sub.id)}
                       className="h-7 px-2 border-red-300 text-red-600 hover:bg-red-50 text-xs"
-                      disabled={isProcessing}
-                    >
+                  disabled={isProcessing}
+                >
                       <XCircle className="w-3 h-3 mr-1" />
-                      반려
-                    </Button>
-                  </div>
-                )}
+                  반려
+                </Button>
+              </div>
+            )}
               </div>
             </div>
           </div>
@@ -428,7 +428,7 @@ function ReviewCard({
                   <p className="text-gray-900 dark:text-white font-medium">{profile?.name || "-"}</p>
                   <p className="text-gray-600 dark:text-gray-400">{profile?.phone || "-"}</p>
                 </div>
-              </div>
+                  </div>
               
               {/* 보증서 정보 */}
               {hasWarranty && (
@@ -511,72 +511,72 @@ export default function AdminReviewListScreen() {
     <div className="flex flex-col h-full">
       {/* 고정 헤더 영역 */}
       <div className="sticky top-0 z-10 bg-background border-b">
-        {/* Header */}
+      {/* Header */}
         <div className="px-4 pt-4 pb-3">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                후기 인증 관리
-              </h1>
+          후기 인증 관리
+        </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                고객이 신청한 후기를 검토하고 승인/반려 처리합니다.
-              </p>
-            </div>
-            
+          고객이 신청한 후기를 검토하고 승인/반려 처리합니다.
+        </p>
+      </div>
+
             {/* 통계 요약 (작게) */}
             <div className="hidden md:flex items-center gap-3">
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 dark:bg-amber-900/30 rounded-full">
                 <Clock className="w-3.5 h-3.5 text-amber-600" />
                 <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">{counts.pending}</span>
-              </div>
+        </div>
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 rounded-full">
                 <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
                 <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">{counts.approved}</span>
-              </div>
+        </div>
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 dark:bg-red-900/30 rounded-full">
                 <XCircle className="w-3.5 h-3.5 text-red-600" />
                 <span className="text-sm font-semibold text-red-700 dark:text-red-400">{counts.rejected}</span>
-              </div>
-            </div>
-          </div>
         </div>
+        </div>
+        </div>
+      </div>
 
         {/* 필터 - 상단 고정 */}
         <div className="px-4 pb-3 flex items-center gap-3">
           <div className="flex gap-1">
-            {[
+          {[
               { value: "pending", label: "대기중", count: counts.pending, color: "amber" },
               { value: "approved", label: "승인됨", count: counts.approved, color: "emerald" },
               { value: "rejected", label: "반려됨", count: counts.rejected, color: "red" },
               { value: "all", label: "전체", count: counts.total, color: "gray" },
-            ].map((filter) => (
-              <a
-                key={filter.value}
-                href={`?status=${filter.value}`}
+          ].map((filter) => (
+            <a
+              key={filter.value}
+              href={`?status=${filter.value}`}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  statusFilter === filter.value
+                statusFilter === filter.value
                     ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm"
                     : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
-                }`}
-              >
-                {filter.label}
+              }`}
+            >
+              {filter.label}
                 <span className={`ml-1.5 text-xs ${statusFilter === filter.value ? "opacity-70" : "opacity-50"}`}>
                   {filter.count}
                 </span>
-              </a>
-            ))}
-          </div>
+            </a>
+          ))}
+        </div>
           
           <div className="flex-1" />
-          
-          <a 
-            href="?status=pending"
+        
+        <a 
+          href="?status=pending"
             className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            새로고침
-          </a>
-        </div>
+        >
+          <RefreshCw className="w-4 h-4" />
+          새로고침
+        </a>
+      </div>
         
         {/* 알림 */}
         {fetcherData?.success && (
