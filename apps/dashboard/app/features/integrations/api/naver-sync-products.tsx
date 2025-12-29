@@ -196,8 +196,7 @@ async function handleProductSync(): Promise<SyncResult> {
             option_value1: option.optionValue1 || null,
             option_name2: option.optionName2 || null,
             option_value2: option.optionValue2 || null,
-            option_name3: option.optionName3 || null,
-            option_name4: option.optionName4 || null,
+            // option_name3, option_name4는 테이블에 없으므로 제외
             stock_quantity: option.stockQuantity || 0,
             price: option.price || 0,
             seller_management_code: option.sellerManagerCode || null,
