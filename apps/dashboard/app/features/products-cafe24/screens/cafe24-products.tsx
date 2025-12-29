@@ -90,17 +90,28 @@ interface Cafe24Variant {
 export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
   
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'cafe24-products.tsx:loader',message:'Loader 시작',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H4'})}).catch(()=>{});
+  // #endregion
+
   // 제품 목록 조회
   const { data: products, error: productsError } = await supabase
     .from("cafe24_products")
     .select("*")
     .order("updated_at", { ascending: false });
 
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'cafe24-products.tsx:loader',message:'제품 조회 결과',data:{productsCount:products?.length,productsError:productsError?.message||productsError?.code||null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+  // #endregion
+
   // Variants 조회
   const { data: variants, error: variantsError } = await supabase
     .from("cafe24_product_variants")
     .select("*")
     .order("variant_code", { ascending: true });
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'cafe24-products.tsx:loader',message:'Variants 조회 결과',data:{variantsCount:variants?.length,variantsError:variantsError?.message||variantsError?.code||null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
 
   // 제품별로 Variants 그룹핑
   const productsWithVariants = (products || []).map((product: Cafe24Product) => ({
