@@ -466,11 +466,6 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
   console.log(`🔍 [DEBUG v4] 네이버 주문 조회 시작 - from/to ISO-8601(+09:00) 정규화`);
   console.log(`🧭 [DEBUG v4] rawFrom/rawTo: ${rawStart} ~ ${rawEnd}`);
   console.log(`📅 [DEBUG v4] from/to: ${startDate} ~ ${endDate}`);
-  // #region agent log
-  if (process.env.DEBUG_NDJSON_INGEST === "1") {
-    fetch("http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({location:"naver.server.ts:getOrders",message:"normalized from/to",data:{rawStart,rawEnd,startDate,endDate},timestamp:Date.now(),sessionId:"debug-session",runId:"pre-fix",hypothesisId:"H1"})}).catch(()=>{});
-  }
-  // #endregion
 
   const proxyUrl = getProxyUrl();
   const proxyApiKey = getProxyApiKey();
@@ -562,9 +557,6 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
       let windowIndex = 0;
       const windowTimesMs: number[] = [];
       const windowItemCounts: number[] = [];
-      // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({location:"naver.server.ts:getOrders",message:"windowed fetch start",data:{windowHours:24,from:startDate,to:endDate},timestamp:Date.now(),sessionId:"debug-session",runId:"pre-fix",hypothesisId:"H1"})}).catch(()=>{});
-      // #endregion
 
       while (cursor <= endMs) {
         const windowT0 = Date.now();
@@ -628,9 +620,6 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
         ? Math.round(windowTimesMs.reduce((a, b) => a + b, 0) / windowTimesMs.length)
         : 0;
       console.log(`✅ [DEBUG v4] 전체 주문 수(윈도우 합산): ${allOrders.length} (총 ${perfMs}ms)`);
-      // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({location:"naver.server.ts:getOrders",message:"windowed fetch done",data:{windows:windowTimesMs.length,totalOrders:allOrders.length,perfMs,maxWinMs,avgWinMs,itemsPerWindow:windowItemCounts.slice(0,10)},timestamp:Date.now(),sessionId:"debug-session",runId:"pre-fix",hypothesisId:"H1"})}).catch(()=>{});
-      // #endregion
       return { success: true, orders: allOrders, count: allOrders.length };
       
     } catch (error) {
@@ -759,9 +748,6 @@ export async function getProductListDetailed(params: GetProductsParams = {}): Pr
     searchBody.productStatusTypes = [params.productStatusType];
   }
 
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver.server.ts:getProductListDetailed',message:'상품 목록 조회 시작',data:{page,size,endpoint:'/external/v1/products/search',body:searchBody},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'H3'})}).catch(()=>{});
-  // #endregion
 
   console.log(`📦 네이버 상품 목록 조회: POST /external/v1/products/search`, searchBody);
 
@@ -797,9 +783,6 @@ export async function getProductListDetailed(params: GetProductsParams = {}): Pr
     }
   );
 
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver.server.ts:getProductListDetailed:result',message:'상품 목록 조회 결과',data:{success:result.success,error:result.error,contentsCount:result.data?.contents?.length||0,totalElements:result.data?.totalElements||0,firstItem:result.data?.contents?.[0]},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v3',hypothesisId:'H4'})}).catch(()=>{});
-  // #endregion
 
   if (!result.success) {
     return { success: false, error: result.error };
@@ -827,9 +810,6 @@ export async function getProductListDetailed(params: GetProductsParams = {}): Pr
     }
   }
 
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'naver.server.ts:getProductListDetailed:flat',message:'플랫 변환 결과',data:{flatCount:flatProducts.length,firstFlat:flatProducts[0]},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v3',hypothesisId:'H4'})}).catch(()=>{});
-  // #endregion
 
   return {
     success: true,
