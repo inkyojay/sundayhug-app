@@ -1,12 +1,12 @@
 /**
- * 고객 분석 대시보드
+ * 고객 분석 대시보드 (recharts 차트 포함)
  * 
- * Laplace Tech 스타일 고객 분석 기능
  * - 재구매율 / 재구매 횟수
  * - 교차 채널 구매 현황
  * - 고객별 LTV
  * - 평균 구매 주기
  * - 코호트 분석 (첫 구매월 기준)
+ * - 시각화 차트 (recharts)
  */
 import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 
@@ -18,10 +18,27 @@ import {
   CalendarIcon,
   ShoppingBagIcon,
   ArrowRightLeftIcon,
-  RefreshCwIcon,
+  FilterIcon,
 } from "lucide-react";
 import { useState } from "react";
-import { data, useLoaderData, useFetcher } from "react-router";
+import { data, useLoaderData } from "react-router";
+import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+  AreaChart,
+  Area,
+} from "recharts";
 
 import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
@@ -46,6 +63,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "~/core/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/core/components/ui/select";
 
 export const meta: MetaFunction = () => {
   return [{ title: "고객 분석 | 관리자 대시보드" }];
@@ -54,6 +78,15 @@ export const meta: MetaFunction = () => {
 export async function loader({ request }: LoaderFunctionArgs) {
   const { createAdminClient } = await import("~/core/lib/supa-admin.server");
   const adminClient = createAdminClient();
+
+  const url = new URL(request.url);
+  const period = url.searchParams.get("period") || "90"; // 기본 90일
+
+  // 기간 계산
+  const periodDays = parseInt(period);
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - periodDays);
+  const startDateStr = startDate.toISOString();
 
   // 1. 전체 고객 수
   const { count: totalCustomers } = await adminClient
@@ -139,13 +172,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // 최근 12개월만
   const sortedCohorts = Object.entries(cohortStats)
-    .sort((a, b) => b[0].localeCompare(a[0]))
-    .slice(0, 12)
+    .sort((a, b) => a[0].localeCompare(b[0])) // 오래된 것부터 (차트용)
+    .slice(-12)
     .map(([month, stats]) => ({
-      month,
+      month: month.slice(5), // MM만
+      fullMonth: month,
       total: stats.total,
       repeat: stats.repeat,
-      rate: stats.total > 0 ? (stats.repeat / stats.total * 100).toFixed(1) : "0",
+      rate: stats.total > 0 ? Math.round(stats.repeat / stats.total * 100) : 0,
     }));
 
   // 9. 평균 구매 주기 계산
@@ -168,6 +202,79 @@ export async function loader({ request }: LoaderFunctionArgs) {
   });
   const avgPurchaseCycle = cycleCount > 0 ? Math.round(totalDays / cycleCount) : 0;
 
+  // 10. LTV 분포 (구간별)
+  const ltvDistribution: Record<string, number> = {
+    "0-5만": 0,
+    "5-10만": 0,
+    "10-30만": 0,
+    "30-50만": 0,
+    "50-100만": 0,
+    "100만+": 0,
+  };
+  ltvData?.forEach((c) => {
+    const amount = c.total_amount || 0;
+    if (amount < 50000) ltvDistribution["0-5만"]++;
+    else if (amount < 100000) ltvDistribution["5-10만"]++;
+    else if (amount < 300000) ltvDistribution["10-30만"]++;
+    else if (amount < 500000) ltvDistribution["30-50만"]++;
+    else if (amount < 1000000) ltvDistribution["50-100만"]++;
+    else ltvDistribution["100만+"]++;
+  });
+
+  const ltvDistributionData = Object.entries(ltvDistribution).map(([range, count]) => ({
+    range,
+    count,
+  }));
+
+  // 11. 채널별 매출
+  const { data: channelRevenueData } = await adminClient
+    .from("customers")
+    .select("channels, total_amount");
+
+  const channelRevenue: Record<string, number> = {};
+  channelRevenueData?.forEach((c) => {
+    const amount = c.total_amount || 0;
+    const channels = c.channels || [];
+    // 채널이 하나면 해당 채널에 전액 할당, 여러개면 균등 분배
+    const perChannel = channels.length > 0 ? amount / channels.length : 0;
+    channels.forEach((ch: string) => {
+      channelRevenue[ch] = (channelRevenue[ch] || 0) + perChannel;
+    });
+  });
+
+  const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
+  const channelPieData = Object.entries(channelRevenue).map(([name, value], idx) => ({
+    name: name === "cafe24" ? "Cafe24" : name === "naver" ? "네이버" : name,
+    value: Math.round(value),
+    color: COLORS[idx % COLORS.length],
+  }));
+
+  // 12. 주문횟수 분포
+  const { data: orderCountData } = await adminClient
+    .from("customers")
+    .select("total_orders");
+
+  const orderDistribution: Record<string, number> = {
+    "1회": 0,
+    "2회": 0,
+    "3회": 0,
+    "4회": 0,
+    "5회+": 0,
+  };
+  orderCountData?.forEach((c) => {
+    const orders = c.total_orders || 0;
+    if (orders === 1) orderDistribution["1회"]++;
+    else if (orders === 2) orderDistribution["2회"]++;
+    else if (orders === 3) orderDistribution["3회"]++;
+    else if (orders === 4) orderDistribution["4회"]++;
+    else if (orders >= 5) orderDistribution["5회+"]++;
+  });
+
+  const orderDistributionData = Object.entries(orderDistribution).map(([orders, count]) => ({
+    orders,
+    count,
+  }));
+
   return data({
     summary: {
       totalCustomers: totalCustomers || 0,
@@ -183,6 +290,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
     channelStats,
     crossChannelCustomers: filteredCrossChannel,
     cohortStats: sortedCohorts,
+    ltvDistribution: ltvDistributionData,
+    channelPieData,
+    orderDistribution: orderDistributionData,
+    period,
   });
 }
 
@@ -201,16 +312,26 @@ function getChannelBadge(channel: string) {
   );
 }
 
+// 숫자 포맷
+const formatCurrency = (value: number) => {
+  if (value >= 1000000) {
+    return `${(value / 1000000).toFixed(1)}M`;
+  } else if (value >= 1000) {
+    return `${(value / 1000).toFixed(0)}K`;
+  }
+  return value.toLocaleString();
+};
+
 export default function CustomerAnalyticsPage() {
   const loaderData = useLoaderData<typeof loader>();
   const [activeTab, setActiveTab] = useState("overview");
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+    <div className="flex flex-1 flex-col gap-6 p-6">
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+          <h1 className="text-2xl font-bold flex items-center gap-2">
             <BarChart3Icon className="h-6 w-6 text-purple-500" />
             고객 분석
           </h1>
@@ -218,6 +339,22 @@ export default function CustomerAnalyticsPage() {
             교차 채널 재구매 분석 및 고객 LTV 추적
           </p>
         </div>
+        <Select 
+          value={loaderData.period} 
+          onValueChange={(v) => window.location.href = `/dashboard/customer-analytics?period=${v}`}
+        >
+          <SelectTrigger className="w-[150px]">
+            <FilterIcon className="h-4 w-4 mr-2" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7">최근 7일</SelectItem>
+            <SelectItem value="30">최근 30일</SelectItem>
+            <SelectItem value="90">최근 90일</SelectItem>
+            <SelectItem value="365">최근 1년</SelectItem>
+            <SelectItem value="9999">전체</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* 요약 카드 */}
@@ -238,7 +375,7 @@ export default function CustomerAnalyticsPage() {
             <RepeatIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{loaderData.summary.repeatRate}%</div>
+            <div className="text-2xl font-bold text-green-600">{loaderData.summary.repeatRate}%</div>
             <p className="text-xs text-muted-foreground">
               {loaderData.summary.repeatCustomers}명 / 2회 이상 구매
             </p>
@@ -250,7 +387,7 @@ export default function CustomerAnalyticsPage() {
             <ArrowRightLeftIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{loaderData.summary.crossChannelRate}%</div>
+            <div className="text-2xl font-bold text-purple-600">{loaderData.summary.crossChannelRate}%</div>
             <p className="text-xs text-muted-foreground">
               {loaderData.summary.crossChannelCustomers}명 / 2개+ 채널
             </p>
@@ -264,14 +401,160 @@ export default function CustomerAnalyticsPage() {
           <CardContent>
             <div className="text-2xl font-bold">₩{loaderData.summary.avgLTV.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              총 매출: ₩{loaderData.summary.totalRevenue.toLocaleString()}
+              총 매출: ₩{formatCurrency(loaderData.summary.totalRevenue)}
             </p>
           </CardContent>
         </Card>
       </div>
 
+      {/* 차트 영역 */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* 코호트 분석 차트 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>월별 재구매율 추이</CardTitle>
+            <CardDescription>첫 구매 월 기준 재구매 전환율</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              {loaderData.cohortStats.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={loaderData.cohortStats}>
+                    <defs>
+                      <linearGradient id="colorRate" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="month" className="text-xs" />
+                    <YAxis className="text-xs" unit="%" domain={[0, 100]} />
+                    <Tooltip 
+                      formatter={(value: number) => [`${value}%`, "재구매율"]}
+                      labelFormatter={(label) => `${label}월`}
+                      contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb" }}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="rate" 
+                      stroke="#8b5cf6" 
+                      strokeWidth={2}
+                      fillOpacity={1}
+                      fill="url(#colorRate)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  데이터가 없습니다
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 채널별 매출 파이 차트 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>채널별 매출 비중</CardTitle>
+            <CardDescription>고객 구매 채널 기준</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              {loaderData.channelPieData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={loaderData.channelPieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={90}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {loaderData.channelPieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value: number) => [`₩${formatCurrency(value)}`, ""]}
+                      contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb" }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  데이터가 없습니다
+                </div>
+              )}
+              <div className="flex flex-wrap justify-center gap-4 mt-4">
+                {loaderData.channelPieData.map((entry, index) => (
+                  <div key={index} className="flex items-center gap-2 text-sm">
+                    <div 
+                      className="w-3 h-3 rounded-full" 
+                      style={{ backgroundColor: entry.color }}
+                    />
+                    <span>{entry.name}</span>
+                    <span className="text-muted-foreground">₩{formatCurrency(entry.value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* LTV 분포 차트 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>LTV 분포</CardTitle>
+            <CardDescription>고객별 총 구매금액 분포</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={loaderData.ltvDistribution}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="range" className="text-xs" />
+                  <YAxis className="text-xs" />
+                  <Tooltip 
+                    formatter={(value: number) => [`${value}명`, "고객 수"]}
+                    contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb" }}
+                  />
+                  <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 주문횟수 분포 차트 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>주문횟수 분포</CardTitle>
+            <CardDescription>고객별 주문 횟수</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={loaderData.orderDistribution}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="orders" className="text-xs" />
+                  <YAxis className="text-xs" />
+                  <Tooltip 
+                    formatter={(value: number) => [`${value}명`, "고객 수"]}
+                    contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb" }}
+                  />
+                  <Bar dataKey="count" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* 추가 지표 */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">평균 구매 주기</CardTitle>
@@ -282,7 +565,7 @@ export default function CustomerAnalyticsPage() {
             <p className="text-xs text-muted-foreground">재구매 고객 기준</p>
           </CardContent>
         </Card>
-        {Object.entries(loaderData.channelStats).map(([channel, count]) => (
+        {Object.entries(loaderData.channelStats).slice(0, 3).map(([channel, count]) => (
           <Card key={channel}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{getChannelBadge(channel)}</CardTitle>
@@ -301,7 +584,7 @@ export default function CustomerAnalyticsPage() {
         <TabsList>
           <TabsTrigger value="overview">LTV 순위</TabsTrigger>
           <TabsTrigger value="cross-channel">교차 채널</TabsTrigger>
-          <TabsTrigger value="cohort">코호트 분석</TabsTrigger>
+          <TabsTrigger value="cohort">코호트 상세</TabsTrigger>
         </TabsList>
 
         {/* LTV 순위 */}
@@ -311,15 +594,15 @@ export default function CustomerAnalyticsPage() {
               <CardTitle>고객 LTV 순위 (Top 20)</CardTitle>
               <CardDescription>총 구매금액 기준 상위 고객</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>순위</TableHead>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="w-[60px]">순위</TableHead>
                     <TableHead>고객명</TableHead>
                     <TableHead>전화번호</TableHead>
-                    <TableHead>총 주문</TableHead>
-                    <TableHead>총 금액</TableHead>
+                    <TableHead className="text-right">총 주문</TableHead>
+                    <TableHead className="text-right">총 금액</TableHead>
                     <TableHead>채널</TableHead>
                     <TableHead>첫 구매</TableHead>
                     <TableHead>최근 구매</TableHead>
@@ -328,13 +611,17 @@ export default function CustomerAnalyticsPage() {
                 <TableBody>
                   {loaderData.topCustomers.map((customer: any, idx: number) => (
                     <TableRow key={customer.id}>
-                      <TableCell className="font-medium">{idx + 1}</TableCell>
-                      <TableCell>{customer.name}</TableCell>
+                      <TableCell>
+                        <Badge variant={idx < 3 ? "default" : "secondary"}>
+                          {idx + 1}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-medium">{customer.name}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {customer.phone?.replace(/(\d{3})(\d{4})(\d{4})/, "$1-****-$3")}
                       </TableCell>
-                      <TableCell>{customer.total_orders}회</TableCell>
-                      <TableCell className="font-medium">
+                      <TableCell className="text-right">{customer.total_orders}회</TableCell>
+                      <TableCell className="text-right font-medium">
                         ₩{(customer.total_amount || 0).toLocaleString()}
                       </TableCell>
                       <TableCell>
@@ -344,10 +631,10 @@ export default function CustomerAnalyticsPage() {
                           ))}
                         </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
+                      <TableCell className="text-muted-foreground text-sm">
                         {customer.first_order_date?.slice(0, 10)}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
+                      <TableCell className="text-muted-foreground text-sm">
                         {customer.last_order_date?.slice(0, 10)}
                       </TableCell>
                     </TableRow>
@@ -365,14 +652,14 @@ export default function CustomerAnalyticsPage() {
               <CardTitle>교차 채널 구매 고객</CardTitle>
               <CardDescription>2개 이상 채널에서 구매한 고객 (총 {loaderData.crossChannelCustomers.length}명)</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0">
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="bg-muted/50">
                     <TableHead>고객명</TableHead>
                     <TableHead>전화번호</TableHead>
-                    <TableHead>총 주문</TableHead>
-                    <TableHead>총 금액</TableHead>
+                    <TableHead className="text-right">총 주문</TableHead>
+                    <TableHead className="text-right">총 금액</TableHead>
                     <TableHead>구매 채널</TableHead>
                     <TableHead>첫 구매</TableHead>
                   </TableRow>
@@ -384,8 +671,8 @@ export default function CustomerAnalyticsPage() {
                       <TableCell className="text-muted-foreground">
                         {customer.phone?.replace(/(\d{3})(\d{4})(\d{4})/, "$1-****-$3")}
                       </TableCell>
-                      <TableCell>{customer.total_orders}회</TableCell>
-                      <TableCell className="font-medium">
+                      <TableCell className="text-right">{customer.total_orders}회</TableCell>
+                      <TableCell className="text-right font-medium">
                         ₩{(customer.total_amount || 0).toLocaleString()}
                       </TableCell>
                       <TableCell>
@@ -395,7 +682,7 @@ export default function CustomerAnalyticsPage() {
                           ))}
                         </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
+                      <TableCell className="text-muted-foreground text-sm">
                         {customer.first_order_date?.slice(0, 10)}
                       </TableCell>
                     </TableRow>
@@ -413,36 +700,36 @@ export default function CustomerAnalyticsPage() {
           </Card>
         </TabsContent>
 
-        {/* 코호트 분석 */}
+        {/* 코호트 상세 */}
         <TabsContent value="cohort">
           <Card>
             <CardHeader>
               <CardTitle>코호트 분석 (월별 재구매율)</CardTitle>
               <CardDescription>첫 구매월 기준 재구매 전환율 (최근 12개월)</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0">
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="bg-muted/50">
                     <TableHead>첫 구매월</TableHead>
-                    <TableHead>신규 고객</TableHead>
-                    <TableHead>재구매 고객</TableHead>
-                    <TableHead>재구매율</TableHead>
-                    <TableHead>시각화</TableHead>
+                    <TableHead className="text-right">신규 고객</TableHead>
+                    <TableHead className="text-right">재구매 고객</TableHead>
+                    <TableHead className="text-right">재구매율</TableHead>
+                    <TableHead className="w-[200px]">시각화</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loaderData.cohortStats.map((cohort: any) => (
-                    <TableRow key={cohort.month}>
-                      <TableCell className="font-medium">{cohort.month}</TableCell>
-                      <TableCell>{cohort.total}명</TableCell>
-                      <TableCell>{cohort.repeat}명</TableCell>
-                      <TableCell className="font-medium">{cohort.rate}%</TableCell>
+                  {loaderData.cohortStats.slice().reverse().map((cohort: any) => (
+                    <TableRow key={cohort.fullMonth}>
+                      <TableCell className="font-medium">{cohort.fullMonth}</TableCell>
+                      <TableCell className="text-right">{cohort.total}명</TableCell>
+                      <TableCell className="text-right">{cohort.repeat}명</TableCell>
+                      <TableCell className="text-right font-medium">{cohort.rate}%</TableCell>
                       <TableCell>
-                        <div className="w-32 h-3 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="w-full h-4 bg-muted rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-purple-500 rounded-full"
-                            style={{ width: `${Math.min(parseFloat(cohort.rate), 100)}%` }}
+                            className="h-full bg-purple-500 rounded-full transition-all"
+                            style={{ width: `${Math.min(cohort.rate, 100)}%` }}
                           />
                         </div>
                       </TableCell>
@@ -474,4 +761,3 @@ export default function CustomerAnalyticsPage() {
     </div>
   );
 }
-

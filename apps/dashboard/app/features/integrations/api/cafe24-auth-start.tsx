@@ -41,7 +41,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     "mall.read_shipping",
     "mall.read_analytics",
   ].join(" ");
-
+  
   // state 파라미터로 CSRF 방지 (간단히 타임스탬프 사용)
   const state = Buffer.from(JSON.stringify({
     timestamp: Date.now(),

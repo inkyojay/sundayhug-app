@@ -9,6 +9,287 @@
 
 ---
 
+## 2025-12-30 (월) - 네이버/카페24 제품 페이지 UI 개선
+
+### 요약
+- **기능**: 색상/사이즈 필터, 정렬, 옵션 유무 필터 추가
+- **UI 개선**: 단일 옵션 제품 화살표 숨김, 색상/사이즈 컬럼 추가
+- **버그 수정**: SelectItem 빈 문자열 에러, ColorBadge null 체크
+
+### 네이버/카페24 제품 페이지 공통 기능
+
+| 기능 | 설명 |
+|------|------|
+| **색상 필터** | SKU 매핑된 색상별 필터링 |
+| **사이즈 필터** | SKU 매핑된 사이즈별 필터링 |
+| **옵션 유무 필터** | 전체/다중 옵션/단일 상품 |
+| **정렬** | 제품명, 색상, 사이즈, 가격, 재고 기준 정렬 |
+| **단일 옵션 화살표 숨김** | 옵션 1개 이하면 아코디언 화살표 미표시 |
+| **색상/사이즈 컬럼** | 메인 테이블에 색상/사이즈 정보 표시 |
+
+### 정렬 옵션
+```
+최신순 / 제품명 ↑↓ / 색상 ↑↓ / 사이즈 ↑↓ / 가격 낮은순/높은순 / 재고 적은순/많은순
+```
+
+### ColorBadge 컴포넌트 개선
+- `colorName` prop에 `null`/`undefined` 체크 추가
+- `color` prop alias 추가 (호환성)
+- 값이 없으면 `null` 반환 (에러 방지)
+
+### 버그 수정
+
+1. **SelectItem 빈 문자열 에러**
+   - 원인: `<SelectItem value="">` 빈 문자열 허용 안됨
+   - 해결: `"__none__"` 값으로 변경, 내부적으로 빈 문자열 변환
+
+2. **availableColors/Sizes 빈 문자열**
+   - 원인: DB에서 빈 문자열 색상/사이즈가 포함됨
+   - 해결: `.filter((v) => v)` 추가하여 빈 값 제외
+
+3. **internalProducts SKU 빈 값**
+   - 원인: SKU가 없는 제품이 SelectItem에 포함
+   - 해결: `.filter((p) => p.sku)` 추가
+
+### 파일 변경
+```
+apps/dashboard/app/
+├── features/
+│   ├── products-naver/screens/
+│   │   └── naver-products.tsx        # 필터/정렬/화살표숨김 추가
+│   └── products-cafe24/screens/
+│       └── cafe24-products.tsx       # 필터/정렬/화살표숨김 추가
+└── core/components/ui/
+    └── color-badge.tsx               # null 체크, color alias 추가
+```
+
+---
+
+## 2025-12-30 (월) - 제품 관리 고급 기능 (정렬/그룹핑/일괄변경/CSV/원가/변경로그)
+
+### 요약
+- **기능**: 제품 목록 및 제품 분류 페이지에 고급 관리 기능 추가
+- **UI 개선**: Airtable 스타일 테이블, 인라인 편집, 색상 팔레트 자동 적용
+
+### DB 마이그레이션
+
+1. **products 테이블**
+   - `cost_price` (NUMERIC) - 제품 원가 컬럼 추가
+   - `thumbnail_url` (TEXT) - 썸네일 URL 컬럼 추가
+
+2. **parent_products 테이블**
+   - `thumbnail_url` (TEXT) - 썸네일 URL 컬럼 추가
+
+3. **product_change_logs 테이블** (신규)
+   ```sql
+   CREATE TABLE product_change_logs (
+     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+     table_name VARCHAR(50) NOT NULL,      -- 'products' 또는 'parent_products'
+     record_id UUID NOT NULL,
+     field_name VARCHAR(100) NOT NULL,
+     old_value TEXT,
+     new_value TEXT,
+     changed_by UUID REFERENCES auth.users(id),
+     changed_at TIMESTAMPTZ DEFAULT NOW(),
+     change_type VARCHAR(20) DEFAULT 'update'  -- 'update', 'create', 'delete', 'bulk_update'
+   );
+   ```
+
+### 제품 목록 (`/dashboard/products`) 기능
+
+| 기능 | 설명 |
+|------|------|
+| **정렬** | 제품명, SKU, 사이즈, 색상, 원가 컬럼 클릭 시 정렬 |
+| **그룹핑** | 분류별, 색상별, 사이즈별, 카테고리별 그룹화 |
+| **체크박스 일괄 변경** | 다중 선택 후 분류/색상/사이즈/원가/썸네일/상태 일괄 수정 |
+| **인라인 편집** | 연필 아이콘 클릭 시 행 단위 편집 |
+| **색상 자동 팔레트** | 색상명 분석하여 배경색 자동 지정 (50+ 색상 매핑) |
+| **색상/사이즈 직접 입력** | 기존 옵션 선택 또는 새 값 직접 입력 |
+| **원가 필드** | 제품별 원가 관리 |
+| **변경 확인 알람** | 저장 전 확인 다이얼로그 |
+| **변경 로그 기록** | 모든 변경사항 DB 기록 |
+| **CSV 다운로드** | 현재 목록 CSV 내보내기 |
+| **CSV 업로드 (Upsert)** | SKU 기준 업데이트/삽입 |
+| **페이지당 개수 선택** | 50/100/500/1000개씩 보기 |
+
+### 제품 분류 (`/dashboard/parent-products`) 기능
+
+| 기능 | 설명 |
+|------|------|
+| **하위 제품 상세 표시** | 펼침 시 색상/사이즈/썸네일 카드로 표시 |
+| **정렬** | SKU, 제품명, 카테고리 컬럼 클릭 시 정렬 |
+| **그룹핑** | 카테고리별, 서브카테고리별 그룹화 |
+| **체크박스 일괄 변경** | 다중 선택 후 카테고리/서브카테고리/썸네일/설명/상태 일괄 수정 |
+| **인라인 편집** | 연필 아이콘 클릭 시 행 단위 편집 |
+| **변경 확인 알람** | 저장 전 확인 다이얼로그 |
+| **변경 로그 기록** | 모든 변경사항 DB 기록 |
+| **CSV 다운로드** | 현재 목록 CSV 내보내기 |
+| **CSV 업로드 (Upsert)** | Parent SKU 기준 업데이트/삽입 |
+
+### 컬럼 순서 (제품 목록)
+```
+이미지 → 제품명 → SKU → 사이즈 → 색상 → 원가 → 분류 → 채널 → 상태 → 액션
+```
+
+### 색상 자동 팔레트 매핑 (예시)
+| 색상명 | 배경색 |
+|--------|--------|
+| 어스브라운 | #6B4423 |
+| 데일리크림 | #FFFDD0 |
+| 네이비 | #000080 |
+| 화이트 | #FFFFFF (테두리 추가) |
+
+### 파일 변경
+```
+apps/dashboard/app/
+├── features/
+│   ├── products/screens/
+│   │   └── products.tsx              # 제품 목록 (전면 개편)
+│   └── parent-products/screens/
+│       └── parent-products.tsx       # 제품 분류 (전면 개편)
+└── core/components/ui/
+    ├── alert-dialog.tsx              # 신규 - 확인 다이얼로그
+    └── switch.tsx                    # 신규 - 토글 스위치
+```
+
+### 버그 수정
+- 보증서 삭제 시 외래키 제약조건 오류 수정 (`review_submissions` 먼저 삭제)
+- 대시보드 다크모드 제거 (항상 라이트 모드)
+
+---
+
+## 2025-12-29 (일) - 후기 이벤트 참여 폼 설정 기능
+
+### 요약
+- **기능**: 이벤트별 참여 폼 설정 (유입 경로 질문, 보증서 연동 표시 여부)
+- **개선**: 관리자가 이벤트마다 다른 폼 항목을 설정 가능
+
+### 작업 내용
+
+1. **DB 마이그레이션**
+   - `review_events` 테이블에 3개 컬럼 추가:
+     - `show_referral_source` (BOOLEAN) - 유입 경로 질문 표시 여부
+     - `show_warranty_link` (BOOLEAN) - 보증서 연동 섹션 표시 여부
+     - `referral_source_options` (JSONB) - 유입 경로 보기 항목 배열
+
+2. **관리자 이벤트 폼 개선 (event-form.tsx)**
+   - "참여 폼 설정" 섹션 추가
+   - 유입 경로 질문 ON/OFF 체크박스
+   - 유입 경로 보기 항목 관리 (추가/삭제/순서 변경)
+   - 보증서 연동 섹션 ON/OFF 체크박스
+
+3. **파일 변경**
+   ```
+   apps/dashboard/app/features/review/screens/admin/
+   ├── event-form.tsx       # 참여 폼 설정 UI 추가
+   ├── event-list.tsx       # 참여자 관리 링크 항상 표시
+   └── event-submissions.tsx # profiles 조인 제거 (FK 없음 문제 해결)
+   ```
+
+### 기본 유입 경로 옵션
+```json
+["네이버 검색", "인스타그램 광고", "맘카페 내 추천", "주변 지인 추천", "기타"]
+```
+
+---
+
+## 2025-12-29 (일) - 네이버 스마트스토어 제품 동기화 완성
+
+### 요약
+- **기능**: 네이버 스마트스토어 제품 및 옵션 동기화 구현 완료
+- **최적화**: 504 Gateway Timeout 해결 (병렬 처리 + 배치 저장)
+
+### 작업 내용
+
+1. **제품 동기화 2단계 구현**
+   - **1단계**: 상품 목록 조회 (`POST /external/v1/products/search`)
+     - 기본 상품 정보 (이름, 가격, 재고, 판매자상품코드 등)
+     - 페이지네이션 처리 (100개씩)
+   - **2단계**: 원상품 상세 조회 (`GET /external/v2/products/origin-products/{originProductNo}`)
+     - 옵션 정보 추출 (`detailAttribute.optionInfo.optionCombinations`)
+     - 옵션별 재고, 가격, 판매자관리코드 저장
+
+2. **디버깅 및 수정**
+   - **API 응답 구조 수정**: 응답이 `{groupProduct, originProduct}` 형태인데 전체를 originProduct로 잘못 사용 → `response.originProduct`에서 추출하도록 수정
+   - **option_name3/4 컬럼 오류**: 테이블에 없는 컬럼 저장 시도 제거
+
+3. **성능 최적화 (504 Timeout 해결)**
+   - **병렬 처리**: 원상품 상세 조회를 순차 → **5개씩 병렬** 처리
+   - **배치 저장**: 개별 upsert → **배치 upsert** (제품 100개씩, 옵션 50개씩)
+   - **효과**: 160개 상품 동기화 시 160초+ → ~30초 수준으로 개선
+
+### DB 테이블
+```sql
+-- 네이버 제품 테이블 (이전에 생성됨)
+CREATE TABLE naver_products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  origin_product_no BIGINT NOT NULL UNIQUE,
+  channel_product_no BIGINT,
+  product_name TEXT NOT NULL,
+  seller_management_code TEXT,  -- 판매자 상품코드 (SKU 매핑용)
+  sale_price NUMERIC,
+  stock_quantity INTEGER,
+  product_status TEXT,
+  channel_product_display_status TEXT,
+  status_type TEXT,
+  sale_start_date TIMESTAMPTZ,
+  sale_end_date TIMESTAMPTZ,
+  represent_image TEXT,
+  category_id TEXT,
+  synced_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 네이버 제품 옵션 테이블
+CREATE TABLE naver_product_options (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  origin_product_no BIGINT NOT NULL,
+  option_combination_id BIGINT NOT NULL,
+  option_name1 TEXT,
+  option_value1 TEXT,
+  option_name2 TEXT,
+  option_value2 TEXT,
+  stock_quantity INTEGER,
+  price NUMERIC,
+  seller_management_code TEXT,  -- 옵션별 판매자관리코드
+  use_yn TEXT DEFAULT 'Y',
+  synced_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(origin_product_no, option_combination_id)
+);
+```
+
+### 변경 파일
+```
+apps/dashboard/app/features/
+├── integrations/
+│   ├── api/
+│   │   └── naver-sync-products.tsx   # 제품 동기화 (병렬+배치 최적화)
+│   └── lib/
+│       └── naver.server.ts           # getProductListDetailed, getOriginProduct 추가
+├── products-naver/
+│   └── screens/
+│       └── naver-products.tsx        # 스마트스토어 제품 UI
+└── users/components/
+    └── dashboard-sidebar.tsx         # "스마트스토어 제품" 메뉴 추가
+```
+
+### API 엔드포인트
+| 용도 | 메서드 | 엔드포인트 |
+|------|--------|-----------|
+| 상품 목록 조회 | POST | `/external/v1/products/search` |
+| 원상품 상세 조회 | GET | `/external/v2/products/origin-products/{originProductNo}` |
+| 옵션 재고 변경 | PUT | `/external/v1/products/origin-products/{originProductNo}/option-stock` |
+
+### 트러블슈팅
+- **`option_name3` 컬럼 없음 에러**: 테이블에 없는 컬럼 저장 시도 → 코드에서 해당 필드 제외
+- **API 응답 구조 불일치**: `detailResult.product`가 전체 응답(`{groupProduct, originProduct}`)인데 바로 사용 → `response.originProduct` 추출 후 사용
+- **504 Gateway Timeout**: Vercel 서버리스 60초 제한 초과 → 병렬 처리 + 배치 저장으로 해결
+
+---
+
 ## 2025-12-23 (월) - 네이버 스마트스토어 API 연동
 
 ### 작업 내용
@@ -99,6 +380,47 @@ naver-proxy/                             # Railway 프록시 서버
 - **`type` 에러**: `SELLER` → `SELF`로 변경 (내 쇼핑몰 전용)
 - **IP 에러**: Railway Pro 플랜 업그레이드 후 Static IP 활성화
 - **서명 에러**: HMAC-SHA256 → bcrypt로 변경
+
+---
+
+## 2025-12-24 (수) - 네이버 주문 동기화 안정화/성능 개선
+
+### 요약
+- **문제**: 네이버 주문 조회 API가 `from/to` 파라미터를 **ISO-8601(+09:00)** 형태로 요구하고, 또한 **from~to 최대 24시간 제한**이 있어 7일/30일 조회 시 400 오류/동기화 실패가 발생.
+- **해결**: 날짜 정규화 + 24시간 윈도우 분할 조회 + DB 저장/고객 매칭 로직 배치화로 **성공/성능을 동시에 개선**.
+
+### 해결 상세
+1. **날짜 포맷 정규화**
+   - UI에서 들어오는 `YYYY-MM-DD`를 네이버 요구 포맷으로 변환:
+     - `from`: `YYYY-MM-DDT00:00:00.000+09:00`
+     - `to`: `YYYY-MM-DDT23:59:59.999+09:00`
+
+2. **API 제약 대응: from~to 최대 24시간**
+   - 조회 기간을 **24시간 단위로 분할**해 순차 호출 후 결과를 합산.
+   - 참고 문서: https://apicenter.commerce.naver.com/docs/commerce-api/current/seller-get-product-orders-with-conditions-pay-order-seller
+
+3. **응답 구조 매핑**
+   - `data.contents[].content.order / content.productOrder` 구조를 파싱해 내부 `orders` 스키마에 맞게 매핑.
+
+4. **성능 개선 (가장 큰 효과)**
+   - 기존: 주문 1건당 `upsert + select + customer match + link` 반복 → 수십 초~수 분 소요
+   - 개선:
+     - 주문 저장: **batch upsert** (1회)
+     - 고객 매칭/연결: 고객(이름+전화) 단위로 **집계 후 batch insert/update** + `orders.customer_id`는 **update-only**로 연결
+   - 런타임 기준(예시): 78건 동기화 **~87초 → ~8~9초** 수준으로 개선
+
+5. **NOT NULL 제약 관련 오류 수정**
+   - `customers.phone` NOT NULL, `orders.sol_no` NOT NULL 등으로 인해 bulk 작업이 insert 경로로 떨어질 때 실패하던 케이스를 보완:
+     - customers upsert에 `name/phone/normalized_phone` 포함
+     - orders.customer_id 연결은 upsert 금지 → `update ... in(id)`로만 수행
+
+### 변경 파일
+```
+apps/dashboard/app/features/integrations/lib/naver.server.ts
+apps/dashboard/app/features/integrations/api/naver-sync-orders.tsx
+apps/dashboard/app/features/customer-analytics/lib/customer-matcher.server.ts
+naver-proxy/index.js
+```
 
 ---
 

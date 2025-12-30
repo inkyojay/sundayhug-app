@@ -262,18 +262,16 @@ export default function AdminEventListScreen() {
                   </div>
                 </div>
 
-                {/* 참여자 관리 링크 */}
-                {submissionCount > 0 && (
-                  <Link 
-                    to={`/dashboard/events/${event.id}/submissions`}
-                    className="block px-5 py-3 bg-gray-50 border-t border-gray-100 hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">참여자 관리</span>
-                      <ChevronRight className="w-4 h-4 text-gray-400" />
-                    </div>
-                  </Link>
-                )}
+                {/* 참여자 관리 링크 - 항상 표시 */}
+                <Link 
+                  to={`/dashboard/events/${event.id}/submissions`}
+                  className="block px-5 py-3 bg-gray-50 border-t border-gray-100 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">참여자 관리</span>
+                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                  </div>
+                </Link>
               </div>
             );
           })}

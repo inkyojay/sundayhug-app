@@ -151,6 +151,7 @@ app.post("/api/token", verifyApiKey, async (req, res) => {
 /**
  * 주문 조회 API (프록시)
  * GET /api/orders
+ * 문서: https://apicenter.commerce.naver.com/docs/commerce-api/current/seller-get-product-orders-with-conditions-pay-order-seller
  */
 app.get("/api/orders", verifyApiKey, async (req, res) => {
   try {
@@ -162,7 +163,8 @@ app.get("/api/orders", verifyApiKey, async (req, res) => {
     
     // 쿼리 파라미터 전달
     const queryString = new URLSearchParams(req.query).toString();
-    const url = `https://api.commerce.naver.com/external/v1/pay-order/seller/orders?${queryString}`;
+    // 올바른 엔드포인트: /external/v1/pay-order/seller/product-orders
+    const url = `https://api.commerce.naver.com/external/v1/pay-order/seller/product-orders?${queryString}`;
     
     console.log(`[주문 조회] URL: ${url}`);
     
@@ -174,7 +176,20 @@ app.get("/api/orders", verifyApiKey, async (req, res) => {
       },
     });
     
-    const data = await response.json();
+    const responseText = await response.text();
+    console.log(`[주문 조회] 응답 status: ${response.status}`);
+    console.log(`[주문 조회] 응답 body (처음 500자): ${responseText.slice(0, 500)}`);
+    
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error(`[주문 조회 JSON 파싱 실패] 원본: ${responseText.slice(0, 1000)}`);
+      return res.status(response.status || 500).json({ 
+        error: "JSON 파싱 실패",
+        rawResponse: responseText.slice(0, 500)
+      });
+    }
     
     if (!response.ok) {
       console.error(`[주문 조회 실패] ${response.status}`, data);
@@ -248,6 +263,7 @@ app.post("/api/proxy", verifyApiKey, async (req, res) => {
     const url = `https://api.commerce.naver.com${path}`;
     
     console.log(`[프록시] ${method} ${url}`);
+    console.log(`[프록시] headers:`, JSON.stringify(headers));
     
     const fetchOptions = {
       method,
@@ -262,7 +278,26 @@ app.post("/api/proxy", verifyApiKey, async (req, res) => {
     }
     
     const response = await fetch(url, fetchOptions);
-    const data = await response.json();
+    const responseText = await response.text();
+    
+    console.log(`[프록시] 응답 status: ${response.status}`);
+    console.log(`[프록시] 응답 contentType: ${response.headers.get('content-type')}`);
+    console.log(`[프록시] 응답 body (처음 500자): ${responseText.slice(0, 500)}`);
+    
+    // JSON 파싱 시도
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      // JSON 파싱 실패 - HTML 또는 다른 형식
+      console.error(`[프록시 JSON 파싱 실패] 원본 응답: ${responseText.slice(0, 1000)}`);
+      return res.status(response.status || 500).json({ 
+        error: "네이버 API가 JSON이 아닌 응답을 반환했습니다",
+        status: response.status,
+        contentType: response.headers.get('content-type'),
+        rawResponse: responseText.slice(0, 500)
+      });
+    }
     
     if (!response.ok) {
       console.error(`[프록시 실패] ${response.status}`, data);

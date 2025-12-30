@@ -62,19 +62,16 @@ export async function loader({ params }: Route.LoaderArgs) {
     .select("*")
     .eq("event_id", eventId);
 
-  // 참여자 목록
-  const { data: submissions } = await adminClient
+  // 참여자 목록 (profiles 조인 제거 - FK 없음)
+  const { data: submissions, error: subError } = await adminClient
     .from("review_submissions")
-    .select(`
-      *,
-      profiles:user_id (
-        name,
-        email,
-        phone
-      )
-    `)
+    .select("*")
     .eq("event_id", eventId)
     .order("created_at", { ascending: false });
+
+  if (subError) {
+    console.error("참여자 목록 조회 오류:", subError);
+  }
 
   // 통계
   const stats = {
@@ -409,7 +406,6 @@ export default function EventSubmissionsScreen() {
             const status = statusConfig[sub.status as keyof typeof statusConfig] || statusConfig.pending;
             const giftStatus = giftStatusConfig[sub.gift_status as keyof typeof giftStatusConfig] || giftStatusConfig.pending;
             const StatusIcon = status.icon;
-            const profile = sub.profiles;
             const product = products.find((p: any) => p.id === sub.event_product_id);
             const gift = gifts.find((g: any) => g.id === sub.selected_gift_id);
             
@@ -467,13 +463,13 @@ export default function EventSubmissionsScreen() {
                       <div className="flex items-center gap-2 text-sm">
                         <User className="w-4 h-4 text-gray-400" />
                         <span className="text-gray-600">
-                          {sub.shipping_name || profile?.name || sub.buyer_name || "-"}
+                          {sub.shipping_name || sub.buyer_name || "-"}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-sm">
                         <Phone className="w-4 h-4 text-gray-400" />
                         <span className="text-gray-600">
-                          {sub.shipping_phone || profile?.phone || sub.buyer_phone || "-"}
+                          {sub.shipping_phone || sub.buyer_phone || "-"}
                         </span>
                       </div>
                     </div>

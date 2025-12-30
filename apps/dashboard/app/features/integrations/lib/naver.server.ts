@@ -62,6 +62,42 @@ export interface NaverProduct {
   saleEndDate: string;
 }
 
+export interface NaverProductDetailed {
+  originProductNo: number;
+  channelProductNo?: number;
+  name: string;
+  salePrice: number;
+  stockQuantity: number;
+  productStatusType: string;
+  channelProductDisplayStatusType?: string;
+  sellerManagementCode?: string;  // 판매자 상품코드
+  saleStartDate?: string;
+  saleEndDate?: string;
+  representativeImage?: {
+    url: string;
+  };
+  detailAttribute?: {
+    naverShoppingSearchInfo?: {
+      categoryId?: string;
+    };
+  };
+  optionInfo?: {
+    optionCombinations?: NaverProductOption[];
+  };
+}
+
+export interface NaverProductOption {
+  id: number;
+  optionName1?: string;
+  optionValue1?: string;
+  optionName2?: string;
+  optionValue2?: string;
+  stockQuantity: number;
+  price: number;
+  sellerManagerCode?: string;
+  usable: boolean;
+}
+
 export interface NaverClaim {
   productOrderId: string;
   claimType: string;
@@ -256,7 +292,7 @@ export async function getValidToken(accountId?: string): Promise<NaverToken | nu
   // 토큰이 없거나 만료되었으면 새로 발급
   if (!token || isTokenExpired(token)) {
     console.log("🔄 토큰 없거나 만료됨, 새로 발급 시도...");
-    token = await refreshNaverToken(token);
+    token = await refreshNaverToken(token ?? undefined);
   }
 
   return token;
@@ -287,6 +323,9 @@ async function naverFetch<T>(
     return { success: false, error: "유효한 네이버 토큰이 없습니다. 연동을 다시 해주세요." };
   }
 
+  console.log(`🔑 [H2] 토큰 유효: ${token.access_token.slice(0, 20)}...`);
+  console.log(`🔗 [H2] 프록시 URL: ${proxyUrl || '없음 (직접 호출)'}`);
+
   try {
     let response: Response;
     
@@ -301,22 +340,29 @@ async function naverFetch<T>(
         headers["X-Proxy-Api-Key"] = proxyApiKey;
       }
       
+      const proxyBody = {
+        method,
+        path: endpoint,
+        headers: {
+          "Authorization": `${token.token_type} ${token.access_token}`,
+        },
+        body,
+      };
+      
+      console.log(`📤 [H2] 프록시 요청: POST ${proxyUrl}/api/proxy`);
+      console.log(`📤 [H2] 프록시 body: ${JSON.stringify(proxyBody)}`);
+      
       // 범용 프록시 API 사용
       response = await fetch(`${proxyUrl}/api/proxy`, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          method,
-          path: endpoint,
-          headers: {
-            "Authorization": `${token.token_type} ${token.access_token}`,
-          },
-          body,
-        }),
+        body: JSON.stringify(proxyBody),
       });
     } else {
       // 직접 호출
       const apiUrl = `${NAVER_API_BASE}${endpoint}`;
+      
+      console.log(`📤 [H2] 직접 호출: ${method} ${apiUrl}`);
       
       response = await fetch(apiUrl, {
         method,
@@ -328,7 +374,16 @@ async function naverFetch<T>(
       });
     }
 
-    const responseData = await response.json();
+    const responseText = await response.text();
+    console.log(`📥 [H2] 응답 (${response.status}): ${responseText.slice(0, 500)}`);
+
+    let responseData;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch {
+      console.error("❌ JSON 파싱 실패:", responseText);
+      return { success: false, error: "API 응답 파싱 실패" };
+    }
 
     if (!response.ok) {
       console.error("❌ 네이버 API 에러:", response.status, responseData);
@@ -358,7 +413,8 @@ export interface GetOrdersParams {
 
 /**
  * 주문 목록 조회
- * POST /external/v1/pay-order/seller/product-orders/last-changed-statuses
+ * 프록시 서버의 /api/orders 엔드포인트 사용 (이미 검증된 엔드포인트)
+ * 참고: https://apicenter.commerce.naver.com/docs/commerce-api/current/%EC%A3%BC%EB%AC%B8-%EC%A1%B0%ED%9A%8C
  */
 export async function getOrders(params: GetOrdersParams = {}): Promise<{
   success: boolean;
@@ -366,35 +422,234 @@ export async function getOrders(params: GetOrdersParams = {}): Promise<{
   count?: number;
   error?: string;
 }> {
-  // 기본값: 최근 7일
-  const endDate = params.orderDateTo || new Date().toISOString();
-  const startDate = params.orderDateFrom || (() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 7);
-    return d.toISOString();
-  })();
+  const perfStart = Date.now();
+  // 기본값: 최근 7일 (ISO-8601 +09:00 예시: 2024-06-07T19:00:00.000+09:00)
+  // 문서: https://apicenter.commerce.naver.com/docs/commerce-api/current/seller-get-product-orders-with-conditions-pay-order-seller
+  const toKSTString = (date: Date): string => {
+    const kstOffset = 9 * 60 * 60 * 1000; // +09:00 in ms
+    const kstDate = new Date(date.getTime() + kstOffset);
+    return kstDate.toISOString().replace("Z", "+09:00");
+  };
 
-  const result = await naverFetch<{ data: { lastChangeStatuses: NaverOrder[] } }>(
-    "/external/v1/pay-order/seller/product-orders/last-changed-statuses",
-    {
-      method: "POST",
-      body: {
-        lastChangedFrom: startDate,
-        lastChangedTo: endDate,
-        lastChangeType: "PAYED", // 결제 완료된 주문
-      },
+  const normalizeNaverDateTime = (input: string, role: "from" | "to"): string => {
+    // 1) UI에서 흔히 오는 YYYY-MM-DD → 문서 요구 date-time(+09:00)로 변환
+    if (/^\d{4}-\d{2}-\d{2}$/.test(input)) {
+      return role === "from"
+        ? `${input}T00:00:00.000+09:00`
+        : `${input}T23:59:59.999+09:00`;
     }
-  );
 
-  if (!result.success) {
-    return { success: false, error: result.error };
+    // 2) timezone 없는 date-time이면 +09:00를 붙임 (예: 2024-06-07T19:00:00.000)
+    if (/^\d{4}-\d{2}-\d{2}T/.test(input) && !/(Z|[+-]\d{2}:\d{2})$/.test(input)) {
+      return `${input}+09:00`;
+    }
+
+    // 3) Z 또는 offset 포함 ISO면 파싱 후 +09:00로 정규화
+    const d = new Date(input);
+    if (!Number.isNaN(d.getTime())) return toKSTString(d);
+
+    // 4) 최후: 그대로(서버가 추가 검증 로그로 잡도록)
+    return input;
+  };
+
+  const rawEnd = params.orderDateTo || toKSTString(new Date());
+  const rawStart =
+    params.orderDateFrom ||
+    (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      return toKSTString(d);
+    })();
+
+  const endDate = normalizeNaverDateTime(rawEnd, "to");
+  const startDate = normalizeNaverDateTime(rawStart, "from");
+
+  console.log(`🔍 [DEBUG v4] 네이버 주문 조회 시작 - from/to ISO-8601(+09:00) 정규화`);
+  console.log(`🧭 [DEBUG v4] rawFrom/rawTo: ${rawStart} ~ ${rawEnd}`);
+  console.log(`📅 [DEBUG v4] from/to: ${startDate} ~ ${endDate}`);
+
+  const proxyUrl = getProxyUrl();
+  const proxyApiKey = getProxyApiKey();
+  const token = await getValidToken();
+
+  if (!token) {
+    console.error(`❌ [DEBUG] 토큰 없음`);
+    return { success: false, error: "유효한 네이버 토큰이 없습니다" };
   }
 
-  return {
-    success: true,
-    orders: result.data?.data?.lastChangeStatuses || [],
-    count: result.data?.data?.lastChangeStatuses?.length || 0,
+  console.log(`🔑 [DEBUG] 토큰 유효: ${token.access_token.slice(0, 20)}...`);
+
+  const extractItems = (resp: any): any[] => {
+    if (Array.isArray(resp?.data?.contents)) return resp.data.contents;
+    if (Array.isArray(resp?.contents)) return resp.contents;
+    if (Array.isArray(resp?.data)) return resp.data;
+    if (Array.isArray(resp?.data?.data?.contents)) return resp.data.data.contents;
+    return [];
   };
+
+  const mapItemToNaverOrder = (item: any): NaverOrder => {
+    // 문서 응답 구조(조건형 상품 주문 상세 내역): { productOrderId, content: { order, productOrder, delivery? } }
+    const content = item?.content ?? item;
+    const order = content?.order ?? item?.order ?? {};
+    const productOrder = content?.productOrder ?? item?.productOrder ?? item ?? {};
+    const delivery = content?.delivery ?? productOrder?.delivery ?? {};
+    const shippingAddress = productOrder?.shippingAddress ?? {};
+
+    const baseAddress = shippingAddress?.baseAddress ?? "";
+    const detailedAddress = shippingAddress?.detailedAddress ?? "";
+    const receiverAddress = [baseAddress, detailedAddress].filter(Boolean).join(" ");
+
+    return {
+      productOrderId: item?.productOrderId ?? productOrder?.productOrderId ?? "",
+      orderId: order?.orderId ?? item?.orderId ?? productOrder?.orderId ?? "",
+      orderDate: order?.orderDate ?? item?.orderDate ?? productOrder?.placeOrderDate ?? "",
+      paymentDate: order?.paymentDate ?? item?.paymentDate ?? "",
+      orderStatus: order?.orderStatus ?? item?.orderStatus ?? "",
+      productOrderStatus: productOrder?.productOrderStatus ?? item?.productOrderStatus ?? "",
+      productId: String(productOrder?.productId ?? item?.productId ?? ""),
+      productName: productOrder?.productName ?? item?.productName ?? "",
+      productOption: productOrder?.productOption ?? item?.productOption ?? "",
+      quantity: Number(productOrder?.quantity ?? item?.quantity ?? 0),
+      unitPrice: Number(productOrder?.unitPrice ?? item?.unitPrice ?? 0),
+      totalProductAmount: Number(productOrder?.totalProductAmount ?? item?.totalProductAmount ?? 0),
+      deliveryFee: Number(productOrder?.deliveryFeeAmount ?? item?.deliveryFee ?? 0),
+      totalPaymentAmount: Number(productOrder?.totalPaymentAmount ?? item?.totalPaymentAmount ?? 0),
+      ordererName: order?.ordererName ?? item?.ordererName ?? "",
+      ordererTel: order?.ordererTel ?? item?.ordererTel ?? "",
+      receiverName: shippingAddress?.name ?? item?.receiverName ?? "",
+      receiverTel: shippingAddress?.tel1 ?? item?.receiverTel ?? "",
+      receiverAddress,
+      deliveryMemo: productOrder?.shippingMemo ?? item?.deliveryMemo ?? "",
+      trackingNumber: delivery?.trackingNumber ?? item?.trackingNumber ?? "",
+      deliveryCompanyCode: delivery?.deliveryCompany ?? item?.deliveryCompanyCode ?? "",
+    };
+  };
+
+  const parseIso = (s: string): Date | null => {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+
+  // 네이버 제약: from/to 최대 24시간 차이
+  const fromDate = parseIso(startDate);
+  const toDate = parseIso(endDate);
+  if (!fromDate || !toDate) {
+    console.error("❌ [DEBUG v4] from/to 파싱 실패", { startDate, endDate });
+    return { success: false, error: "from/to 날짜 파싱 실패" };
+  }
+
+  const MAX_WINDOW_MS = 24 * 60 * 60 * 1000;
+  const allOrders: NaverOrder[] = [];
+
+  // 프록시 서버가 있으면 /api/orders 사용 (이미 검증된 엔드포인트)
+  if (proxyUrl) {
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token.access_token}`,
+      };
+      
+      if (proxyApiKey) {
+        headers["X-Proxy-Api-Key"] = proxyApiKey;
+      }
+
+      let cursor = fromDate.getTime();
+      const endMs = toDate.getTime();
+      let windowIndex = 0;
+      const windowTimesMs: number[] = [];
+      const windowItemCounts: number[] = [];
+
+      while (cursor <= endMs) {
+        const windowT0 = Date.now();
+        const windowFrom = new Date(cursor);
+        const windowTo = new Date(Math.min(cursor + MAX_WINDOW_MS - 1, endMs));
+        const windowFromStr = toKSTString(windowFrom);
+        const windowToStr = toKSTString(windowTo);
+
+        const queryParams = new URLSearchParams();
+        queryParams.set("from", windowFromStr);
+        queryParams.set("to", windowToStr);
+
+        const ordersUrl = `${proxyUrl}/api/orders?${queryParams.toString()}`;
+        console.log(`🌐 [DEBUG v4] 윈도우 ${windowIndex}: ${windowFromStr} ~ ${windowToStr}`);
+        console.log(`🌐 [DEBUG v4] 프록시 /api/orders 호출: ${ordersUrl}`);
+
+        const response = await fetch(ordersUrl, { method: "GET", headers });
+        const responseText = await response.text();
+        console.log(`📥 [DEBUG v4] 응답 (${response.status}) head: ${responseText.slice(0, 300)}`);
+
+        let data: any;
+        try {
+          data = JSON.parse(responseText);
+        } catch {
+          console.error(`❌ [DEBUG v4] JSON 파싱 실패 head: ${responseText.slice(0, 300)}`);
+          return { success: false, error: "API 응답 파싱 실패" };
+        }
+
+        if (!response.ok) {
+          console.error(`❌ [DEBUG v4] API 에러: ${response.status}`, data);
+          return { success: false, error: data.message || `API 호출 실패 (${response.status})` };
+        }
+
+        const items = extractItems(data);
+        console.log(
+          `✅ [DEBUG v4] 윈도우 ${windowIndex} 아이템 수: ${items.length} (keys: ${Object.keys(data || {}).join(",")})`
+        );
+        windowTimesMs.push(Date.now() - windowT0);
+        windowItemCounts.push(items.length);
+
+        if (items.length > 0) {
+          // 첫 1개만 형태 확인 로그(PII/토큰 제외)
+          const sample = items[0];
+          console.log(
+            `🧩 [DEBUG v4] sample keys: ${Object.keys(sample || {}).slice(0, 30).join(",")}`
+          );
+        }
+
+        for (const it of items) {
+          allOrders.push(mapItemToNaverOrder(it));
+        }
+
+        // 다음 24시간 윈도우
+        cursor += MAX_WINDOW_MS;
+        windowIndex++;
+      }
+
+      const perfMs = Date.now() - perfStart;
+      const maxWinMs = windowTimesMs.length ? Math.max(...windowTimesMs) : 0;
+      const avgWinMs = windowTimesMs.length
+        ? Math.round(windowTimesMs.reduce((a, b) => a + b, 0) / windowTimesMs.length)
+        : 0;
+      console.log(`✅ [DEBUG v4] 전체 주문 수(윈도우 합산): ${allOrders.length} (총 ${perfMs}ms)`);
+      return { success: true, orders: allOrders, count: allOrders.length };
+      
+    } catch (error) {
+      console.error(`❌ [DEBUG] 요청 에러:`, error);
+      return { success: false, error: "API 호출 중 오류가 발생했습니다" };
+    }
+  }
+
+  // 직접 호출 (프록시 없이)
+  const queryParams = new URLSearchParams();
+  queryParams.set("lastChangedFrom", startDate);
+  queryParams.set("lastChangedTo", endDate);
+
+  const endpoint = `/external/v1/pay-order/seller/orders?${queryParams.toString()}`;
+  console.log(`🌐 [DEBUG] 직접 호출: GET ${endpoint}`);
+
+  const result = await naverFetch<{ data: NaverOrder[] }>(
+    endpoint,
+    { method: "GET" }
+  );
+
+  if (result.success) {
+    const orders = result.data?.data || [];
+    console.log(`✅ [DEBUG] 성공! 주문 수: ${orders.length}`);
+    return { success: true, orders: orders as NaverOrder[], count: orders.length };
+  }
+
+  console.log(`❌ [DEBUG] 실패: ${result.error}`);
+  return { success: false, error: result.error };
 }
 
 /**
@@ -467,6 +722,189 @@ export async function getProducts(params: GetProductsParams = {}): Promise<{
     products: result.data?.contents || [],
     count: result.data?.totalElements || 0,
   };
+}
+
+/**
+ * 상품 목록 조회
+ * POST /v1/products/search
+ * 참고: https://apicenter.commerce.naver.com/docs/commerce-api/current/상품-목록-조회
+ */
+export async function getProductListDetailed(params: GetProductsParams = {}): Promise<{
+  success: boolean;
+  products?: NaverProductDetailed[];
+  totalCount?: number;
+  error?: string;
+}> {
+  const page = params.page || 1;
+  const size = params.size || 100;
+
+  // 검색 조건 body
+  const searchBody: Record<string, any> = {
+    page,
+    size,
+  };
+
+  // 상품 상태 필터 (선택사항)
+  if (params.productStatusType) {
+    searchBody.productStatusTypes = [params.productStatusType];
+  }
+
+
+  console.log(`📦 네이버 상품 목록 조회: POST /external/v1/products/search`, searchBody);
+
+  // API 응답 구조: { contents: [{ originProductNo, channelProducts: [...] }] }
+  interface SearchResponseItem {
+    originProductNo: number;
+    groupProductNo?: number;
+    channelProducts: Array<{
+      originProductNo: number;
+      channelProductNo: number;
+      channelServiceType: string;
+      categoryId?: string;
+      name: string;
+      sellerManagementCode?: string;
+      statusType: string;
+      channelProductDisplayStatusType: string;
+      salePrice: number;
+      discountedPrice?: number;
+      stockQuantity: number;
+      representativeImage?: { url: string };
+    }>;
+  }
+
+  const result = await naverFetch<{ 
+    contents: SearchResponseItem[]; 
+    totalElements: number;
+    totalPages: number;
+  }>(
+    `/external/v1/products/search`,
+    {
+      method: "POST",
+      body: searchBody,
+    }
+  );
+
+
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  // contents[].channelProducts[]를 플랫하게 변환
+  const flatProducts: NaverProductDetailed[] = [];
+  
+  for (const item of result.data?.contents || []) {
+    const channelProducts = item.channelProducts || [];
+    for (const cp of channelProducts) {
+      flatProducts.push({
+        originProductNo: item.originProductNo || cp.originProductNo,
+        channelProductNo: cp.channelProductNo,
+        name: cp.name,
+        salePrice: cp.salePrice || 0,
+        stockQuantity: cp.stockQuantity || 0,
+        productStatusType: cp.statusType,
+        channelProductDisplayStatusType: cp.channelProductDisplayStatusType,
+        sellerManagementCode: cp.sellerManagementCode,  // 판매자 상품코드
+        representativeImage: cp.representativeImage,
+        detailAttribute: cp.categoryId ? {
+          naverShoppingSearchInfo: { categoryId: cp.categoryId }
+        } : undefined,
+      });
+    }
+  }
+
+
+  return {
+    success: true,
+    products: flatProducts,
+    totalCount: result.data?.totalElements || flatProducts.length,
+  };
+}
+
+/**
+ * 채널 상품 단건 조회 (상세 정보 + 옵션)
+ * GET /v2/products/channel-products/:channelProductNo
+ */
+export async function getChannelProduct(channelProductNo: number): Promise<{
+  success: boolean;
+  product?: NaverProductDetailed;
+  error?: string;
+}> {
+  const result = await naverFetch<NaverProductDetailed>(
+    `/external/v2/products/channel-products/${channelProductNo}`
+  );
+
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  return {
+    success: true,
+    product: result.data,
+  };
+}
+
+/**
+ * 원상품 조회 (옵션 정보 포함)
+ * GET /v2/products/origin-products/:originProductNo
+ */
+export async function getOriginProduct(originProductNo: number): Promise<{
+  success: boolean;
+  product?: NaverProductDetailed;
+  error?: string;
+}> {
+  const result = await naverFetch<NaverProductDetailed>(
+    `/external/v2/products/origin-products/${originProductNo}`
+  );
+
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  return {
+    success: true,
+    product: result.data,
+  };
+}
+
+/**
+ * 상품 옵션 재고/가격 변경
+ * PUT /v1/products/origin-products/:originProductNo/option-stock
+ * 참고: https://apicenter.commerce.naver.com/docs/commerce-api/current/update-options-product
+ */
+export async function updateProductOptionStock(
+  originProductNo: number,
+  options: {
+    optionCombinationId: number;
+    stockQuantity?: number;
+    price?: number;
+  }[]
+): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  const body = {
+    optionStockUpdateRequests: options.map(opt => ({
+      id: opt.optionCombinationId,
+      stockQuantity: opt.stockQuantity,
+      price: opt.price,
+    })),
+  };
+
+  console.log(`📦 네이버 옵션 재고 변경: originProductNo=${originProductNo}`, body);
+
+  const result = await naverFetch<any>(
+    `/external/v1/products/origin-products/${originProductNo}/option-stock`,
+    {
+      method: "PUT",
+      body,
+    }
+  );
+
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  return { success: true };
 }
 
 // ============================================================================

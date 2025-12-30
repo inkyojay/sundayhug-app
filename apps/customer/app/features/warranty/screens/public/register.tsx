@@ -248,12 +248,15 @@ export default function WarrantyRegister() {
         })(),
       });
 
-      if (!response.ok) {
-        throw new Error("업로드 실패");
+      const result = await response.json();
+      
+      if (!response.ok || result.error) {
+        // API에서 반환한 구체적인 에러 메시지 표시
+        setUploadError(result.error || "사진 업로드에 실패했습니다. 다시 시도해주세요.");
+        return;
       }
 
-      const { url } = await response.json();
-      setUploadedPhotoUrl(url);
+      setUploadedPhotoUrl(result.url);
 
       fetcher.submit(
         { 
@@ -261,13 +264,18 @@ export default function WarrantyRegister() {
           customerName: formData.customerName,
           phone: formData.phone,
           purchaseDate: formData.purchaseDate,
-          photoUrl: url,
+          photoUrl: result.url,
         },
         { method: "POST" }
       );
     } catch (error) {
       console.error("Upload error:", error);
-      setUploadError("사진 업로드에 실패했습니다. 다시 시도해주세요.");
+      // 네트워크 오류 등 fetch 자체 실패
+      if (error instanceof TypeError && error.message.includes("network")) {
+        setUploadError("네트워크 연결을 확인해주세요.");
+      } else {
+        setUploadError("사진 업로드에 실패했습니다. 다시 시도해주세요.");
+      }
     } finally {
       setIsUploading(false);
     }

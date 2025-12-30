@@ -57,6 +57,7 @@ export default [
       route("/auth/start", "features/integrations/api/cafe24-auth-start.tsx"),
       route("/auth/callback", "features/integrations/api/cafe24-auth-callback.tsx"),
       route("/sync-orders", "features/integrations/api/cafe24-sync-orders.tsx"),
+      route("/sync-products", "features/integrations/api/cafe24-sync-products.tsx"),
     ]),
     // 네이버 커머스 연동 API
     ...prefix("/integrations/naver", [
@@ -132,6 +133,12 @@ export default [
         
         // 제품 분류 (Parent SKU)
         route("/parent-products", "features/parent-products/screens/parent-products.tsx"),
+        
+        // 카페24 제품 리스트
+        route("/products-cafe24", "features/products-cafe24/screens/cafe24-products.tsx"),
+        
+        // 네이버 스마트스토어 제품 리스트
+        route("/products-naver", "features/products-naver/screens/naver-products.tsx"),
         
         // 재고 관리
         route("/inventory", "features/inventory/screens/inventory.tsx"),

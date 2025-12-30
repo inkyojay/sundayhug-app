@@ -29,8 +29,8 @@ export function meta(): Route.MetaDescriptors {
 export async function loader({ params }: Route.LoaderArgs) {
   const { id } = params;
   
-  // 새 이벤트 생성
-  if (id === "new") {
+  // 새 이벤트 생성 (id가 없거나 "new"인 경우)
+  if (!id || id === "new") {
     return data({ 
       event: null,
       products: [],
@@ -47,6 +47,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     .single();
 
   if (error || !event) {
+    console.error("이벤트 조회 오류:", error);
     throw redirect("/dashboard/events");
   }
 
@@ -79,6 +80,16 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   // 이벤트 저장
   if (actionType === "save_event") {
+    const referralOptionsStr = formData.get("referral_source_options") as string;
+    let referralOptions: string[] = ["네이버 검색", "인스타그램 광고", "맘카페 내 추천", "주변 지인 추천", "기타"];
+    try {
+      if (referralOptionsStr) {
+        referralOptions = JSON.parse(referralOptionsStr);
+      }
+    } catch (e) {
+      console.error("유입 경로 옵션 파싱 오류:", e);
+    }
+
     const eventData = {
       name: formData.get("name") as string,
       description: formData.get("description") as string,
@@ -88,9 +99,12 @@ export async function action({ request, params }: Route.ActionArgs) {
       reward_points: parseInt(formData.get("reward_points") as string) || 0,
       banner_image_url: formData.get("banner_image_url") as string || null,
       is_active: formData.get("is_active") === "true",
+      show_referral_source: formData.get("show_referral_source") === "true",
+      show_warranty_link: formData.get("show_warranty_link") === "true",
+      referral_source_options: referralOptions,
     };
 
-    if (id === "new") {
+    if (!id || id === "new") {
       const { data: newEvent, error } = await adminClient
         .from("review_events")
         .insert(eventData)
@@ -98,6 +112,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         .single();
 
       if (error) {
+        console.error("이벤트 생성 오류:", error);
         return { success: false, error: error.message };
       }
 
@@ -175,6 +190,12 @@ export default function AdminEventFormScreen() {
   const [rewardPoints, setRewardPoints] = useState(event?.reward_points || 0);
   const [bannerImageUrl, setBannerImageUrl] = useState(event?.banner_image_url || "");
   const [isActive, setIsActive] = useState(event?.is_active ?? true);
+  const [showReferralSource, setShowReferralSource] = useState(event?.show_referral_source ?? true);
+  const [showWarrantyLink, setShowWarrantyLink] = useState(event?.show_warranty_link ?? true);
+  const [referralSourceOptions, setReferralSourceOptions] = useState<string[]>(
+    event?.referral_source_options || ["네이버 검색", "인스타그램 광고", "맘카페 내 추천", "주변 지인 추천", "기타"]
+  );
+  const [newReferralOption, setNewReferralOption] = useState("");
 
   // 새 제품 입력
   const [newProductName, setNewProductName] = useState("");
@@ -201,9 +222,33 @@ export default function AdminEventFormScreen() {
         reward_points: rewardPoints.toString(),
         banner_image_url: bannerImageUrl,
         is_active: isActive.toString(),
+        show_referral_source: showReferralSource.toString(),
+        show_warranty_link: showWarrantyLink.toString(),
+        referral_source_options: JSON.stringify(referralSourceOptions),
       },
       { method: "POST" }
     );
+  };
+
+  const handleAddReferralOption = () => {
+    if (!newReferralOption.trim()) return;
+    if (referralSourceOptions.includes(newReferralOption.trim())) return;
+    setReferralSourceOptions([...referralSourceOptions, newReferralOption.trim()]);
+    setNewReferralOption("");
+  };
+
+  const handleRemoveReferralOption = (option: string) => {
+    setReferralSourceOptions(referralSourceOptions.filter((o) => o !== option));
+  };
+
+  const handleMoveReferralOption = (index: number, direction: "up" | "down") => {
+    if (direction === "up" && index === 0) return;
+    if (direction === "down" && index === referralSourceOptions.length - 1) return;
+    
+    const newOptions = [...referralSourceOptions];
+    const newIndex = direction === "up" ? index - 1 : index + 1;
+    [newOptions[index], newOptions[newIndex]] = [newOptions[newIndex], newOptions[index]];
+    setReferralSourceOptions(newOptions);
   };
 
   const handleAddProduct = () => {
@@ -384,6 +429,108 @@ export default function AdminEventFormScreen() {
             <Label htmlFor="isActive" className="cursor-pointer">
               이벤트 활성화 (고객에게 노출)
             </Label>
+          </div>
+        </div>
+
+        {/* 참여 폼 설정 */}
+        <div className="border-t border-gray-200 pt-4 mt-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">참여 폼 설정</h3>
+          <p className="text-xs text-gray-500 mb-4">고객 참여 시 표시할 항목을 선택하세요.</p>
+          
+          <div className="space-y-4">
+            {/* 유입 경로 설정 */}
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center gap-3 mb-3">
+                <input
+                  type="checkbox"
+                  id="showReferralSource"
+                  checked={showReferralSource}
+                  onChange={(e) => setShowReferralSource(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300"
+                />
+                <Label htmlFor="showReferralSource" className="cursor-pointer font-medium">
+                  유입 경로 질문 표시
+                </Label>
+              </div>
+              
+              {showReferralSource && (
+                <div className="ml-7 mt-3 space-y-3">
+                  <p className="text-xs text-gray-500">보기 항목 (드래그하여 순서 변경)</p>
+                  
+                  {/* 보기 항목 목록 */}
+                  <div className="space-y-2">
+                    {referralSourceOptions.map((option, index) => (
+                      <div key={index} className="flex items-center gap-2 bg-white p-2 rounded border border-gray-200">
+                        <div className="flex flex-col">
+                          <button
+                            type="button"
+                            onClick={() => handleMoveReferralOption(index, "up")}
+                            disabled={index === 0}
+                            className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-xs"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveReferralOption(index, "down")}
+                            disabled={index === referralSourceOptions.length - 1}
+                            className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-xs"
+                          >
+                            ▼
+                          </button>
+                        </div>
+                        <span className="flex-1 text-sm">{option}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveReferralOption(option)}
+                          className="text-red-400 hover:text-red-600 text-sm px-2"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 새 보기 추가 */}
+                  <div className="flex gap-2">
+                    <Input
+                      value={newReferralOption}
+                      onChange={(e) => setNewReferralOption(e.target.value)}
+                      placeholder="새 보기 항목 입력"
+                      className="flex-1"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddReferralOption();
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleAddReferralOption}
+                      disabled={!newReferralOption.trim()}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 보증서 연동 설정 */}
+            <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
+              <input
+                type="checkbox"
+                id="showWarrantyLink"
+                checked={showWarrantyLink}
+                onChange={(e) => setShowWarrantyLink(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300"
+              />
+              <Label htmlFor="showWarrantyLink" className="cursor-pointer">
+                보증서 연동 섹션 표시 <span className="text-gray-400 text-sm">(등록된 보증서 선택 또는 새 보증서 등록)</span>
+              </Label>
+            </div>
           </div>
         </div>
 

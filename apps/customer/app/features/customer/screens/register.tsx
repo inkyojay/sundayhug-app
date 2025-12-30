@@ -109,7 +109,7 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     console.log("[회원가입] signUp 시도:", { email, name, phone: normalizedPhone });
-    
+
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -133,7 +133,7 @@ export async function action({ request }: Route.ActionArgs) {
       }
       return data({ success: false, error: `회원가입 실패: ${authError.message}` });
     }
-    
+
     if (!authData.user) {
       console.error("[회원가입] user 객체 없음");
       return data({ success: false, error: "회원가입 처리 중 오류가 발생했습니다." });
@@ -145,12 +145,12 @@ export async function action({ request }: Route.ActionArgs) {
     const adminClient = (await import("~/core/lib/supa-admin-client.server")).default;
     
     const { error: profileError } = await adminClient
-      .from("profiles")
+        .from("profiles")
       .upsert({
         id: authData.user.id,
         email: email,
         name: name,
-        phone: normalizedPhone,
+          phone: normalizedPhone,
       }, { onConflict: "id" });
     
     if (profileError) {
@@ -519,21 +519,21 @@ export default function CustomerRegisterScreen() {
                 전화번호 *
               </Label>
               <div className="flex gap-2">
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="010-1234-5678"
-                  value={phoneNumber}
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="010-1234-5678"
+                value={phoneNumber}
                   onChange={(e) => {
                     setPhoneNumber(formatPhoneNumber(e.target.value));
                     setPhoneVerified(false);
                     setOtpSent(false);
                     setOtpCode("");
                   }}
-                  maxLength={13}
+                maxLength={13}
                   disabled={phoneVerified}
                   className="flex-1 h-14 rounded-2xl border-gray-200 bg-white px-4 text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35] disabled:bg-gray-100"
-                />
+              />
                 <Button
                   type="button"
                   onClick={handleSendOtp}

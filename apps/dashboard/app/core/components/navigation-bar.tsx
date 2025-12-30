@@ -9,7 +9,6 @@
 import { HomeIcon, LogOutIcon, MenuIcon } from "lucide-react";
 import { Link } from "react-router";
 
-import ThemeSwitcher from "./theme-switcher";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
 import {
@@ -95,14 +94,10 @@ function AuthButtons() {
 }
 
 /**
- * 액션 버튼들 (테마 전환만)
+ * 액션 버튼들 (대시보드는 다크모드 없음)
  */
 function Actions() {
-  return (
-    <>
-      <ThemeSwitcher />
-    </>
-  );
+  return null; // 테마 전환 버튼 제거
 }
 
 /**

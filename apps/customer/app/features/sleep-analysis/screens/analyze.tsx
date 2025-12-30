@@ -129,7 +129,7 @@ export default function AnalyzePage() {
       
       const storyCardUrl = responseData.data.storyCardUrl as string;
       const score = responseData.data.score as number;
-      
+        
       // 모달로 이미지 표시 (모바일에서 길게 눌러서 저장)
       setStoryCardData({ url: storyCardUrl, score });
       

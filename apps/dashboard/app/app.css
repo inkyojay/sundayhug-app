@@ -12,7 +12,8 @@
 
 html,
 body {
-  @apply dark:bg-background bg-white;
+  @apply bg-white;
+  /* 대시보드는 항상 라이트 모드 */
 }
 
 :root {
