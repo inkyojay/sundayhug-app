@@ -1,10 +1,9 @@
 /**
- * 주문 관리 - 주문 현황 (그룹핑 버전)
+ * 주문 관리 - PlayAuto 주문 (Airtable 스타일)
  * 
- * 개선사항:
- * - 주문번호(shop_ord_no) 기준으로 그룹핑
- * - 클릭하면 세부 품목 펼쳐짐
- * - 배치 동기화로 속도 향상
+ * - 테이블 스타일 UI
+ * - CSV 내보내기
+ * - 정렬/필터
  */
 import type { Route } from "./+types/orders";
 
@@ -24,6 +23,8 @@ import {
   UserIcon,
   MapPinIcon,
   PhoneIcon,
+  DownloadIcon,
+  ArrowUpDownIcon,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useFetcher, useRevalidator } from "react-router";
@@ -45,6 +46,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/core/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "~/core/components/ui/table";
 import {
   Collapsible,
   CollapsibleContent,
@@ -95,7 +104,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const statusFilter = url.searchParams.get("status") || "all";
   const shopFilter = url.searchParams.get("shop") || "all";
   const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = 100; // 그룹핑 전이라 넉넉히
+  const limitParam = url.searchParams.get("limit") || "50";
+  const limit = parseInt(limitParam);
   const offset = (page - 1) * limit;
 
   // 통계 데이터
@@ -193,7 +203,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const totalOrderGroups = uniqueOrderNos.size;
 
   // 페이지네이션 적용
-  query = query.range(offset, offset + limit - 1);
+  query = query.range(offset, offset + limit * 2 - 1); // 그룹핑 대비 넉넉히
 
   const { data: orders } = await query;
 
@@ -248,9 +258,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   );
 
   // 페이지네이션 (그룹 기준)
-  const groupsPerPage = 20;
-  const paginatedGroups = orderGroups.slice(0, groupsPerPage);
-  const totalPages = Math.ceil(totalOrderGroups / groupsPerPage);
+  const paginatedGroups = orderGroups.slice(0, limit);
+  const totalPages = Math.ceil(totalOrderGroups / limit);
 
   return {
     orderGroups: paginatedGroups,
@@ -258,6 +267,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     totalCount: totalOrderGroups,
     currentPage: page,
     totalPages,
+    limit,
     search,
     filters: { status: statusFilter, shop: shopFilter },
     shopOptions: shopStatsResult,
@@ -379,8 +389,42 @@ export async function action({ request }: Route.ActionArgs) {
   }
 }
 
+// 주문 상태별 배지 색상
+const getStatusBadge = (status: string) => {
+  const statusMap: Record<string, { label: string; className: string }> = {
+    "신규주문": { label: "신규", className: "bg-blue-100 text-blue-800" },
+    "상품준비중": { label: "준비중", className: "bg-yellow-100 text-yellow-800" },
+    "배송중": { label: "배송중", className: "bg-orange-100 text-orange-800" },
+    "배송완료": { label: "배송완료", className: "bg-green-100 text-green-800" },
+    "취소": { label: "취소", className: "bg-red-100 text-red-800" },
+    "반품": { label: "반품", className: "bg-red-100 text-red-800" },
+  };
+  const config = statusMap[status] || { label: status, className: "bg-gray-100 text-gray-800" };
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-medium ${config.className}`}>
+      {config.label}
+    </span>
+  );
+};
+
+// 판매채널별 배지 색상
+const getShopBadge = (shop: string) => {
+  const shopMap: Record<string, { className: string }> = {
+    "스마트스토어": { className: "bg-green-50 text-green-700 border border-green-200" },
+    "카페24(신)": { className: "bg-blue-50 text-blue-700 border border-blue-200" },
+    "카페24": { className: "bg-blue-50 text-blue-700 border border-blue-200" },
+    "쿠팡": { className: "bg-red-50 text-red-700 border border-red-200" },
+  };
+  const config = shopMap[shop] || { className: "bg-gray-50 text-gray-700" };
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-medium ${config.className}`}>
+      {shop}
+    </span>
+  );
+};
+
 export default function Orders({ loaderData }: Route.ComponentProps) {
-  const { orderGroups, stats, totalCount, currentPage, totalPages, search, filters, shopOptions } = loaderData;
+  const { orderGroups, stats, totalCount, currentPage, totalPages, limit, search, filters, shopOptions } = loaderData;
   const [searchInput, setSearchInput] = useState(search);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
@@ -422,11 +466,13 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
     const newStatus = overrides.status !== undefined ? overrides.status : filters.status;
     const newShop = overrides.shop !== undefined ? overrides.shop : filters.shop;
     const newPage = overrides.page !== undefined ? overrides.page : "1";
+    const newLimit = overrides.limit !== undefined ? overrides.limit : String(limit);
 
     if (newSearch) params.set("search", newSearch);
     if (newStatus && newStatus !== "all") params.set("status", newStatus);
     if (newShop && newShop !== "all") params.set("shop", newShop);
     if (newPage && newPage !== "1") params.set("page", newPage);
+    if (newLimit && newLimit !== "50") params.set("limit", newLimit);
     
     const queryString = params.toString();
     return `/dashboard/orders${queryString ? `?${queryString}` : ""}`;
@@ -444,13 +490,6 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
 
   const handleReset = () => {
     window.location.href = "/dashboard/orders";
-  };
-
-  const handleQuery = () => {
-    fetcher.submit(
-      { actionType: "query", startDate, endDate },
-      { method: "POST" }
-    );
   };
 
   const handleSync = () => {
@@ -479,41 +518,33 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
     });
   };
 
+  // CSV 내보내기
+  const handleExportCSV = () => {
+    const headers = ["주문번호", "채널", "상태", "주문자", "연락처", "주소", "금액", "수량", "주문일시", "송장번호", "택배사"];
+    const rows = orderGroups.map((o: OrderGroup) => [
+      o.shop_ord_no,
+      o.shop_name,
+      o.ord_status,
+      o.to_name,
+      o.to_tel || o.to_htel,
+      `${o.to_addr1 || ""} ${o.to_addr2 || ""}`.trim(),
+      o.pay_amt,
+      o.totalQty,
+      o.ord_time,
+      o.invoice_no || "",
+      o.carr_name || "",
+    ]);
+    
+    const csvContent = [headers.join(","), ...rows.map(r => r.map((v: any) => `"${v}"`).join(","))].join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `orders_playauto_${new Date().toISOString().split("T")[0]}.csv`;
+    link.click();
+  };
+
   const hasActiveFilters = search || filters.status !== "all" || filters.shop !== "all";
-
-  // 주문 상태별 배지 색상
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "신규주문":
-        return <Badge className="bg-blue-500">{status}</Badge>;
-      case "상품준비중":
-        return <Badge className="bg-yellow-500">{status}</Badge>;
-      case "배송중":
-        return <Badge className="bg-orange-500">{status}</Badge>;
-      case "배송완료":
-        return <Badge className="bg-green-500">{status}</Badge>;
-      case "취소":
-      case "반품":
-        return <Badge variant="destructive">{status}</Badge>;
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
-    }
-  };
-
-  // 판매채널별 배지 색상
-  const getShopBadge = (shop: string) => {
-    switch (shop) {
-      case "스마트스토어":
-        return <Badge variant="outline" className="border-green-500 text-green-500">{shop}</Badge>;
-      case "카페24(신)":
-      case "카페24":
-        return <Badge variant="outline" className="border-blue-500 text-blue-500">{shop}</Badge>;
-      case "쿠팡":
-        return <Badge variant="outline" className="border-red-500 text-red-500">{shop}</Badge>;
-      default:
-        return <Badge variant="outline">{shop}</Badge>;
-    }
-  };
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -530,9 +561,15 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <ShoppingCartIcon className="h-6 w-6" />
-              주문 관리
+              주문 관리 (PlayAuto)
             </h1>
-            <p className="text-muted-foreground">PlayAuto 주문 현황</p>
+            <p className="text-muted-foreground">PlayAuto 연동 주문 현황</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleExportCSV}>
+              <DownloadIcon className="h-4 w-4 mr-2" />
+              CSV
+            </Button>
           </div>
         </div>
         
@@ -564,24 +601,15 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
               </div>
               
               <div className="flex gap-2">
-                <Button variant="outline" onClick={handleQuery} disabled={isLoading}>
-                  <SearchIcon className={`h-4 w-4 mr-2 ${isLoading ? "animate-pulse" : ""}`} />
-                  {isLoading ? "조회 중..." : "주문 조회"}
-                </Button>
                 <Button onClick={handleSync} disabled={isLoading}>
                   <DatabaseIcon className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                   {isLoading ? "동기화 중..." : "PlayAuto 동기화"}
                 </Button>
                 <Button variant="secondary" onClick={handleCafe24Sync} disabled={isLoading}>
                   <RefreshCwIcon className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-                  {isLoading ? "동기화 중..." : "Cafe24 동기화"}
+                  Cafe24 동기화
                 </Button>
               </div>
-              
-              <p className="text-xs text-muted-foreground ml-auto">
-                <span className="font-medium">주문 조회</span>: DB 캐시에서 조회 | 
-                <span className="font-medium"> 동기화</span>: PlayAuto/Cafe24에서 가져오기
-              </p>
             </div>
           </CardContent>
         </Card>
@@ -699,6 +727,21 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
               </SelectContent>
             </Select>
 
+            {/* 페이지당 개수 */}
+            <Select 
+              value={String(limit)} 
+              onValueChange={(v) => window.location.href = buildUrl({ limit: v })}
+            >
+              <SelectTrigger className="w-[100px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[50, 100, 200, 500].map(n => (
+                  <SelectItem key={n} value={String(n)}>{n}개씩</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             {/* 필터 초기화 */}
             {hasActiveFilters && (
               <Button variant="outline" size="sm" onClick={handleReset}>
@@ -706,31 +749,10 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
               </Button>
             )}
           </div>
-
-          {/* 활성 필터 표시 */}
-          {hasActiveFilters && (
-            <div className="flex flex-wrap gap-2">
-              {search && (
-                <Badge variant="secondary" className="gap-1">
-                  검색: {search}
-                </Badge>
-              )}
-              {filters.status && filters.status !== "all" && (
-                <Badge variant="secondary" className="gap-1">
-                  상태: {filters.status}
-                </Badge>
-              )}
-              {filters.shop && filters.shop !== "all" && (
-                <Badge variant="secondary" className="gap-1">
-                  채널: {filters.shop}
-                </Badge>
-              )}
-            </div>
-          )}
         </CardContent>
       </Card>
 
-      {/* 주문 목록 (그룹핑) */}
+      {/* 주문 테이블 */}
       <Card>
         <CardHeader>
           <CardTitle>주문 목록</CardTitle>
@@ -738,137 +760,124 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
             {hasActiveFilters ? "필터링된 결과" : "전체 주문"} ({totalCount.toLocaleString()}건)
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {orderGroups.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              {hasActiveFilters ? "검색 결과가 없습니다" : "주문 데이터가 없습니다"}
-            </div>
-          ) : (
-            orderGroups.map((group) => (
-              <Collapsible 
-                key={group.shop_ord_no} 
-                open={expandedOrders.has(group.shop_ord_no)}
-                onOpenChange={() => toggleOrder(group.shop_ord_no)}
-              >
-                {/* 주문 요약 (헤더) */}
-                <CollapsibleTrigger asChild>
-                  <div className="w-full p-4 rounded-lg border bg-card hover:bg-muted/50 cursor-pointer transition-colors">
-                    <div className="flex items-center gap-4">
-                      {/* 펼침 아이콘 */}
-                      <div className="flex-shrink-0">
-                        {expandedOrders.has(group.shop_ord_no) ? (
-                          <ChevronDownIcon className="h-5 w-5 text-muted-foreground" />
-                        ) : (
-                          <ChevronRightIcon className="h-5 w-5 text-muted-foreground" />
-                        )}
-                      </div>
-                      
-                      {/* 주문 정보 */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-1">
-                          <span className="font-mono text-sm font-medium">
-                            {group.shop_ord_no}
-                          </span>
-                          {getStatusBadge(group.ord_status)}
-                          {getShopBadge(group.shop_name)}
-                          {group.itemCount > 1 && (
-                            <Badge variant="secondary" className="text-xs">
-                              {group.itemCount}개 품목
-                            </Badge>
-                          )}
-                        </div>
-                        
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <UserIcon className="h-3 w-3" />
-                            {group.to_name}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <PhoneIcon className="h-3 w-3" />
-                            {group.to_htel || group.to_tel}
-                          </span>
-                          <span>
-                            {new Date(group.ord_time).toLocaleDateString("ko-KR")}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* 금액 & 송장 */}
-                      <div className="text-right flex-shrink-0">
-                        <div className="font-bold">
-                          {group.pay_amt.toLocaleString()}원
-                        </div>
-                        {group.invoice_no && (
-                          <div className="text-xs text-muted-foreground">
-                            {group.carr_name}: {group.invoice_no}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </CollapsibleTrigger>
-                
-                {/* 세부 품목 (펼침) */}
-                <CollapsibleContent>
-                  <div className="ml-9 mt-2 space-y-2 pb-2">
-                    {/* 배송 정보 */}
-                    <div className="p-3 rounded-lg bg-muted/30 text-sm">
-                      <div className="flex items-start gap-2">
-                        <MapPinIcon className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                        <div>
-                          <span className="font-medium">{group.to_name}</span>
-                          <span className="mx-2 text-muted-foreground">|</span>
-                          <span>{group.to_htel || group.to_tel}</span>
-                          <div className="text-muted-foreground mt-1">
-                            {group.to_addr1} {group.to_addr2}
-                          </div>
-                          {group.ship_msg && (
-                            <div className="text-orange-500 mt-1">
-                              📝 {group.ship_msg}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 품목 목록 */}
-                    {group.items.map((item, idx) => (
-                      <div 
-                        key={item.id} 
-                        className="flex items-center gap-4 p-3 rounded-lg border bg-background"
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-[40px]"></TableHead>
+                  <TableHead className="w-[100px]">채널</TableHead>
+                  <TableHead>주문번호</TableHead>
+                  <TableHead>상태</TableHead>
+                  <TableHead>주문자</TableHead>
+                  <TableHead>연락처</TableHead>
+                  <TableHead className="text-right">금액</TableHead>
+                  <TableHead className="text-right">수량</TableHead>
+                  <TableHead>주문일시</TableHead>
+                  <TableHead>송장정보</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {orderGroups.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
+                      {hasActiveFilters ? "검색 결과가 없습니다" : "주문 데이터가 없습니다"}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  orderGroups.map((group) => (
+                    <>
+                      <TableRow 
+                        key={group.shop_ord_no}
+                        className="hover:bg-muted/50 cursor-pointer"
+                        onClick={() => toggleOrder(group.shop_ord_no)}
                       >
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm font-medium">
-                          {idx + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium truncate">
-                            {item.shop_sale_name}
-                          </div>
-                          {item.shop_opt_name && (
-                            <div className="text-sm text-muted-foreground truncate">
-                              옵션: {item.shop_opt_name}
-                            </div>
+                        <TableCell>
+                          {expandedOrders.has(group.shop_ord_no) ? (
+                            <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRightIcon className="h-4 w-4 text-muted-foreground" />
                           )}
-                        </div>
-                        <div className="text-center flex-shrink-0">
-                          <div className="font-bold">{item.sale_cnt}개</div>
-                        </div>
-                        <div className="text-right flex-shrink-0 w-24">
-                          <div className="font-medium">
-                            {(item.pay_amt || item.sales || 0).toLocaleString()}원
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            ))
-          )}
+                        </TableCell>
+                        <TableCell>{getShopBadge(group.shop_name)}</TableCell>
+                        <TableCell className="font-mono text-xs">{group.shop_ord_no}</TableCell>
+                        <TableCell>{getStatusBadge(group.ord_status)}</TableCell>
+                        <TableCell className="font-medium">{group.to_name}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {group.to_htel || group.to_tel}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          ₩{group.pay_amt.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {group.totalQty}개
+                          {group.itemCount > 1 && (
+                            <span className="text-muted-foreground text-xs ml-1">
+                              ({group.itemCount}품목)
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {new Date(group.ord_time).toLocaleDateString("ko-KR")}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {group.invoice_no ? `${group.carr_name || ""} ${group.invoice_no}` : "-"}
+                        </TableCell>
+                      </TableRow>
+                      {/* 확장된 상세 정보 */}
+                      {expandedOrders.has(group.shop_ord_no) && (
+                        <TableRow>
+                          <TableCell colSpan={10} className="bg-muted/30 p-4">
+                            <div className="grid md:grid-cols-2 gap-4">
+                              {/* 상품 목록 */}
+                              <div>
+                                <h4 className="font-medium mb-2 flex items-center gap-2">
+                                  <PackageIcon className="h-4 w-4" />
+                                  주문 상품 ({group.items.length}개)
+                                </h4>
+                                <div className="space-y-2">
+                                  {group.items.map((item, idx) => (
+                                    <div key={item.id} className="p-2 bg-white rounded border text-sm">
+                                      <div className="font-medium">{item.shop_sale_name}</div>
+                                      {item.shop_opt_name && (
+                                        <div className="text-muted-foreground">옵션: {item.shop_opt_name}</div>
+                                      )}
+                                      <div className="text-muted-foreground">
+                                        ₩{(item.pay_amt || item.sales || 0).toLocaleString()} x {item.sale_cnt}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              {/* 배송 정보 */}
+                              <div>
+                                <h4 className="font-medium mb-2 flex items-center gap-2">
+                                  <MapPinIcon className="h-4 w-4" />
+                                  배송 정보
+                                </h4>
+                                <div className="p-3 bg-white rounded border text-sm space-y-1">
+                                  <p><strong>수령인:</strong> {group.to_name}</p>
+                                  <p><strong>연락처:</strong> {group.to_htel || group.to_tel || "-"}</p>
+                                  <p><strong>주소:</strong> {group.to_addr1} {group.to_addr2}</p>
+                                  {group.ship_msg && (
+                                    <p className="text-orange-600"><strong>배송메모:</strong> {group.ship_msg}</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
 
           {/* 페이지네이션 */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-4">
+            <div className="flex items-center justify-between px-4 py-3 border-t">
               <p className="text-sm text-muted-foreground">
                 페이지 {currentPage} / {totalPages}
               </p>

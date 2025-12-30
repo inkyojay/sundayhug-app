@@ -310,3 +310,4 @@ export function formatDateForCardNews(date: Date = new Date()): string {
 
 
 
+
