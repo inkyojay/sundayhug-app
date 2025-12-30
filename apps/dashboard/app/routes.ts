@@ -66,6 +66,8 @@ export default [
       route("/sync-orders", "features/integrations/api/naver-sync-orders.tsx"),
       route("/sync-products", "features/integrations/api/naver-sync-products.tsx"),
     ]),
+    // 재고 위치 API
+    route("/inventory-locations", "features/inventory/api/inventory-locations.tsx"),
   ]),
 
   // ========================================
@@ -203,6 +205,21 @@ export default [
           route("/cafe24", "features/integrations/screens/cafe24-status.tsx"),
           route("/naver", "features/integrations/screens/naver-status.tsx"),
         ]),
+        
+        // 재고/물류 관리
+        ...prefix("/factories", [
+          index("features/factories/screens/factory-list.tsx"),
+          route("/:factoryId/costs", "features/factories/screens/factory-product-costs.tsx"),
+        ]),
+        route("/warehouses", "features/warehouses/screens/warehouse-list.tsx"),
+        ...prefix("/purchase-orders", [
+          index("features/purchase-orders/screens/purchase-order-list.tsx"),
+          route("/new", "features/purchase-orders/screens/purchase-order-form.tsx", { id: "po-new" }),
+          route("/:id", "features/purchase-orders/screens/purchase-order-form.tsx", { id: "po-edit" }),
+        ]),
+        route("/stock-receipts", "features/stock-receipts/screens/stock-receipt-list.tsx"),
+        route("/stock-transfers", "features/stock-transfers/screens/stock-transfer-list.tsx"),
+        route("/returns", "features/returns/screens/returns-list.tsx"),
       ]),
       
       // 계정 설정

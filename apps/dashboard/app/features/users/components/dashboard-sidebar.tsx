@@ -11,18 +11,25 @@
  * - 쇼핑몰 연동: (추후 추가)
  */
 import {
+  ArrowLeftRightIcon,
   BarChart3Icon,
   BookOpenIcon,
   BoxIcon,
+  ClipboardListIcon,
+  FactoryIcon,
   LayoutDashboardIcon,
   LinkIcon,
   MegaphoneIcon,
+  PackageIcon,
+  RotateCcwIcon,
   Settings2Icon,
   ShieldCheckIcon,
   ShoppingCartIcon,
   StarIcon,
   StoreIcon,
+  TruckIcon,
   UsersIcon,
+  WarehouseIcon,
   ZapIcon,
 } from "lucide-react";
 
@@ -158,6 +165,39 @@ const data = {
         {
           title: "재고 현황",
           url: "/dashboard/inventory",
+        },
+      ],
+    },
+    
+    // ===== 재고/물류 =====
+    {
+      title: "재고/물류",
+      url: "/dashboard/purchase-orders",
+      icon: TruckIcon,
+      items: [
+        {
+          title: "공장 관리",
+          url: "/dashboard/factories",
+        },
+        {
+          title: "창고 관리",
+          url: "/dashboard/warehouses",
+        },
+        {
+          title: "발주 관리",
+          url: "/dashboard/purchase-orders",
+        },
+        {
+          title: "입고 관리",
+          url: "/dashboard/stock-receipts",
+        },
+        {
+          title: "재고 이동",
+          url: "/dashboard/stock-transfers",
+        },
+        {
+          title: "교환/반품/AS",
+          url: "/dashboard/returns",
         },
       ],
     },

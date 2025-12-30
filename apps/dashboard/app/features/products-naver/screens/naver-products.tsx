@@ -23,6 +23,10 @@ import {
   LinkIcon,
   SearchIcon,
   FilterIcon,
+  Link2OffIcon,
+  LayersIcon,
+  ExternalLinkIcon,
+  PackageOpenIcon,
 } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useFetcher, useRevalidator, useLoaderData } from "react-router";
@@ -62,6 +66,7 @@ import {
 } from "~/core/components/ui/dialog";
 import { Label } from "~/core/components/ui/label";
 import { ColorBadge, SizeBadge } from "~/core/components/ui/color-badge";
+import { ScrollArea } from "~/core/components/ui/scroll-area";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
@@ -108,6 +113,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const statusFilter = url.searchParams.get("status") || "all";
   const stockFilter = url.searchParams.get("stock") || "all";
   const optionFilter = url.searchParams.get("option") || "all";
+  const mappingFilter = url.searchParams.get("mapping") || "all";
   const colorFilter = url.searchParams.get("color") || "all";
   const sizeFilter = url.searchParams.get("size") || "all";
   const sortBy = url.searchParams.get("sortBy") || "updated_at";
@@ -168,10 +174,31 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   // 내부 제품 SKU 맵 생성 (색상/사이즈 필터용)
+  const internalSkuSet = new Set<string>();
   const internalProductsMapForFilter = new Map<string, { color_kr: string | null; sku_6_size: string | null }>();
   (internalProducts || []).forEach((p: any) => {
+    internalSkuSet.add(p.sku);
     internalProductsMapForFilter.set(p.sku, { color_kr: p.color_kr, sku_6_size: p.sku_6_size });
   });
+
+  // SKU 매핑 필터
+  if (mappingFilter === "unmapped") {
+    productsWithOptions = productsWithOptions.filter((p: any) => {
+      // internal_sku가 없거나 products 테이블에 매핑 안 된 옵션이 있는 제품
+      return p.options?.some((o: NaverProductOption) => {
+        const sku = o.internal_sku || o.seller_management_code;
+        return !sku || !internalSkuSet.has(sku);
+      });
+    });
+  } else if (mappingFilter === "mapped") {
+    productsWithOptions = productsWithOptions.filter((p: any) => {
+      // 모든 옵션이 매핑된 제품
+      return p.options?.length > 0 && p.options.every((o: NaverProductOption) => {
+        const sku = o.internal_sku || o.seller_management_code;
+        return sku && internalSkuSet.has(sku);
+      });
+    });
+  }
 
   // 색상 필터
   if (colorFilter !== "all") {
@@ -242,6 +269,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
     if (mapped?.sku_6_size) sizeSet.add(mapped.sku_6_size);
   });
   
+  // 미매핑 옵션 수 계산
+  const unmappedOptions = allOptions.filter((o: NaverProductOption) => {
+    const sku = o.internal_sku || o.seller_management_code;
+    return !sku || !internalSkuSet.has(sku);
+  }).length;
+  const unmappedProducts = allProductsWithOptions.filter((p: any) => 
+    p.options?.some((o: NaverProductOption) => {
+      const sku = o.internal_sku || o.seller_management_code;
+      return !sku || !internalSkuSet.has(sku);
+    })
+  ).length;
+
   const stats = {
     total: (products || []).length,
     onSale: (products || []).filter((p: NaverProduct) => p.product_status === "SALE").length,
@@ -251,6 +290,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     totalOptions: allOptions.length,
     hasOptions: allProductsWithOptions.filter((p: any) => p.options && p.options.length > 1).length,
     noOptions: allProductsWithOptions.filter((p: any) => !p.options || p.options.length <= 1).length,
+    unmappedOptions,
+    unmappedProducts,
   };
 
   return {
@@ -260,7 +301,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     availableColors: Array.from(colorSet).sort(),
     availableSizes: Array.from(sizeSet).sort(),
     error: productsError || optionsError,
-    filters: { search, status: statusFilter, stock: stockFilter, option: optionFilter, color: colorFilter, size: sizeFilter, sortBy, sortOrder },
+    filters: { search, status: statusFilter, stock: stockFilter, option: optionFilter, mapping: mappingFilter, color: colorFilter, size: sizeFilter, sortBy, sortOrder },
   };
 }
 
@@ -285,6 +326,41 @@ export async function action({ request }: ActionFunctionArgs) {
       return { success: false, error: error.message };
     }
     return { success: true, message: "SKU가 매핑되었습니다." };
+  }
+
+  // 일괄 SKU 매핑
+  if (actionType === "bulkMapSku") {
+    const mappingsJson = formData.get("mappings") as string;
+    
+    try {
+      const mappings = JSON.parse(mappingsJson) as { optionId: string; sku: string | null }[];
+      
+      let successCount = 0;
+      let errorCount = 0;
+      
+      for (const mapping of mappings) {
+        const { error } = await adminClient
+          .from("naver_product_options")
+          .update({ internal_sku: mapping.sku || null })
+          .eq("id", mapping.optionId);
+        
+        if (error) {
+          errorCount++;
+        } else {
+          successCount++;
+        }
+      }
+      
+      if (errorCount > 0) {
+        return { 
+          success: true, 
+          message: `${successCount}개 매핑 완료, ${errorCount}개 실패` 
+        };
+      }
+      return { success: true, message: `${successCount}개 옵션이 매핑되었습니다.` };
+    } catch (e) {
+      return { success: false, error: "매핑 데이터 파싱 오류" };
+    }
   }
 
   return { success: false, error: "알 수 없는 액션입니다." };
@@ -322,18 +398,27 @@ export default function NaverProducts() {
     optionName: string;
   } | null>(null);
   const [selectedSku, setSelectedSku] = useState<string>("");
+  const [bulkMappingModal, setBulkMappingModal] = useState<{
+    open: boolean;
+    product: NaverProduct;
+  } | null>(null);
+  const [bulkMappings, setBulkMappings] = useState<Record<string, string>>({});
+  const [bulkSkuSearch, setBulkSkuSearch] = useState<string>("");
 
   const syncFetcher = useFetcher();
   const inventoryFetcher = useFetcher();
   const mappingFetcher = useFetcher();
+  const bulkMappingFetcher = useFetcher();
   const revalidator = useRevalidator();
   
   const syncing = syncFetcher.state === "submitting" || syncFetcher.state === "loading";
   const updatingInventory = inventoryFetcher.state === "submitting" || inventoryFetcher.state === "loading";
   const updatingMapping = mappingFetcher.state === "submitting" || mappingFetcher.state === "loading";
+  const updatingBulkMapping = bulkMappingFetcher.state === "submitting" || bulkMappingFetcher.state === "loading";
   const hasHandledSyncRef = useRef(false);
   const hasHandledInventoryRef = useRef(false);
   const hasHandledMappingRef = useRef(false);
+  const hasHandledBulkMappingRef = useRef(false);
 
   // 동기화 결과 처리
   useEffect(() => {
@@ -387,6 +472,25 @@ export default function NaverProducts() {
       hasHandledMappingRef.current = false;
     }
   }, [mappingFetcher.data, mappingFetcher.state, revalidator]);
+
+  // 일괄 매핑 결과 처리
+  useEffect(() => {
+    if (bulkMappingFetcher.data && bulkMappingFetcher.state === "idle" && !hasHandledBulkMappingRef.current) {
+      hasHandledBulkMappingRef.current = true;
+      if ((bulkMappingFetcher.data as any).success) {
+        setSyncMessage(`✅ ${(bulkMappingFetcher.data as any).message}`);
+        setBulkMappingModal(null);
+        setBulkMappings({});
+        revalidator.revalidate();
+      } else {
+        setSyncMessage(`❌ ${(bulkMappingFetcher.data as any).error}`);
+      }
+      setTimeout(() => setSyncMessage(null), 5000);
+    }
+    if (bulkMappingFetcher.state === "submitting") {
+      hasHandledBulkMappingRef.current = false;
+    }
+  }, [bulkMappingFetcher.data, bulkMappingFetcher.state, revalidator]);
 
   const toggleProduct = (originProductNo: number) => {
     const newExpanded = new Set(expandedProducts);
@@ -469,6 +573,32 @@ export default function NaverProducts() {
     );
   };
 
+  const openBulkMappingModal = (product: NaverProduct) => {
+    const initialMappings: Record<string, string> = {};
+    product.options?.forEach((o) => {
+      initialMappings[o.id] = o.internal_sku || "";
+    });
+    setBulkMappings(initialMappings);
+    setBulkMappingModal({ open: true, product });
+  };
+
+  const handleBulkMappingUpdate = () => {
+    if (!bulkMappingModal) return;
+    
+    const mappings = Object.entries(bulkMappings).map(([optionId, sku]) => ({
+      optionId,
+      sku: sku || null,
+    }));
+    
+    bulkMappingFetcher.submit(
+      {
+        actionType: "bulkMapSku",
+        mappings: JSON.stringify(mappings),
+      },
+      { method: "POST" }
+    );
+  };
+
   const formatOptionName = (option: NaverProductOption) => {
     const parts: string[] = [];
     if (option.option_name1 && option.option_value1) {
@@ -516,6 +646,7 @@ export default function NaverProducts() {
     const newStatus = overrides.status !== undefined ? overrides.status : filters.status;
     const newStock = overrides.stock !== undefined ? overrides.stock : filters.stock;
     const newOption = overrides.option !== undefined ? overrides.option : filters.option;
+    const newMapping = overrides.mapping !== undefined ? overrides.mapping : filters.mapping;
     const newColor = overrides.color !== undefined ? overrides.color : filters.color;
     const newSize = overrides.size !== undefined ? overrides.size : filters.size;
     const newSortBy = overrides.sortBy !== undefined ? overrides.sortBy : filters.sortBy;
@@ -525,6 +656,7 @@ export default function NaverProducts() {
     if (newStatus && newStatus !== "all") params.set("status", newStatus);
     if (newStock && newStock !== "all") params.set("stock", newStock);
     if (newOption && newOption !== "all") params.set("option", newOption);
+    if (newMapping && newMapping !== "all") params.set("mapping", newMapping);
     if (newColor && newColor !== "all") params.set("color", newColor);
     if (newSize && newSize !== "all") params.set("size", newSize);
     if (newSortBy && newSortBy !== "updated_at") params.set("sortBy", newSortBy);
@@ -575,7 +707,7 @@ export default function NaverProducts() {
     link.click();
   };
 
-  const hasActiveFilters = filters.search || filters.status !== "all" || filters.stock !== "all" || filters.option !== "all" || filters.color !== "all" || filters.size !== "all";
+  const hasActiveFilters = filters.search || filters.status !== "all" || filters.stock !== "all" || filters.option !== "all" || filters.mapping !== "all" || filters.color !== "all" || filters.size !== "all";
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -610,14 +742,26 @@ export default function NaverProducts() {
       </div>
 
       {/* 통계 카드 */}
-      <div className="grid gap-4 md:grid-cols-6">
-        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => window.location.href = buildUrl({ status: "all", stock: "all", option: "all" })}>
+      <div className="grid gap-4 md:grid-cols-7">
+        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => window.location.href = buildUrl({ status: "all", stock: "all", option: "all", mapping: "all" })}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">전체 제품</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.total}</div>
             <p className="text-xs text-muted-foreground">{stats.totalOptions}개 옵션</p>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => window.location.href = buildUrl({ mapping: "unmapped" })}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-1">
+              <Link2OffIcon className="h-4 w-4 text-orange-500" />
+              미매핑
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">{stats.unmappedProducts}</div>
+            <p className="text-xs text-muted-foreground">{stats.unmappedOptions}개 옵션</p>
           </CardContent>
         </Card>
         <Card className="cursor-pointer hover:bg-muted/50" onClick={() => window.location.href = buildUrl({ option: "hasOptions" })}>
@@ -629,17 +773,6 @@ export default function NaverProducts() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">{stats.hasOptions}</div>
-          </CardContent>
-        </Card>
-        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => window.location.href = buildUrl({ option: "noOptions" })}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-1">
-              <PackageIcon className="h-4 w-4 text-slate-400" />
-              단일 상품
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-slate-600">{stats.noOptions}</div>
           </CardContent>
         </Card>
         <Card className="cursor-pointer hover:bg-muted/50" onClick={() => window.location.href = buildUrl({ status: "SALE" })}>
@@ -662,6 +795,17 @@ export default function NaverProducts() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">{stats.outOfStock}</div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => window.location.href = buildUrl({ stock: "lowStock" })}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-1">
+              <AlertCircleIcon className="h-4 w-4 text-yellow-500" />
+              재고부족
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">{stats.lowStock}</div>
           </CardContent>
         </Card>
         <Card>
@@ -693,6 +837,19 @@ export default function NaverProducts() {
 
             <div className="flex flex-wrap gap-2 items-center">
               <FilterIcon className="h-4 w-4 text-muted-foreground" />
+              <Select 
+                value={filters.mapping} 
+                onValueChange={(v) => window.location.href = buildUrl({ mapping: v })}
+              >
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="SKU 매핑" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체 매핑</SelectItem>
+                  <SelectItem value="unmapped">미매핑</SelectItem>
+                  <SelectItem value="mapped">매핑완료</SelectItem>
+                </SelectContent>
+              </Select>
               <Select 
                 value={filters.option} 
                 onValueChange={(v) => window.location.href = buildUrl({ option: v })}
@@ -826,6 +983,7 @@ export default function NaverProducts() {
                   <TableHead className="w-[40px]"></TableHead>
                   <TableHead className="w-[80px]">이미지</TableHead>
                   <TableHead>제품명</TableHead>
+                  <TableHead className="w-[60px]">유형</TableHead>
                   <TableHead className="w-[150px]">판매자 코드</TableHead>
                   <TableHead className="w-[90px]">색상</TableHead>
                   <TableHead className="w-[70px]">사이즈</TableHead>
@@ -834,12 +992,14 @@ export default function NaverProducts() {
                   <TableHead className="w-[90px]">상태</TableHead>
                   <TableHead className="w-[70px]">옵션 수</TableHead>
                   <TableHead className="w-[80px]">품절</TableHead>
+                  <TableHead className="w-[100px]">액션</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {products.map((product: NaverProduct) => {
                   const outOfStockOptions = product.options?.filter(o => o.stock_quantity <= 0).length || 0;
                   const isSingleOption = !product.options || product.options.length <= 1;
+                  const isSetProduct = product.product_name.includes("세트") || product.product_name.toLowerCase().includes("set");
                   
                   // 단일 옵션인 경우 첫 번째 옵션의 SKU로 색상/사이즈 조회
                   const firstOption = product.options?.[0];
@@ -878,9 +1038,24 @@ export default function NaverProducts() {
                         </TableCell>
                         <TableCell>
                           <div className="font-medium">{product.product_name}</div>
-                          <div className="text-sm text-muted-foreground font-mono">
-                            #{product.origin_product_no}
+                          <div className="text-xs text-muted-foreground font-mono space-x-2">
+                            <span title="원상품번호">원: {product.origin_product_no}</span>
+                            {product.channel_product_no && (
+                              <span title="채널상품번호" className="text-green-600">채널: {product.channel_product_no}</span>
+                            )}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          {isSetProduct ? (
+                            <Badge variant="outline" className="text-xs border-purple-500 text-purple-600 bg-purple-50">
+                              <PackageOpenIcon className="h-3 w-3 mr-1" />
+                              세트
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs">
+                              단품
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell className="font-mono text-xs">
                           {product.seller_management_code || "-"}
@@ -930,12 +1105,39 @@ export default function NaverProducts() {
                             <span className="text-muted-foreground">-</span>
                           )}
                         </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const productNo = product.channel_product_no || product.origin_product_no;
+                                window.open(`https://brand.naver.com/sundayhug/products/${productNo}`, "_blank");
+                              }}
+                              title="스마트스토어에서 보기"
+                            >
+                              <ExternalLinkIcon className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openBulkMappingModal(product);
+                              }}
+                              title="일괄 SKU 매핑"
+                            >
+                              <LayersIcon className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
 
                       {/* 옵션 아코디언 */}
                       {expandedProducts.has(product.origin_product_no) && product.options && product.options.length > 0 && (
                         <TableRow>
-                          <TableCell colSpan={11} className="bg-muted/30 p-0">
+                          <TableCell colSpan={13} className="bg-muted/30 p-0">
                             <div className="p-4">
                               <Table>
                                 <TableHeader>
@@ -1073,7 +1275,7 @@ export default function NaverProducts() {
                 })}
                 {products.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
                       {hasActiveFilters 
                         ? "검색 결과가 없습니다" 
                         : "제품이 없습니다. \"제품 동기화\" 버튼을 클릭해 스마트스토어에서 제품을 가져오세요."}
@@ -1148,7 +1350,7 @@ export default function NaverProducts() {
         open={mappingModal?.open || false} 
         onOpenChange={(open) => !open && setMappingModal(null)}
       >
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>SKU 매핑</DialogTitle>
             <DialogDescription>
@@ -1175,11 +1377,16 @@ export default function NaverProducts() {
                   <SelectTrigger>
                     <SelectValue placeholder="SKU 선택..." />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-[400px]">
                     <SelectItem value="__none__">매핑 해제</SelectItem>
                     {internalProducts.filter((product: any) => product.sku).map((product: any) => (
                       <SelectItem key={product.sku} value={product.sku}>
-                        {product.sku} - {product.product_name} {product.color_kr && `(${product.color_kr})`} {product.sku_6_size && `[${product.sku_6_size}]`}
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs bg-muted px-1 rounded">{product.sku}</span>
+                          <span className="truncate">{product.product_name}</span>
+                          {product.color_kr && <Badge variant="outline" className="text-xs">{product.color_kr}</Badge>}
+                          {product.sku_6_size && <Badge variant="secondary" className="text-xs">{product.sku_6_size}</Badge>}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1200,6 +1407,195 @@ export default function NaverProducts() {
               disabled={updatingMapping}
             >
               {updatingMapping ? "저장 중..." : "매핑 저장"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 일괄 SKU 매핑 모달 */}
+      <Dialog 
+        open={bulkMappingModal?.open || false} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setBulkMappingModal(null);
+            setBulkSkuSearch("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <LayersIcon className="h-5 w-5 text-green-500" />
+              일괄 SKU 매핑
+            </DialogTitle>
+            <DialogDescription className="flex items-center gap-2">
+              <span className="font-medium text-foreground">{bulkMappingModal?.product.product_name}</span>
+              {bulkMappingModal && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2"
+                    onClick={() => {
+                      const productNo = bulkMappingModal.product.channel_product_no || bulkMappingModal.product.origin_product_no;
+                      window.open(`https://brand.naver.com/sundayhug/products/${productNo}`, "_blank");
+                    }}
+                  >
+                    <ExternalLinkIcon className="h-3 w-3 mr-1" />
+                    스토어 보기
+                  </Button>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {bulkMappingModal && (
+            <div className="flex-1 flex flex-col gap-4 min-h-0">
+              {/* SKU 검색 필터 */}
+              <div className="flex-shrink-0">
+                <div className="relative">
+                  <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="SKU, 제품명, 색상으로 검색..."
+                    value={bulkSkuSearch}
+                    onChange={(e) => setBulkSkuSearch(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+              
+              {/* 옵션 매핑 테이블 */}
+              <ScrollArea className="flex-1 border rounded-lg">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10">
+                    <TableRow>
+                      <TableHead className="w-[200px]">네이버 옵션</TableHead>
+                      <TableHead className="w-[150px]">현재 SKU</TableHead>
+                      <TableHead>내부 SKU 선택</TableHead>
+                      <TableHead className="w-[100px]">매핑 정보</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {bulkMappingModal.product.options?.map((option) => {
+                      const currentMapped = bulkMappings[option.id] ? internalProductsMap.get(bulkMappings[option.id]) : null;
+                      const filteredProducts = internalProducts.filter((p: any) => {
+                        if (!bulkSkuSearch) return true;
+                        const search = bulkSkuSearch.toLowerCase();
+                        return (
+                          p.sku?.toLowerCase().includes(search) ||
+                          p.product_name?.toLowerCase().includes(search) ||
+                          p.color_kr?.toLowerCase().includes(search)
+                        );
+                      });
+                      
+                      return (
+                        <TableRow key={option.id} className="hover:bg-muted/50">
+                          <TableCell>
+                            <div className="font-medium">{formatOptionName(option)}</div>
+                            <div className="text-xs text-muted-foreground font-mono">ID: {option.option_combination_id}</div>
+                          </TableCell>
+                          <TableCell>
+                            {option.internal_sku || option.seller_management_code ? (
+                              <Badge variant="outline" className="font-mono text-xs">
+                                {option.internal_sku || option.seller_management_code}
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-xs text-orange-600 bg-orange-50">
+                                미매핑
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Select 
+                              value={bulkMappings[option.id] || "__none__"} 
+                              onValueChange={(v) => setBulkMappings(prev => ({
+                                ...prev,
+                                [option.id]: v === "__none__" ? "" : v
+                              }))}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="SKU 선택..." />
+                              </SelectTrigger>
+                              <SelectContent className="max-h-[300px]">
+                                <SelectItem value="__none__">
+                                  <span className="text-muted-foreground">매핑 해제</span>
+                                </SelectItem>
+                                {filteredProducts.filter((p: any) => p.sku).map((p: any) => (
+                                  <SelectItem key={p.sku} value={p.sku}>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono text-xs bg-muted px-1 rounded">{p.sku}</span>
+                                      <span className="truncate">{p.product_name}</span>
+                                      {p.color_kr && <Badge variant="outline" className="text-xs">{p.color_kr}</Badge>}
+                                      {p.sku_6_size && <Badge variant="secondary" className="text-xs">{p.sku_6_size}</Badge>}
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            {currentMapped ? (
+                              <div className="flex flex-col gap-1">
+                                {currentMapped.color_kr && (
+                                  <ColorBadge colorName={currentMapped.color_kr} />
+                                )}
+                                {currentMapped.sku_6_size && (
+                                  <SizeBadge size={currentMapped.sku_6_size} />
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">-</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+              
+              {/* 매핑 요약 */}
+              <div className="flex-shrink-0 flex items-center justify-between text-sm text-muted-foreground border-t pt-4">
+                <div>
+                  총 {bulkMappingModal.product.options?.length || 0}개 옵션 중{" "}
+                  <span className="text-green-600 font-medium">
+                    {Object.values(bulkMappings).filter(v => v).length}개 매핑됨
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      // 전체 해제
+                      const cleared: Record<string, string> = {};
+                      bulkMappingModal.product.options?.forEach(o => {
+                        cleared[o.id] = "";
+                      });
+                      setBulkMappings(cleared);
+                    }}
+                  >
+                    전체 해제
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter className="flex-shrink-0 border-t pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setBulkMappingModal(null);
+                setBulkSkuSearch("");
+              }}
+              disabled={updatingBulkMapping}
+            >
+              취소
+            </Button>
+            <Button 
+              onClick={handleBulkMappingUpdate}
+              disabled={updatingBulkMapping}
+            >
+              {updatingBulkMapping ? "저장 중..." : "일괄 매핑 저장"}
             </Button>
           </DialogFooter>
         </DialogContent>
