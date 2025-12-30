@@ -424,54 +424,65 @@ export async function action({ request }: Route.ActionArgs) {
     const cafe24Variants = formData.get("cafe24Variants") as string;
     const naverOptions = formData.get("naverOptions") as string;
     
-    const results = { cafe24: { success: 0, fail: 0 }, naver: { success: 0, fail: 0 } };
-    const supabaseUrl = process.env.SUPABASE_URL!;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
+    const results = { cafe24: { success: 0, fail: 0, errors: [] as string[] }, naver: { success: 0, fail: 0, errors: [] as string[] } };
 
-    // Cafe24 재고 업데이트
+    // Cafe24 재고 업데이트 - 직접 API 호출
     if (cafe24Stock && cafe24Variants) {
+      const { updateVariantInventory } = await import("~/features/integrations/lib/cafe24.server");
       const variants = JSON.parse(cafe24Variants) as Array<{ product_no: number; variant_code: string }>;
       const stockValue = parseInt(cafe24Stock);
       
       for (const variant of variants) {
-        try {
-          const response = await fetch(`${supabaseUrl}/functions/v1/cafe24-update-stock`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
-            body: JSON.stringify({ 
-              product_no: variant.product_no, 
-              variant_code: variant.variant_code,
-              quantity: stockValue 
-            }),
-          });
-          if (response.ok) results.cafe24.success++;
-          else results.cafe24.fail++;
-        } catch {
+        const result = await updateVariantInventory(variant.product_no, variant.variant_code, stockValue);
+        if (result.success) {
+          results.cafe24.success++;
+          // DB에도 동기화 상태 업데이트
+          await adminClient
+            .from("cafe24_product_variants")
+            .update({ stock_quantity: stockValue, synced_at: new Date().toISOString() })
+            .eq("product_no", variant.product_no)
+            .eq("variant_code", variant.variant_code);
+        } else {
           results.cafe24.fail++;
+          results.cafe24.errors.push(result.error || "알 수 없는 오류");
         }
       }
     }
 
-    // 네이버 재고 업데이트
+    // 네이버 재고 업데이트 - 직접 API 호출
     if (naverStock && naverOptions) {
+      const { updateProductOptionStock } = await import("~/features/integrations/lib/naver.server");
       const options = JSON.parse(naverOptions) as Array<{ origin_product_no: number; option_combination_id: number }>;
       const stockValue = parseInt(naverStock);
       
-      for (const option of options) {
-        try {
-          const response = await fetch(`${supabaseUrl}/functions/v1/naver-update-stock`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
-            body: JSON.stringify({ 
-              origin_product_no: option.origin_product_no,
-              option_combination_id: option.option_combination_id,
-              quantity: stockValue 
-            }),
-          });
-          if (response.ok) results.naver.success++;
-          else results.naver.fail++;
-        } catch {
-          results.naver.fail++;
+      // 같은 origin_product_no를 가진 옵션들을 그룹화하여 한 번에 업데이트
+      const groupedOptions = options.reduce((acc, opt) => {
+        if (!acc[opt.origin_product_no]) {
+          acc[opt.origin_product_no] = [];
+        }
+        acc[opt.origin_product_no].push({
+          optionCombinationId: opt.option_combination_id,
+          stockQuantity: stockValue,
+        });
+        return acc;
+      }, {} as Record<number, Array<{ optionCombinationId: number; stockQuantity: number }>>);
+      
+      for (const [originProductNoStr, optionUpdates] of Object.entries(groupedOptions)) {
+        const originProductNo = parseInt(originProductNoStr);
+        const result = await updateProductOptionStock(originProductNo, optionUpdates);
+        if (result.success) {
+          results.naver.success += optionUpdates.length;
+          // DB에도 동기화 상태 업데이트
+          for (const opt of optionUpdates) {
+            await adminClient
+              .from("naver_product_options")
+              .update({ stock_quantity: stockValue, synced_at: new Date().toISOString() })
+              .eq("origin_product_no", originProductNo)
+              .eq("option_combination_id", opt.optionCombinationId);
+          }
+        } else {
+          results.naver.fail += optionUpdates.length;
+          results.naver.errors.push(result.error || "알 수 없는 오류");
         }
       }
     }
@@ -482,27 +493,97 @@ export async function action({ request }: Route.ActionArgs) {
     if (results.naver.success > 0) messages.push(`네이버: ${results.naver.success}개 성공`);
     if (results.naver.fail > 0) messages.push(`네이버: ${results.naver.fail}개 실패`);
     
+    const hasErrors = results.cafe24.fail > 0 || results.naver.fail > 0;
+    const errorDetail = [...results.cafe24.errors, ...results.naver.errors].slice(0, 3).join("; ");
+    
     return { 
-      success: results.cafe24.fail === 0 && results.naver.fail === 0, 
-      message: messages.join(", ") || "업데이트할 채널이 없습니다." 
+      success: !hasErrors, 
+      message: messages.join(", ") || "업데이트할 채널이 없습니다.",
+      error: hasErrors ? errorDetail : undefined,
     };
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL!;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
-
-  try {
-    const response = await fetch(`${supabaseUrl}/functions/v1/sync-inventory-simple`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
-      body: JSON.stringify({ trigger: "manual" }),
-    });
-    const result = await response.json();
-    if (response.ok && result.success) return { success: true, message: "재고 동기화가 완료되었습니다!", data: result.data };
-    return { success: false, error: result.error || "동기화 중 오류가 발생했습니다." };
-  } catch (error: any) {
-    return { success: false, error: error.message || "동기화 중 오류가 발생했습니다." };
+  // 일괄 재고 분배
+  if (actionType === "bulkDistributeStock") {
+    const itemsStr = formData.get("items") as string;
+    const cafe24RatioStr = formData.get("cafe24Ratio") as string;
+    const naverRatioStr = formData.get("naverRatio") as string;
+    
+    const items = JSON.parse(itemsStr) as Array<{
+      sku: string;
+      current_stock: number;
+      cafe24Variants: Array<{ product_no: number; variant_code: string }>;
+      naverOptions: Array<{ origin_product_no: number; option_combination_id: number }>;
+    }>;
+    
+    const cafe24Ratio = parseInt(cafe24RatioStr) / 100;
+    const naverRatio = parseInt(naverRatioStr) / 100;
+    
+    const { updateVariantInventory } = await import("~/features/integrations/lib/cafe24.server");
+    const { updateProductOptionStock } = await import("~/features/integrations/lib/naver.server");
+    
+    const results = { cafe24: { success: 0, fail: 0 }, naver: { success: 0, fail: 0 } };
+    
+    for (const item of items) {
+      const cafe24Stock = Math.floor(item.current_stock * cafe24Ratio);
+      const naverStock = Math.floor(item.current_stock * naverRatio);
+      
+      // Cafe24 업데이트
+      for (const variant of item.cafe24Variants) {
+        const result = await updateVariantInventory(variant.product_no, variant.variant_code, cafe24Stock);
+        if (result.success) {
+          results.cafe24.success++;
+          await adminClient
+            .from("cafe24_product_variants")
+            .update({ stock_quantity: cafe24Stock, synced_at: new Date().toISOString() })
+            .eq("product_no", variant.product_no)
+            .eq("variant_code", variant.variant_code);
+        } else {
+          results.cafe24.fail++;
+        }
+      }
+      
+      // 네이버 업데이트 - 같은 origin_product_no 그룹화
+      const groupedOptions = item.naverOptions.reduce((acc, opt) => {
+        if (!acc[opt.origin_product_no]) acc[opt.origin_product_no] = [];
+        acc[opt.origin_product_no].push({
+          optionCombinationId: opt.option_combination_id,
+          stockQuantity: naverStock,
+        });
+        return acc;
+      }, {} as Record<number, Array<{ optionCombinationId: number; stockQuantity: number }>>);
+      
+      for (const [originProductNoStr, optionUpdates] of Object.entries(groupedOptions)) {
+        const originProductNo = parseInt(originProductNoStr);
+        const result = await updateProductOptionStock(originProductNo, optionUpdates);
+        if (result.success) {
+          results.naver.success += optionUpdates.length;
+          for (const opt of optionUpdates) {
+            await adminClient
+              .from("naver_product_options")
+              .update({ stock_quantity: naverStock, synced_at: new Date().toISOString() })
+              .eq("origin_product_no", originProductNo)
+              .eq("option_combination_id", opt.optionCombinationId);
+          }
+        } else {
+          results.naver.fail += optionUpdates.length;
+        }
+      }
+    }
+    
+    const messages = [];
+    if (results.cafe24.success > 0) messages.push(`Cafe24: ${results.cafe24.success}개 성공`);
+    if (results.cafe24.fail > 0) messages.push(`Cafe24: ${results.cafe24.fail}개 실패`);
+    if (results.naver.success > 0) messages.push(`네이버: ${results.naver.success}개 성공`);
+    if (results.naver.fail > 0) messages.push(`네이버: ${results.naver.fail}개 실패`);
+    
+    return {
+      success: results.cafe24.fail === 0 && results.naver.fail === 0,
+      message: `${items.length}개 SKU 분배 완료. ${messages.join(", ")}`,
+    };
   }
+
+  return { success: false, error: "지원하지 않는 액션입니다." };
 }
 
 // 재고 프로그레스 바
@@ -705,6 +786,11 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
   const [naverPushStock, setNaverPushStock] = useState("");
   const [syncBoth, setSyncBoth] = useState(true);
   
+  // 일괄 분배 모달 상태
+  const [showDistributionDialog, setShowDistributionDialog] = useState(false);
+  const [cafe24Ratio, setCafe24Ratio] = useState("100");
+  const [naverRatio, setNaverRatio] = useState("100");
+  
   // 정렬 상태
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
@@ -879,7 +965,6 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
   };
 
   const handleReset = () => window.location.href = "/dashboard/inventory";
-  const handleSync = () => fetcher.submit({ actionType: "sync" }, { method: "POST" });
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) setSelectedItems(new Set(sortedInventory.map(i => i.id)));
@@ -907,6 +992,37 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
   const handleBulkUpdate = () => {
     fetcher.submit({ actionType: "bulkUpdateThreshold", inventoryIds: JSON.stringify(Array.from(selectedItems)), alertThreshold: bulkThreshold }, { method: "POST" });
     setShowBulkDialog(false);
+  };
+
+  // 일괄 분배 핸들러 - 선택된 SKU들의 재고를 채널별로 분배
+  const handleBulkDistribution = () => {
+    if (selectedItems.size === 0) return;
+    
+    // 선택된 아이템들의 데이터 수집
+    const selectedSkuData = sortedInventory
+      .filter(item => selectedItems.has(item.id))
+      .map(item => ({
+        sku: item.sku,
+        current_stock: item.current_stock,
+        cafe24Variants: item.channel_mapping?.cafe24.map(v => ({
+          product_no: v.product_no,
+          variant_code: v.variant_code,
+        })) || [],
+        naverOptions: item.channel_mapping?.naver.map(o => ({
+          origin_product_no: o.origin_product_no,
+          option_combination_id: o.option_combination_id,
+        })) || [],
+      }));
+    
+    fetcher.submit({
+      actionType: "bulkDistributeStock",
+      items: JSON.stringify(selectedSkuData),
+      cafe24Ratio: cafe24Ratio,
+      naverRatio: naverRatio,
+    }, { method: "POST" });
+    
+    setShowDistributionDialog(false);
+    setSelectedItems(new Set());
   };
 
   const handleExportCSV = () => {
@@ -1056,10 +1172,6 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
             <Button variant="outline" size="sm" onClick={handleExportCSV}>
               <DownloadIcon className="h-4 w-4 mr-2" />CSV
             </Button>
-            <Button onClick={handleSync} disabled={syncing}>
-              <RefreshCwIcon className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-              {syncing ? "동기화 중..." : "재고 동기화"}
-            </Button>
           </div>
         </div>
 
@@ -1197,6 +1309,9 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
             <Button size="sm" variant="outline" onClick={() => setShowBulkDialog(true)}>
               <SettingsIcon className="h-4 w-4 mr-1" />안전재고 일괄 설정
             </Button>
+            <Button size="sm" variant="default" onClick={() => setShowDistributionDialog(true)}>
+              <SendIcon className="h-4 w-4 mr-1" />채널 재고 일괄 분배
+            </Button>
           </div>
         )}
 
@@ -1319,6 +1434,80 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowBulkDialog(false)}>취소</Button>
               <Button onClick={handleBulkUpdate} disabled={syncing}>{syncing ? "처리 중..." : "설정"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* 채널 재고 일괄 분배 모달 */}
+        <Dialog open={showDistributionDialog} onOpenChange={setShowDistributionDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <LayersIcon className="h-5 w-5" />
+                채널 재고 일괄 분배
+              </DialogTitle>
+              <DialogDescription>
+                선택한 {selectedItems.size}개 SKU의 현재 재고를 비율에 맞게 각 채널에 분배합니다.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {/* 분배 비율 설정 */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-6 h-6 bg-blue-500 rounded flex items-center justify-center flex-shrink-0">
+                    <StoreIcon className="w-4 h-4 text-white" />
+                  </div>
+                  <span className="font-medium text-sm w-24">Cafe24</span>
+                  <div className="flex items-center gap-2 flex-1">
+                    <Input
+                      type="number"
+                      value={cafe24Ratio}
+                      onChange={(e) => setCafe24Ratio(e.target.value)}
+                      min="0"
+                      max="100"
+                      className="w-20"
+                    />
+                    <span className="text-sm text-muted-foreground">%</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-6 h-6 bg-green-500 rounded flex items-center justify-center flex-shrink-0">
+                    <ShoppingBagIcon className="w-4 h-4 text-white" />
+                  </div>
+                  <span className="font-medium text-sm w-24">네이버</span>
+                  <div className="flex items-center gap-2 flex-1">
+                    <Input
+                      type="number"
+                      value={naverRatio}
+                      onChange={(e) => setNaverRatio(e.target.value)}
+                      min="0"
+                      max="100"
+                      className="w-20"
+                    />
+                    <span className="text-sm text-muted-foreground">%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 안내 메시지 */}
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                <AlertTriangleIcon className="h-4 w-4 inline mr-1" />
+                각 SKU의 현재 재고에 비율을 곱한 값이 해당 채널에 전송됩니다.
+                <br />
+                예: 현재 재고 100개, Cafe24 50% → Cafe24에 50개 설정
+              </div>
+
+              {/* 선택된 SKU 요약 */}
+              <div className="text-xs text-muted-foreground">
+                선택된 SKU 중 총 재고: {sortedInventory.filter(i => selectedItems.has(i.id)).reduce((sum, i) => sum + i.current_stock, 0).toLocaleString()}개
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowDistributionDialog(false)}>취소</Button>
+              <Button onClick={handleBulkDistribution} disabled={syncing}>
+                <SendIcon className="h-4 w-4 mr-2" />
+                {syncing ? "분배 중..." : "재고 분배"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

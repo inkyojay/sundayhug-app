@@ -16,6 +16,7 @@ interface SyncResult {
   data?: {
     ordersSynced: number;
     ordersSkipped: number;
+    stockDeducted: number;
     durationMs: number;
   };
 }
@@ -56,6 +57,7 @@ export async function action({ request }: Route.ActionArgs): Promise<SyncResult>
         data: {
           ordersSynced: 0,
           ordersSkipped: 0,
+          stockDeducted: 0,
           durationMs: Date.now() - startTime,
         },
       };
@@ -73,6 +75,21 @@ export async function action({ request }: Route.ActionArgs): Promise<SyncResult>
     let syncedCount = 0;
     let skippedCount = 0;
     let customerMatchedCount = 0;
+    let stockDeductedCount = 0;
+
+    // SKU 매핑 조회 (cafe24_product_variants에서 sku_id와 연결된 SKU 찾기)
+    const { data: skuMappings } = await adminClient
+      .from("cafe24_product_variants")
+      .select("product_no, variant_code, options, sku_id, products:sku_id(sku)")
+      .not("sku_id", "is", null);
+    
+    const skuMap = new Map<string, string>();
+    for (const mapping of skuMappings || []) {
+      const key = `${mapping.product_no}_${mapping.variant_code}`;
+      if (mapping.products && typeof mapping.products === 'object' && 'sku' in mapping.products) {
+        skuMap.set(key, mapping.products.sku as string);
+      }
+    }
 
     for (const cafe24Order of cafe24Orders) {
       // 주문 상품별로 개별 레코드 생성 (기존 orders 테이블 구조와 호환)
@@ -85,7 +102,7 @@ export async function action({ request }: Route.ActionArgs): Promise<SyncResult>
           .upsert(orderData, {
             onConflict: "uniq",
           })
-          .select("id, to_name, to_tel, to_htel, pay_amt, ord_time, shop_cd")
+          .select("id, to_name, to_tel, to_htel, pay_amt, ord_time, shop_cd, ord_status")
           .single();
 
         if (upsertError) {
@@ -93,6 +110,51 @@ export async function action({ request }: Route.ActionArgs): Promise<SyncResult>
           skippedCount++;
         } else {
           syncedCount++;
+
+          // 재고 차감 처리 - 결제완료 또는 상품준비중 상태일 때만
+          const stockDeductionStatuses = ["결제완료", "상품준비중"];
+          if (upsertedOrder && stockDeductionStatuses.includes(upsertedOrder.ord_status)) {
+            try {
+              // Cafe24 variant_code 찾기 (item에서)
+              // cafe24_product_variants에서 SKU 찾기
+              const { data: variantData } = await adminClient
+                .from("cafe24_product_variants")
+                .select("sku_id, products:sku_id(sku)")
+                .eq("product_no", item.product_no)
+                .single();
+
+              if (variantData?.products && typeof variantData.products === 'object' && 'sku' in variantData.products) {
+                const sku = variantData.products.sku as string;
+                
+                // 재고 차감
+                const { data: inventoryData, error: fetchError } = await adminClient
+                  .from("inventory")
+                  .select("id, current_stock")
+                  .eq("sku", sku)
+                  .order("synced_at", { ascending: false })
+                  .limit(1)
+                  .single();
+
+                if (!fetchError && inventoryData) {
+                  const newStock = Math.max(0, inventoryData.current_stock - item.quantity);
+                  await adminClient
+                    .from("inventory")
+                    .update({ 
+                      current_stock: newStock,
+                      previous_stock: inventoryData.current_stock,
+                      stock_change: -item.quantity,
+                      synced_at: new Date().toISOString(),
+                    })
+                    .eq("id", inventoryData.id);
+                  
+                  stockDeductedCount++;
+                  console.log(`📉 재고 차감: ${sku} ${inventoryData.current_stock} → ${newStock} (-${item.quantity})`);
+                }
+              }
+            } catch (stockErr) {
+              console.warn("재고 차감 실패:", stockErr);
+            }
+          }
 
           // 고객 매칭 처리
           if (upsertedOrder) {
@@ -120,14 +182,15 @@ export async function action({ request }: Route.ActionArgs): Promise<SyncResult>
     }
 
     const durationMs = Date.now() - startTime;
-    console.log(`✅ Cafe24 주문 동기화 완료: ${syncedCount}건 저장, ${skippedCount}건 실패, ${customerMatchedCount}건 고객 매칭 (${durationMs}ms)`);
+    console.log(`✅ Cafe24 주문 동기화 완료: ${syncedCount}건 저장, ${skippedCount}건 실패, ${customerMatchedCount}건 고객 매칭, ${stockDeductedCount}건 재고 차감 (${durationMs}ms)`);
 
     return {
       success: true,
-      message: `${syncedCount}개 주문 동기화 완료`,
+      message: `${syncedCount}개 주문 동기화 완료 (재고 ${stockDeductedCount}건 차감)`,
       data: {
         ordersSynced: syncedCount,
         ordersSkipped: skippedCount,
+        stockDeducted: stockDeductedCount,
         durationMs,
       },
     };

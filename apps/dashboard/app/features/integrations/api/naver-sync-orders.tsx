@@ -30,9 +30,7 @@ export async function action({ request }: Route.ActionArgs) {
       orderDateTo: endDate || undefined,
     });
     const fetchMs = Date.now() - fetchT0;
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({location:"naver-sync-orders.tsx:action",message:"orders fetched",data:{inputStartDate:startDate||null,inputEndDate:endDate||null,success:ordersResult.success,count:ordersResult.count||0,fetchMs},timestamp:Date.now(),sessionId:"debug-session",runId:"pre-fix",hypothesisId:"H2"})}).catch(()=>{});
-    // #endregion
+    console.log(`📋 네이버 주문 조회 완료: ${fetchMs}ms`);
 
     if (!ordersResult.success) {
       console.error("❌ 주문 조회 실패:", ordersResult.error);
@@ -132,11 +130,66 @@ export async function action({ request }: Route.ActionArgs) {
     );
     const upsertMs = Date.now() - upsertT0;
 
+    // 2-3) 재고 차감 처리 - 결제완료 또는 상품준비중 상태일 때
+    const stockDeductionStatuses = ["결제완료", "상품준비중", "PAYED"];
+    let stockDeductedCount = 0;
+
+    for (let i = 0; i < orders.length; i++) {
+      const order = orders[i];
+      const upsertedOrder = upsertedOrders?.[i];
+      
+      if (!upsertedOrder) continue;
+      
+      // 매핑된 상태 확인
+      const mappedStatus = mapNaverOrderStatus(order.productOrderStatus);
+      if (!stockDeductionStatuses.includes(mappedStatus) && !stockDeductionStatuses.includes(order.productOrderStatus)) {
+        continue;
+      }
+
+      try {
+        // 네이버 상품에서 SKU 찾기
+        const { data: optionData } = await adminClient
+          .from("naver_product_options")
+          .select("sku_id, products:sku_id(sku)")
+          .eq("origin_product_no", parseInt(order.productId))
+          .limit(1)
+          .single();
+
+        if (optionData?.products && typeof optionData.products === 'object' && 'sku' in optionData.products) {
+          const sku = optionData.products.sku as string;
+          
+          // 재고 차감
+          const { data: inventoryData, error: fetchError } = await adminClient
+            .from("inventory")
+            .select("id, current_stock")
+            .eq("sku", sku)
+            .order("synced_at", { ascending: false })
+            .limit(1)
+            .single();
+
+          if (!fetchError && inventoryData) {
+            const newStock = Math.max(0, inventoryData.current_stock - order.quantity);
+            await adminClient
+              .from("inventory")
+              .update({ 
+                current_stock: newStock,
+                previous_stock: inventoryData.current_stock,
+                stock_change: -order.quantity,
+                synced_at: new Date().toISOString(),
+              })
+              .eq("id", inventoryData.id);
+            
+            stockDeductedCount++;
+            console.log(`📉 재고 차감: ${sku} ${inventoryData.current_stock} → ${newStock} (-${order.quantity})`);
+          }
+        }
+      } catch (stockErr) {
+        console.warn("재고 차감 실패:", stockErr);
+      }
+    }
+
     const duration = Date.now() - syncStartTime;
-    console.log(`✅ 네이버 주문 동기화 완료: ${syncedCount}건 성공, ${failedCount}건 실패, ${customerMatchedCount}건 고객 매칭 (${duration}ms)`);
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/876e79b7-3e6f-4fe2-a898-0e4d7dc77d34",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({location:"naver-sync-orders.tsx:action",message:"sync done",data:{syncedCount,failedCount,customerMatchedCount,durationMs:duration,upsertMs},timestamp:Date.now(),sessionId:"debug-session",runId:"pre-fix",hypothesisId:"H2"})}).catch(()=>{});
-    // #endregion
+    console.log(`✅ 네이버 주문 동기화 완료: ${syncedCount}건 성공, ${failedCount}건 실패, ${customerMatchedCount}건 고객 매칭, ${stockDeductedCount}건 재고 차감 (${duration}ms)`);
 
     // 3. 동기화 로그 저장
     await adminClient.from("order_sync_logs").insert({
@@ -153,9 +206,10 @@ export async function action({ request }: Route.ActionArgs) {
 
     return data({
       success: true,
-      message: `${syncedCount}건의 주문이 동기화되었습니다.`,
+      message: `${syncedCount}건의 주문이 동기화되었습니다. (재고 ${stockDeductedCount}건 차감)`,
       synced: syncedCount,
       failed: failedCount,
+      stockDeducted: stockDeductedCount,
       total: orders.length,
       duration,
     });

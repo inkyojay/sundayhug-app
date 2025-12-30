@@ -302,7 +302,6 @@ function getChannelBadge(channel: string) {
   const channelMap: Record<string, { label: string; color: string }> = {
     "cafe24": { label: "Cafe24", color: "bg-blue-100 text-blue-800" },
     "naver": { label: "네이버", color: "bg-green-100 text-green-800" },
-    "playauto": { label: "PlayAuto", color: "bg-gray-100 text-gray-800" },
   };
   const config = channelMap[channel] || { label: channel, color: "bg-gray-100 text-gray-800" };
   return (

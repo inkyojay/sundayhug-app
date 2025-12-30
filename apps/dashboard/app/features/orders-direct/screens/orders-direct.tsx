@@ -1,7 +1,7 @@
 /**
- * 주문 관리 (직접연동) - Airtable 스타일
+ * 주문 관리 - Airtable 스타일
  * 
- * 플레이오토 제외한 직접 연동(카페24, 네이버) 주문만 표시
+ * Cafe24 + 네이버 스마트스토어 직접 연동 주문 관리
  * - 테이블 스타일 UI
  * - 인라인 편집 (송장번호, 상태)
  * - 체크박스 일괄 처리
@@ -88,7 +88,7 @@ import {
 } from "~/core/components/ui/collapsible";
 
 export const meta: MetaFunction = () => {
-  return [{ title: "주문 관리 (직접연동) | 관리자 대시보드" }];
+  return [{ title: "주문 관리 | Sundayhug Admin" }];
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {

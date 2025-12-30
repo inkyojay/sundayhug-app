@@ -3,12 +3,11 @@
  * 
  * 모듈:
  * - 대시보드: 종합 현황
- * - 재고 관리: PlayAuto 재고 연동
- * - 주문 관리: PlayAuto 주문 연동
- * - 보증서 관리: 디지털 보증서 시스템 (2025-11-27 추가)
- * - 광고 분석: (추후 추가)
- * - 출고 분석: (추후 추가)
- * - 쇼핑몰 연동: (추후 추가)
+ * - 재고 관리: Cafe24, 네이버 연동
+ * - 주문 관리: Cafe24, 네이버 연동
+ * - 보증서 관리: 디지털 보증서 시스템
+ * - 후기 관리: 후기 인증/이벤트
+ * - 콘텐츠 관리: 블로그/AI 상담 지식
  */
 import {
   ArrowLeftRightIcon,
@@ -90,12 +89,8 @@ const data = {
       icon: ShoppingCartIcon,
       items: [
         {
-          title: "주문 목록 (플레이오토)",
+          title: "주문 목록",
           url: "/dashboard/orders",
-        },
-        {
-          title: "주문 관리 (직접연동)",
-          url: "/dashboard/orders-direct",
         },
       ],
     },
@@ -275,13 +270,8 @@ const data = {
     },
   ],
 
-  // 쇼핑몰 연동 상태 (추후 활성화)
+  // 쇼핑몰 연동 상태
   projects: [
-    {
-      name: "PlayAuto",
-      url: "#",
-      icon: BoxIcon,
-    },
     {
       name: "Cafe24",
       url: "/dashboard/integrations/cafe24",
