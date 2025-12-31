@@ -68,6 +68,10 @@ export default [
     ]),
     // 재고 위치 API
     route("/inventory-locations", "features/inventory/api/inventory-locations.tsx"),
+    // B2B 문서 생성 API
+    ...prefix("/b2b", [
+      route("/generate-document", "features/b2b/api/generate-document.tsx"),
+    ]),
   ]),
 
   // ========================================
@@ -147,6 +151,25 @@ export default [
         
         // 주문 관리 (Cafe24 + 네이버)
         route("/orders", "features/orders-direct/screens/orders-direct.tsx"),
+
+        // B2B 주문 관리
+        ...prefix("/b2b", [
+          // 업체 관리
+          ...prefix("/customers", [
+            index("features/b2b/screens/b2b-customer-list.tsx"),
+            route("/new", "features/b2b/screens/b2b-customer-form.tsx", { id: "b2b-customer-new" }),
+            route("/:id", "features/b2b/screens/b2b-customer-form.tsx", { id: "b2b-customer-edit" }),
+            route("/:id/prices", "features/b2b/screens/b2b-customer-prices.tsx"),
+          ]),
+          // 주문 관리
+          ...prefix("/orders", [
+            index("features/b2b/screens/b2b-order-list.tsx"),
+            route("/new", "features/b2b/screens/b2b-order-form.tsx", { id: "b2b-order-new" }),
+            route("/:id", "features/b2b/screens/b2b-order-detail.tsx"),
+            route("/:id/edit", "features/b2b/screens/b2b-order-form.tsx", { id: "b2b-order-edit" }),
+            route("/:id/shipment", "features/b2b/screens/b2b-shipment-form.tsx"),
+          ]),
+        ]),
         
         // 고객 분석
         route("/customer-analytics", "features/customer-analytics/screens/customer-analytics.tsx"),

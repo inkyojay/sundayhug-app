@@ -14,6 +14,7 @@ import {
   BarChart3Icon,
   BookOpenIcon,
   BoxIcon,
+  BuildingIcon,
   ClipboardListIcon,
   FactoryIcon,
   LayoutDashboardIcon,
@@ -91,6 +92,14 @@ const data = {
         {
           title: "주문 목록",
           url: "/dashboard/orders",
+        },
+        {
+          title: "B2B 업체",
+          url: "/dashboard/b2b/customers",
+        },
+        {
+          title: "B2B 주문",
+          url: "/dashboard/b2b/orders",
         },
       ],
     },

@@ -182,13 +182,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     productsByParent[product.parent_sku].push(product);
   }
 
-  // 카테고리 목록 추출
+  // 카테고리 및 서브카테고리 목록 추출
   const categories = [...new Set((parentProducts || []).map(p => p.category).filter(Boolean))].sort();
+  const subcategories = [...new Set((parentProducts || []).map(p => p.subcategory).filter(Boolean))].sort();
 
   return {
     parentProducts: parentProducts || [],
     productsByParent,
     categories,
+    subcategories,
     search,
     category,
     sortBy,
@@ -458,6 +460,7 @@ export default function ParentProducts({ loaderData }: Route.ComponentProps) {
     parentProducts,
     productsByParent,
     categories,
+    subcategories,
     search,
     category,
     sortBy,
@@ -614,12 +617,34 @@ export default function ParentProducts({ loaderData }: Route.ComponentProps) {
   };
 
   const handleBulkUpdate = () => {
+    // 커스텀 입력값 처리
+    const finalChanges: Record<string, any> = {};
+
+    // 카테고리 처리
+    if (bulkChanges.category === "__custom__" && bulkChanges._customCategory) {
+      finalChanges.category = bulkChanges._customCategory;
+    } else if (bulkChanges.category && bulkChanges.category !== "__custom__") {
+      finalChanges.category = bulkChanges.category;
+    }
+
+    // 서브카테고리 처리
+    if (bulkChanges.subcategory === "__custom__" && bulkChanges._customSubcategory) {
+      finalChanges.subcategory = bulkChanges._customSubcategory;
+    } else if (bulkChanges.subcategory && bulkChanges.subcategory !== "__custom__") {
+      finalChanges.subcategory = bulkChanges.subcategory;
+    }
+
+    // 나머지 필드 처리
+    if (bulkChanges.thumbnail_url !== undefined) finalChanges.thumbnail_url = bulkChanges.thumbnail_url;
+    if (bulkChanges.description !== undefined) finalChanges.description = bulkChanges.description;
+    if (bulkChanges.is_active !== undefined) finalChanges.is_active = bulkChanges.is_active;
+
     setPendingAction(() => () => {
       fetcher.submit(
         {
           intent: "bulk_update",
           ids: JSON.stringify(Array.from(selectedIds)),
-          changes: JSON.stringify(bulkChanges),
+          changes: JSON.stringify(finalChanges),
         },
         { method: "POST" }
       );
@@ -782,19 +807,71 @@ export default function ParentProducts({ loaderData }: Route.ComponentProps) {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>카테고리</Label>
-                <Input
-                  value={bulkChanges.category || ""}
-                  onChange={(e) => setBulkChanges({ ...bulkChanges, category: e.target.value || undefined })}
-                  placeholder="변경 안함"
-                />
+                <Select
+                  value={bulkChanges.category === undefined ? "__none__" : (bulkChanges.category === "__custom__" ? "__custom__" : bulkChanges.category)}
+                  onValueChange={(v) => {
+                    if (v === "__none__") {
+                      setBulkChanges({ ...bulkChanges, category: undefined, _customCategory: undefined });
+                    } else if (v === "__custom__") {
+                      setBulkChanges({ ...bulkChanges, category: "__custom__", _customCategory: "" });
+                    } else {
+                      setBulkChanges({ ...bulkChanges, category: v, _customCategory: undefined });
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="변경 안함" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">변경 안함</SelectItem>
+                    {categories.map((c: string) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                    <SelectItem value="__custom__">+ 새로 입력</SelectItem>
+                  </SelectContent>
+                </Select>
+                {bulkChanges.category === "__custom__" && (
+                  <Input
+                    value={bulkChanges._customCategory || ""}
+                    onChange={(e) => setBulkChanges({ ...bulkChanges, _customCategory: e.target.value })}
+                    placeholder="새 카테고리 입력"
+                    className="mt-2"
+                  />
+                )}
               </div>
               <div className="space-y-2">
                 <Label>서브카테고리</Label>
-                <Input
-                  value={bulkChanges.subcategory || ""}
-                  onChange={(e) => setBulkChanges({ ...bulkChanges, subcategory: e.target.value || undefined })}
-                  placeholder="변경 안함"
-                />
+                <Select
+                  value={bulkChanges.subcategory === undefined ? "__none__" : (bulkChanges.subcategory === "__custom__" ? "__custom__" : bulkChanges.subcategory)}
+                  onValueChange={(v) => {
+                    if (v === "__none__") {
+                      setBulkChanges({ ...bulkChanges, subcategory: undefined, _customSubcategory: undefined });
+                    } else if (v === "__custom__") {
+                      setBulkChanges({ ...bulkChanges, subcategory: "__custom__", _customSubcategory: "" });
+                    } else {
+                      setBulkChanges({ ...bulkChanges, subcategory: v, _customSubcategory: undefined });
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="변경 안함" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">변경 안함</SelectItem>
+                    {subcategories.map((s: string) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                    <SelectItem value="__custom__">+ 새로 입력</SelectItem>
+                  </SelectContent>
+                </Select>
+                {bulkChanges.subcategory === "__custom__" && (
+                  <Input
+                    value={bulkChanges._customSubcategory || ""}
+                    onChange={(e) => setBulkChanges({ ...bulkChanges, _customSubcategory: e.target.value })}
+                    placeholder="새 서브카테고리 입력"
+                    className="mt-2"
+                  />
+                )}
               </div>
             </div>
             <div className="space-y-2">
@@ -837,7 +914,19 @@ export default function ParentProducts({ loaderData }: Route.ComponentProps) {
             <Button variant="outline" onClick={() => { setShowBulkDialog(false); setBulkChanges({}); }}>
               취소
             </Button>
-            <Button onClick={handleBulkUpdate} disabled={isSubmitting || Object.keys(bulkChanges).filter(k => bulkChanges[k] !== undefined).length === 0}>
+            <Button
+              onClick={handleBulkUpdate}
+              disabled={isSubmitting || (() => {
+                const hasCategory = (bulkChanges.category && bulkChanges.category !== "__custom__") ||
+                                   (bulkChanges.category === "__custom__" && bulkChanges._customCategory);
+                const hasSubcategory = (bulkChanges.subcategory && bulkChanges.subcategory !== "__custom__") ||
+                                       (bulkChanges.subcategory === "__custom__" && bulkChanges._customSubcategory);
+                const hasOther = bulkChanges.thumbnail_url !== undefined ||
+                                 bulkChanges.description !== undefined ||
+                                 bulkChanges.is_active !== undefined;
+                return !hasCategory && !hasSubcategory && !hasOther;
+              })()}
+            >
               {isSubmitting ? "처리 중..." : "일괄 변경"}
             </Button>
           </DialogFooter>

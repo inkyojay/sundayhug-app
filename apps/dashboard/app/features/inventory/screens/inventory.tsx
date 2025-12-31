@@ -185,6 +185,14 @@ interface Warehouse {
   warehouse_code: string;
   warehouse_name: string;
   warehouse_type: string;
+  is_default?: boolean;
+}
+
+// 창고별 재고 타입
+interface WarehouseStock {
+  warehouse_id: string;
+  sku: string;
+  quantity: number;
 }
 
 // 재고 아이템 타입
@@ -197,16 +205,19 @@ interface InventoryItem {
   alert_threshold: number;
   synced_at: string | null;
   products: {
+    id?: string;
     product_name: string;
     parent_sku: string;
     color_kr: string | null;
     sku_6_size: string | null;
+    priority_warehouse_id?: string | null;
   } | null;
   cafe24_stock: number | null;
   cafe24_synced: string | null;
   naver_stock: number | null;
   naver_synced: string | null;
   channel_mapping?: ChannelMapping;
+  warehouse_stocks?: Record<string, number>; // warehouse_id -> quantity
 }
 
 // 그룹 타입
@@ -244,7 +255,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     supabase.from("parent_products").select("parent_sku, product_name").order("product_name", { ascending: true }),
     supabase.from("products").select("color_kr").not("color_kr", "is", null).not("color_kr", "eq", ""),
     supabase.from("products").select("sku_6_size").not("sku_6_size", "is", null).not("sku_6_size", "eq", ""),
-    supabase.from("warehouses").select("id, warehouse_code, warehouse_name, warehouse_type").eq("is_active", true).or("is_deleted.is.null,is_deleted.eq.false"),
+    supabase.from("warehouses").select("id, warehouse_code, warehouse_name, warehouse_type, is_default").eq("is_active", true).or("is_deleted.is.null,is_deleted.eq.false").order("is_default", { ascending: false }),
   ]);
 
   const parentSkuOptions = parentSkusResult.data || [];
@@ -277,7 +288,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     .from("inventory")
     .select(`
       id, sku, current_stock, previous_stock, stock_change, alert_threshold, synced_at,
-      products!inner (product_name, parent_sku, color_kr, sku_6_size)
+      products!inner (id, product_name, parent_sku, color_kr, sku_6_size, priority_warehouse_id)
     `)
     .order("synced_at", { ascending: false });
 
@@ -307,12 +318,22 @@ export async function loader({ request }: Route.LoaderArgs) {
   const { data: inventory } = await finalQuery;
 
   const skus = inventory?.map((i: any) => i.sku) || [];
-  const [cafe24Result, naverResult, cafe24ProductsResult, naverProductsResult] = await Promise.all([
+  const [cafe24Result, naverResult, cafe24ProductsResult, naverProductsResult, inventoryLocationsResult] = await Promise.all([
     supabase.from("cafe24_product_variants").select("sku, product_no, variant_code, options, stock_quantity, display, selling, synced_at").in("sku", skus),
     supabase.from("naver_product_options").select("seller_management_code, origin_product_no, option_combination_id, option_name1, option_value1, option_name2, option_value2, stock_quantity, use_yn, synced_at").in("seller_management_code", skus),
     supabase.from("cafe24_products").select("product_no, product_name"),
     supabase.from("naver_products").select("origin_product_no, channel_product_no, product_name"),
+    supabase.from("inventory_locations").select("warehouse_id, sku, quantity").in("sku", skus),
   ]);
+
+  // SKU별 창고별 재고 맵 생성
+  const warehouseStocksBySku = new Map<string, Record<string, number>>();
+  (inventoryLocationsResult.data || []).forEach((loc: WarehouseStock) => {
+    if (!warehouseStocksBySku.has(loc.sku)) {
+      warehouseStocksBySku.set(loc.sku, {});
+    }
+    warehouseStocksBySku.get(loc.sku)![loc.warehouse_id] = loc.quantity;
+  });
 
   const cafe24ProductMap = new Map((cafe24ProductsResult.data || []).map((p: any) => [p.product_no, p.product_name]));
   const naverProductMap = new Map((naverProductsResult.data || []).map((p: any) => [p.origin_product_no, { product_name: p.product_name, channel_product_no: p.channel_product_no }]));
@@ -365,7 +386,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     const naverList = naverBySku.get(item.sku) || [];
     const latestCafe24 = cafe24List.sort((a, b) => new Date(b.synced_at || 0).getTime() - new Date(a.synced_at || 0).getTime())[0];
     const latestNaver = naverList.sort((a, b) => new Date(b.synced_at || 0).getTime() - new Date(a.synced_at || 0).getTime())[0];
-    
+
     return {
       ...item,
       cafe24_stock: cafe24List.length > 0 ? cafe24List.reduce((sum, v) => sum + (v.stock_quantity || 0), 0) : null,
@@ -373,6 +394,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       naver_stock: naverList.length > 0 ? naverList.reduce((sum, o) => sum + (o.stock_quantity || 0), 0) : null,
       naver_synced: latestNaver?.synced_at || null,
       channel_mapping: { cafe24: cafe24List, naver: naverList },
+      warehouse_stocks: warehouseStocksBySku.get(item.sku) || {},
     };
   });
 
@@ -583,6 +605,171 @@ export async function action({ request }: Route.ActionArgs) {
     };
   }
 
+  // 창고별 재고 수정
+  if (actionType === "updateWarehouseStock") {
+    const sku = formData.get("sku") as string;
+    const warehouseId = formData.get("warehouseId") as string;
+    const quantity = parseInt(formData.get("quantity") as string);
+    const warehouseName = formData.get("warehouseName") as string;
+
+    // 기존 재고 조회
+    const { data: existing } = await adminClient
+      .from("inventory_locations")
+      .select("quantity, product_id")
+      .eq("sku", sku)
+      .eq("warehouse_id", warehouseId)
+      .single();
+
+    const previousQty = existing?.quantity || 0;
+
+    // product_id 조회 (없으면)
+    let productId = existing?.product_id;
+    if (!productId) {
+      const { data: product } = await adminClient.from("products").select("id").eq("sku", sku).single();
+      productId = product?.id;
+    }
+
+    // upsert
+    const { error } = await adminClient
+      .from("inventory_locations")
+      .upsert({
+        warehouse_id: warehouseId,
+        sku,
+        product_id: productId,
+        quantity,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "warehouse_id,sku" });
+
+    if (error) return { success: false, error: error.message };
+
+    // 재고 이력 기록
+    if (productId) {
+      await adminClient.from("inventory_history").insert({
+        product_id: productId,
+        sku,
+        stock_before: previousQty,
+        stock_after: quantity,
+        stock_change: quantity - previousQty,
+        change_reason: `창고 재고 수동 조정 (${warehouseName}): ${previousQty} → ${quantity}`,
+      });
+    }
+
+    return { success: true, message: `${warehouseName} 재고가 ${quantity}개로 변경되었습니다.` };
+  }
+
+  // 우선 출고 창고 변경
+  if (actionType === "updatePriorityWarehouse") {
+    const sku = formData.get("sku") as string;
+    const warehouseId = formData.get("warehouseId") as string;
+    const warehouseName = formData.get("warehouseName") as string;
+
+    const { error } = await adminClient
+      .from("products")
+      .update({ priority_warehouse_id: warehouseId })
+      .eq("sku", sku);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, message: `우선 출고 창고가 ${warehouseName}(으)로 변경되었습니다.` };
+  }
+
+  // 창고 간 재고 이동
+  if (actionType === "transferStock") {
+    const sku = formData.get("sku") as string;
+    const fromWarehouseId = formData.get("fromWarehouseId") as string;
+    const toWarehouseId = formData.get("toWarehouseId") as string;
+    const quantity = parseInt(formData.get("quantity") as string);
+    const fromWarehouseName = formData.get("fromWarehouseName") as string;
+    const toWarehouseName = formData.get("toWarehouseName") as string;
+
+    if (fromWarehouseId === toWarehouseId) {
+      return { success: false, error: "출발 창고와 도착 창고가 같을 수 없습니다." };
+    }
+
+    if (quantity <= 0) {
+      return { success: false, error: "이동 수량은 1개 이상이어야 합니다." };
+    }
+
+    // 출발 창고 재고 확인
+    const { data: fromStock } = await adminClient
+      .from("inventory_locations")
+      .select("quantity, product_id")
+      .eq("warehouse_id", fromWarehouseId)
+      .eq("sku", sku)
+      .single();
+
+    if (!fromStock || fromStock.quantity < quantity) {
+      return { success: false, error: `출발 창고 재고 부족: 현재 ${fromStock?.quantity || 0}개, 요청 ${quantity}개` };
+    }
+
+    const productId = fromStock.product_id;
+
+    // 출발 창고 재고 차감
+    await adminClient
+      .from("inventory_locations")
+      .update({ quantity: fromStock.quantity - quantity, updated_at: new Date().toISOString() })
+      .eq("warehouse_id", fromWarehouseId)
+      .eq("sku", sku);
+
+    // 도착 창고 재고 증가
+    const { data: toStock } = await adminClient
+      .from("inventory_locations")
+      .select("quantity")
+      .eq("warehouse_id", toWarehouseId)
+      .eq("sku", sku)
+      .single();
+
+    if (toStock) {
+      await adminClient
+        .from("inventory_locations")
+        .update({ quantity: toStock.quantity + quantity, updated_at: new Date().toISOString() })
+        .eq("warehouse_id", toWarehouseId)
+        .eq("sku", sku);
+    } else {
+      await adminClient
+        .from("inventory_locations")
+        .insert({
+          warehouse_id: toWarehouseId,
+          sku,
+          product_id: productId,
+          quantity,
+        });
+    }
+
+    // 이동 이력 기록
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const { count } = await adminClient
+      .from("stock_transfers")
+      .select("*", { count: "exact", head: true })
+      .ilike("transfer_number", `TRF-${today}%`);
+
+    const transferNumber = `TRF-${today}-${String((count || 0) + 1).padStart(4, "0")}`;
+
+    await adminClient.from("stock_transfers").insert({
+      transfer_number: transferNumber,
+      sku,
+      product_id: productId,
+      from_warehouse_id: fromWarehouseId,
+      to_warehouse_id: toWarehouseId,
+      quantity,
+      status: "completed",
+      completed_at: new Date().toISOString(),
+    });
+
+    // 재고 이력 기록
+    if (productId) {
+      await adminClient.from("inventory_history").insert({
+        product_id: productId,
+        sku,
+        stock_before: fromStock.quantity,
+        stock_after: fromStock.quantity - quantity,
+        stock_change: -quantity,
+        change_reason: `창고 이동 출고: ${fromWarehouseName} → ${toWarehouseName} (${transferNumber})`,
+      });
+    }
+
+    return { success: true, message: `${quantity}개가 ${fromWarehouseName}에서 ${toWarehouseName}(으)로 이동되었습니다.` };
+  }
+
   return { success: false, error: "지원하지 않는 액션입니다." };
 }
 
@@ -790,10 +977,30 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
   const [showDistributionDialog, setShowDistributionDialog] = useState(false);
   const [cafe24Ratio, setCafe24Ratio] = useState("100");
   const [naverRatio, setNaverRatio] = useState("100");
-  
+
+  // 창고별 재고 편집 상태
+  const [editingWarehouseStock, setEditingWarehouseStock] = useState<{
+    sku: string;
+    warehouseId: string;
+  } | null>(null);
+  const [editWarehouseStockValue, setEditWarehouseStockValue] = useState("");
+
+  // 재고 이동 모달 상태
+  const [transferModal, setTransferModal] = useState<{
+    open: boolean;
+    item: InventoryItem | null;
+  }>({ open: false, item: null });
+  const [transferFromWarehouse, setTransferFromWarehouse] = useState("");
+  const [transferToWarehouse, setTransferToWarehouse] = useState("");
+  const [transferQuantity, setTransferQuantity] = useState("");
+
   // 정렬 상태
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+
+  // 창고 목록
+  const warehouses = filterOptions.warehouses as Warehouse[];
+  const defaultWarehouse = warehouses.find(w => w.is_default);
   
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
@@ -989,6 +1196,58 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
     fetcher.submit({ actionType: "updateThreshold", inventoryId: item.id, alertThreshold: editThreshold }, { method: "POST" });
   };
 
+  // 창고별 재고 저장
+  const saveWarehouseStock = () => {
+    if (!editingWarehouseStock) return;
+    const warehouse = warehouses.find(w => w.id === editingWarehouseStock.warehouseId);
+    fetcher.submit({
+      actionType: "updateWarehouseStock",
+      sku: editingWarehouseStock.sku,
+      warehouseId: editingWarehouseStock.warehouseId,
+      warehouseName: warehouse?.warehouse_name || "",
+      quantity: editWarehouseStockValue,
+    }, { method: "POST" });
+    setEditingWarehouseStock(null);
+  };
+
+  // 우선 출고 창고 변경
+  const handlePriorityWarehouseChange = (sku: string, warehouseId: string) => {
+    const warehouse = warehouses.find(w => w.id === warehouseId);
+    fetcher.submit({
+      actionType: "updatePriorityWarehouse",
+      sku,
+      warehouseId,
+      warehouseName: warehouse?.warehouse_name || "",
+    }, { method: "POST" });
+  };
+
+  // 재고 이동 모달 열기
+  const openTransferModal = (item: InventoryItem) => {
+    setTransferModal({ open: true, item });
+    const firstWarehouse = warehouses[0]?.id || "";
+    const secondWarehouse = warehouses[1]?.id || firstWarehouse;
+    setTransferFromWarehouse(firstWarehouse);
+    setTransferToWarehouse(secondWarehouse);
+    setTransferQuantity("");
+  };
+
+  // 재고 이동 실행
+  const handleTransferStock = () => {
+    if (!transferModal.item) return;
+    const fromWarehouse = warehouses.find(w => w.id === transferFromWarehouse);
+    const toWarehouse = warehouses.find(w => w.id === transferToWarehouse);
+    fetcher.submit({
+      actionType: "transferStock",
+      sku: transferModal.item.sku,
+      fromWarehouseId: transferFromWarehouse,
+      toWarehouseId: transferToWarehouse,
+      fromWarehouseName: fromWarehouse?.warehouse_name || "",
+      toWarehouseName: toWarehouse?.warehouse_name || "",
+      quantity: transferQuantity,
+    }, { method: "POST" });
+    setTransferModal({ open: false, item: null });
+  };
+
   const handleBulkUpdate = () => {
     fetcher.submit({ actionType: "bulkUpdateThreshold", inventoryIds: JSON.stringify(Array.from(selectedItems)), alertThreshold: bulkThreshold }, { method: "POST" });
     setShowBulkDialog(false);
@@ -1082,8 +1341,72 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
               <Badge variant="secondary" className="text-xs">{item.products.sku_6_size}</Badge>
             ) : <span className="text-muted-foreground">-</span>}
           </td>
-          <td className="px-2 py-2 min-w-[160px]">
+          <td className="px-2 py-2 min-w-[120px]">
             <StockProgressBar current={item.current_stock} threshold={item.alert_threshold} />
+          </td>
+          {/* 창고별 재고 컬럼 */}
+          {warehouses.map((wh) => {
+            const whStock = item.warehouse_stocks?.[wh.id] ?? 0;
+            const isEditing = editingWarehouseStock?.sku === item.sku && editingWarehouseStock?.warehouseId === wh.id;
+            return (
+              <td key={wh.id} className="px-2 py-2 text-center">
+                {isEditing ? (
+                  <div className="flex items-center justify-center gap-1">
+                    <Input
+                      type="number"
+                      value={editWarehouseStockValue}
+                      onChange={(e) => setEditWarehouseStockValue(e.target.value)}
+                      className="w-16 h-7 text-xs text-center"
+                      min="0"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveWarehouseStock();
+                        if (e.key === "Escape") setEditingWarehouseStock(null);
+                      }}
+                    />
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={saveWarehouseStock} disabled={syncing}>
+                      <CheckIcon className="h-3 w-3 text-green-600" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setEditingWarehouseStock(null)}>
+                      <XIcon className="h-3 w-3 text-red-600" />
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    className={`px-2 py-1 rounded hover:bg-muted transition-colors min-w-[50px] ${
+                      whStock === 0 ? "text-red-600 font-medium" : whStock < 10 ? "text-orange-600" : ""
+                    }`}
+                    onClick={() => {
+                      setEditingWarehouseStock({ sku: item.sku, warehouseId: wh.id });
+                      setEditWarehouseStockValue(String(whStock));
+                    }}
+                  >
+                    {whStock}
+                  </button>
+                )}
+              </td>
+            );
+          })}
+          {/* 우선 출고 창고 */}
+          <td className="px-2 py-2">
+            <Select
+              value={item.products?.priority_warehouse_id || defaultWarehouse?.id || ""}
+              onValueChange={(v) => handlePriorityWarehouseChange(item.sku, v)}
+              disabled={syncing}
+            >
+              <SelectTrigger className="w-[100px] h-7 text-xs">
+                <SelectValue placeholder="창고 선택">
+                  {warehouses.find(w => w.id === (item.products?.priority_warehouse_id || defaultWarehouse?.id))?.warehouse_name || "선택"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {warehouses.map((wh) => (
+                  <SelectItem key={wh.id} value={wh.id} className="text-xs">
+                    {wh.warehouse_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </td>
           <td className="px-2 py-2 text-center">
             {item.cafe24_stock !== null ? (
@@ -1122,26 +1445,43 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
             )}
           </td>
           <td className="px-2 py-2 text-center">
-            {hasMapping && (
+            <div className="flex items-center justify-center gap-1">
+              {/* 재고 이동 버튼 */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button 
-                    size="sm" 
-                    variant="ghost" 
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     className="h-6 w-6 p-0"
-                    onClick={(e) => { e.stopPropagation(); openStockPushModal(item); }}
+                    onClick={(e) => { e.stopPropagation(); openTransferModal(item); }}
                   >
-                    <SendIcon className="h-3 w-3 text-blue-500" />
+                    <WarehouseIcon className="h-3 w-3 text-purple-500" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>채널 재고 푸시</TooltipContent>
+                <TooltipContent>창고 간 재고 이동</TooltipContent>
               </Tooltip>
-            )}
+              {/* 채널 재고 푸시 버튼 */}
+              {hasMapping && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0"
+                      onClick={(e) => { e.stopPropagation(); openStockPushModal(item); }}
+                    >
+                      <SendIcon className="h-3 w-3 text-blue-500" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>채널 재고 푸시</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
           </td>
         </tr>
         {hasMapping && isExpanded && (
           <tr key={`${item.id}-detail`} className="bg-muted/20">
-            <td colSpan={10} className="p-0">
+            <td colSpan={12 + warehouses.length} className="p-0">
               <ChannelMappingDetail mapping={item.channel_mapping!} />
             </td>
           </tr>
@@ -1387,7 +1727,17 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
                       <SortableHeader sortKey="product_name" currentSort={sortKey} currentOrder={sortOrder} onSort={handleSort}>제품명</SortableHeader>
                       <SortableHeader sortKey="color" currentSort={sortKey} currentOrder={sortOrder} onSort={handleSort}>색상</SortableHeader>
                       <SortableHeader sortKey="size" currentSort={sortKey} currentOrder={sortOrder} onSort={handleSort}>사이즈</SortableHeader>
-                      <SortableHeader sortKey="current_stock" currentSort={sortKey} currentOrder={sortOrder} onSort={handleSort}>재고 현황</SortableHeader>
+                      <SortableHeader sortKey="current_stock" currentSort={sortKey} currentOrder={sortOrder} onSort={handleSort}>전체</SortableHeader>
+                      {/* 창고별 컬럼 헤더 */}
+                      {warehouses.map((wh) => (
+                        <th key={wh.id} className="px-2 py-3 text-center text-xs font-medium text-muted-foreground whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1">
+                            <WarehouseIcon className="w-3 h-3" />
+                            {wh.warehouse_name}
+                          </div>
+                        </th>
+                      ))}
+                      <th className="px-2 py-3 text-center text-xs font-medium text-muted-foreground">우선출고</th>
                       <SortableHeader sortKey="cafe24_stock" currentSort={sortKey} currentOrder={sortOrder} onSort={handleSort}>Cafe24</SortableHeader>
                       <SortableHeader sortKey="naver_stock" currentSort={sortKey} currentOrder={sortOrder} onSort={handleSort}>네이버</SortableHeader>
                       <SortableHeader sortKey="alert_threshold" currentSort={sortKey} currentOrder={sortOrder} onSort={handleSort} className="text-right">안전재고</SortableHeader>
@@ -1626,6 +1976,117 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
               >
                 <SendIcon className="h-4 w-4 mr-2" />
                 {syncing ? "전송 중..." : "재고 전송"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* 재고 이동 모달 */}
+        <Dialog open={transferModal.open} onOpenChange={(open) => setTransferModal({ open, item: open ? transferModal.item : null })}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <WarehouseIcon className="h-5 w-5" />
+                창고 간 재고 이동
+              </DialogTitle>
+              <DialogDescription>
+                선택한 SKU의 재고를 다른 창고로 이동합니다.
+              </DialogDescription>
+            </DialogHeader>
+            {transferModal.item && (
+              <div className="space-y-4">
+                {/* SKU 정보 */}
+                <div className="p-3 bg-muted rounded-lg">
+                  <div className="font-mono text-sm font-medium">{transferModal.item.sku}</div>
+                  <div className="text-xs text-muted-foreground">{transferModal.item.products?.product_name}</div>
+                </div>
+
+                {/* 출발 창고 */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">출발 창고</label>
+                  <Select value={transferFromWarehouse} onValueChange={setTransferFromWarehouse}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="출발 창고 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {warehouses.map((wh) => (
+                        <SelectItem key={wh.id} value={wh.id}>
+                          {wh.warehouse_name} (재고: {transferModal.item?.warehouse_stocks?.[wh.id] ?? 0}개)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* 도착 창고 */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">도착 창고</label>
+                  <Select value={transferToWarehouse} onValueChange={setTransferToWarehouse}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="도착 창고 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {warehouses.filter(wh => wh.id !== transferFromWarehouse).map((wh) => (
+                        <SelectItem key={wh.id} value={wh.id}>
+                          {wh.warehouse_name} (재고: {transferModal.item?.warehouse_stocks?.[wh.id] ?? 0}개)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* 이동 수량 */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">이동 수량</label>
+                  <Input
+                    type="number"
+                    value={transferQuantity}
+                    onChange={(e) => setTransferQuantity(e.target.value)}
+                    min="1"
+                    max={transferModal.item?.warehouse_stocks?.[transferFromWarehouse] ?? 0}
+                    placeholder="이동할 수량 입력"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    출발 창고 현재 재고: {transferModal.item?.warehouse_stocks?.[transferFromWarehouse] ?? 0}개
+                  </p>
+                </div>
+
+                {/* 이동 결과 미리보기 */}
+                {transferQuantity && parseInt(transferQuantity) > 0 && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+                    <div className="font-medium mb-2">이동 후 예상 재고</div>
+                    <div className="flex justify-between">
+                      <span>{warehouses.find(w => w.id === transferFromWarehouse)?.warehouse_name}:</span>
+                      <span className="font-mono">
+                        {(transferModal.item?.warehouse_stocks?.[transferFromWarehouse] ?? 0) - parseInt(transferQuantity)}개
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>{warehouses.find(w => w.id === transferToWarehouse)?.warehouse_name}:</span>
+                      <span className="font-mono">
+                        {(transferModal.item?.warehouse_stocks?.[transferToWarehouse] ?? 0) + parseInt(transferQuantity)}개
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTransferModal({ open: false, item: null })}>취소</Button>
+              <Button
+                onClick={handleTransferStock}
+                disabled={
+                  syncing ||
+                  !transferFromWarehouse ||
+                  !transferToWarehouse ||
+                  transferFromWarehouse === transferToWarehouse ||
+                  !transferQuantity ||
+                  parseInt(transferQuantity) <= 0 ||
+                  parseInt(transferQuantity) > (transferModal.item?.warehouse_stocks?.[transferFromWarehouse] ?? 0)
+                }
+              >
+                <WarehouseIcon className="h-4 w-4 mr-2" />
+                {syncing ? "이동 중..." : "재고 이동"}
               </Button>
             </DialogFooter>
           </DialogContent>
