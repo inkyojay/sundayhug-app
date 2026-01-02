@@ -57,10 +57,25 @@ async function generateSignature(clientId, clientSecret, timestamp) {
 }
 
 /**
+ * 쿠팡 API datetime 형식 생성 (yyMMddTHHmmssZ)
+ */
+function getCoupangDatetime() {
+  const now = new Date();
+  const yy = String(now.getUTCFullYear()).slice(2);
+  const MM = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(now.getUTCDate()).padStart(2, '0');
+  const HH = String(now.getUTCHours()).padStart(2, '0');
+  const mm = String(now.getUTCMinutes()).padStart(2, '0');
+  const ss = String(now.getUTCSeconds()).padStart(2, '0');
+  return `${yy}${MM}${dd}T${HH}${mm}${ss}Z`;
+}
+
+/**
  * 쿠팡 API HMAC-SHA256 서명 생성
  */
-function generateCoupangSignature(method, path, timestamp, secretKey) {
-  const message = `${timestamp}${method}${path}`;
+function generateCoupangSignature(method, path, datetime, secretKey) {
+  // message = datetime + method + path (쿼리스트링 포함)
+  const message = `${datetime}${method}${path}`;
   return crypto.createHmac("sha256", secretKey).update(message).digest("hex");
 }
 
@@ -68,11 +83,11 @@ function generateCoupangSignature(method, path, timestamp, secretKey) {
  * 쿠팡 API 인증 헤더 생성
  */
 function getCoupangAuthHeaders(method, path, accessKey, secretKey) {
-  const timestamp = new Date().toISOString();
-  const signature = generateCoupangSignature(method, path, timestamp, secretKey);
+  const datetime = getCoupangDatetime();
+  const signature = generateCoupangSignature(method, path, datetime, secretKey);
   return {
-    "Content-Type": "application/json",
-    "Authorization": `CEA algorithm=HmacSHA256, access-key=${accessKey}, signed-date=${timestamp}, signature=${signature}`,
+    "Content-Type": "application/json;charset=UTF-8",
+    "Authorization": `CEA algorithm=HmacSHA256, access-key=${accessKey}, signed-date=${datetime}, signature=${signature}`,
   };
 }
 
