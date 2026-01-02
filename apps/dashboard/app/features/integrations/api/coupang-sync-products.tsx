@@ -7,6 +7,7 @@
 import type { Route } from "./+types/coupang-sync-products";
 import { createClient } from "@supabase/supabase-js";
 import {
+  getCoupangCredentials,
   getCoupangCredentialsByVendorId,
   getAllCoupangProducts,
   getCoupangProductDetail,
@@ -21,16 +22,14 @@ export async function action({ request }: Route.ActionArgs) {
   );
 
   const formData = await request.formData();
-  const vendorId = formData.get("vendor_id") as string;
+  const vendorIdParam = formData.get("vendor_id") as string;
   const status = formData.get("status") as string | null; // APPROVED, IN_REVIEW 등
   const fetchDetails = formData.get("fetch_details") === "true"; // 상세 정보 조회 여부
 
-  if (!vendorId) {
-    return { error: "판매자 ID가 필요합니다." };
-  }
-
-  // 인증 정보 조회
-  const credentials = await getCoupangCredentialsByVendorId(vendorId);
+  // 인증 정보 조회 ("auto"인 경우 활성화된 첫 번째 인증정보 사용)
+  const credentials = vendorIdParam === "auto"
+    ? await getCoupangCredentials()
+    : await getCoupangCredentialsByVendorId(vendorIdParam);
 
   if (!credentials) {
     return { error: "쿠팡 연동 정보가 없습니다. 먼저 연동을 설정해주세요." };
@@ -40,6 +39,8 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: "쿠팡 연동이 비활성화되어 있습니다." };
   }
 
+  const vendorId = credentials.vendor_id;
+
   const startTime = Date.now();
   let syncedProducts = 0;
   let syncedOptions = 0;
@@ -48,11 +49,11 @@ export async function action({ request }: Route.ActionArgs) {
   try {
     console.log(`[Coupang] Syncing products for vendor: ${vendorId}`);
 
-    // 전체 상품 조회 (로켓그로스 전용)
-    const products = await getAllCoupangProducts(
-      credentials,
-      status || undefined
-    );
+    // 전체 상품 조회 (로켓그로스 + 마켓플레이스 모두)
+    const products = await getAllCoupangProducts(credentials, {
+      status: status || undefined,
+      businessTypes: "all", // 둘 다 조회
+    });
 
     if (products.length === 0) {
       await adminClient.from("coupang_sync_logs").insert({
@@ -110,33 +111,7 @@ export async function action({ request }: Route.ActionArgs) {
 
         syncedProducts++;
 
-        // 옵션 정보 저장 (items 배열에서)
-        for (const item of product.items) {
-          const rgItem = item.rocketGrowthItem;
-          if (!rgItem) continue;
-
-          const optionData = {
-            coupang_product_id: upsertedProduct.id,
-            vendor_item_id: rgItem.vendorItemId,
-            vendor_inventory_item_id: rgItem.vendorInventoryItemId,
-            item_name: item.itemName,
-            updated_at: new Date().toISOString(),
-          };
-
-          const { error: optionError } = await adminClient
-            .from("coupang_product_options")
-            .upsert(optionData, { onConflict: "vendor_item_id" });
-
-          if (optionError) {
-            console.error(
-              `[Coupang] Option upsert error for ${rgItem.vendorItemId}:`,
-              optionError
-            );
-          } else {
-            syncedOptions++;
-          }
-        }
-
+        // 상품 목록 API는 items 배열을 반환하지 않으므로 상세 API에서만 옵션 처리
         // 상세 정보 조회 (옵션)
         if (fetchDetails) {
           try {
@@ -156,30 +131,95 @@ export async function action({ request }: Route.ActionArgs) {
                 })
                 .eq("id", upsertedProduct.id);
 
-              // 옵션 상세 정보 업데이트
-              for (const detailItem of detail.items) {
-                const rgData = detailItem.rocketGrowthItemData;
-                if (!rgData) continue;
+              // 옵션 상세 정보 upsert (로켓그로스 + 마켓플레이스)
+              // 주의: 상품 목록 API는 items 배열이 비어있을 수 있으므로 상세 API에서 upsert 필요
+              const detailItems = detail.items || [];
+              for (const detailItem of detailItems) {
+                // 로켓그로스 옵션 상세
+                if (detailItem.rocketGrowthItemData) {
+                  const rgData = detailItem.rocketGrowthItemData;
 
-                await adminClient
-                  .from("coupang_product_options")
-                  .update({
-                    item_id: rgData.itemId,
-                    external_vendor_sku: rgData.externalVendorSku || null,
-                    model_no: rgData.modelNo || null,
-                    barcode: rgData.barcode || null,
-                    original_price: rgData.priceData?.originalPrice || null,
-                    sale_price: rgData.priceData?.salePrice || null,
-                    sku_fragile: rgData.skuInfo?.fragile || false,
-                    sku_height: rgData.skuInfo?.height || null,
-                    sku_length: rgData.skuInfo?.length || null,
-                    sku_width: rgData.skuInfo?.width || null,
-                    sku_weight: rgData.skuInfo?.weight || null,
-                    quantity_per_box: rgData.skuInfo?.quantityPerBox || null,
-                    distribution_period:
-                      rgData.skuInfo?.distributionPeriod || null,
-                  })
-                  .eq("vendor_item_id", rgData.vendorItemId);
+                  // 자동 SKU 매핑 시도
+                  let skuId: string | null = null;
+                  if (rgData.externalVendorSku) {
+                    const { data: matchedProduct } = await adminClient
+                      .from("products")
+                      .select("id")
+                      .eq("sku", rgData.externalVendorSku)
+                      .single();
+                    if (matchedProduct) {
+                      skuId = matchedProduct.id;
+                    }
+                  }
+
+                  const { error: rgError } = await adminClient
+                    .from("coupang_product_options")
+                    .upsert({
+                      coupang_product_id: upsertedProduct.id,
+                      vendor_item_id: rgData.vendorItemId,
+                      item_id: rgData.itemId,
+                      item_name: detailItem.itemName,
+                      fulfillment_type: "ROCKET_GROWTH",
+                      external_vendor_sku: rgData.externalVendorSku || null,
+                      model_no: rgData.modelNo || null,
+                      barcode: rgData.barcode || null,
+                      original_price: rgData.priceData?.originalPrice || null,
+                      sale_price: rgData.priceData?.salePrice || null,
+                      sku_fragile: rgData.skuInfo?.fragile || false,
+                      sku_height: rgData.skuInfo?.height || null,
+                      sku_length: rgData.skuInfo?.length || null,
+                      sku_width: rgData.skuInfo?.width || null,
+                      sku_weight: rgData.skuInfo?.weight || null,
+                      quantity_per_box: rgData.skuInfo?.quantityPerBox || null,
+                      distribution_period:
+                        rgData.skuInfo?.distributionPeriod || null,
+                      sku_id: skuId, // 자동 매핑된 SKU
+                      updated_at: new Date().toISOString(),
+                    }, { onConflict: "vendor_item_id" });
+
+                  if (!rgError) {
+                    syncedOptions++;
+                  }
+                }
+
+                // 마켓플레이스 옵션 상세
+                if (detailItem.marketplaceItemData) {
+                  const mpData = detailItem.marketplaceItemData;
+
+                  // 자동 SKU 매핑 시도
+                  let skuId: string | null = null;
+                  if (mpData.externalVendorSku) {
+                    const { data: matchedProduct } = await adminClient
+                      .from("products")
+                      .select("id")
+                      .eq("sku", mpData.externalVendorSku)
+                      .single();
+                    if (matchedProduct) {
+                      skuId = matchedProduct.id;
+                    }
+                  }
+
+                  const { error: mpError } = await adminClient
+                    .from("coupang_product_options")
+                    .upsert({
+                      coupang_product_id: upsertedProduct.id,
+                      vendor_item_id: mpData.vendorItemId,
+                      item_id: mpData.itemId,
+                      item_name: detailItem.itemName,
+                      fulfillment_type: "MARKETPLACE",
+                      external_vendor_sku: mpData.externalVendorSku || null,
+                      model_no: mpData.modelNo || null,
+                      barcode: mpData.barcode || null,
+                      original_price: mpData.priceData?.originalPrice || null,
+                      sale_price: mpData.priceData?.salePrice || null,
+                      sku_id: skuId, // 자동 매핑된 SKU
+                      updated_at: new Date().toISOString(),
+                    }, { onConflict: "vendor_item_id" });
+
+                  if (!mpError) {
+                    syncedOptions++;
+                  }
+                }
               }
             }
           } catch (detailError: any) {

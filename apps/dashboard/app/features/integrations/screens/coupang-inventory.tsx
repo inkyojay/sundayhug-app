@@ -13,6 +13,10 @@ import {
   AlertTriangleIcon,
   TrendingUpIcon,
   PackageIcon,
+  LinkIcon,
+  Link2OffIcon,
+  RocketIcon,
+  TruckIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { Link, useFetcher } from "react-router";
@@ -83,6 +87,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       vendor_item_id,
       item_name,
       external_vendor_sku,
+      fulfillment_type,
+      sku_id,
       coupang_products (
         seller_product_name,
         brand
@@ -101,6 +107,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     .from("coupang_inventory")
     .select("total_orderable_quantity");
 
+  // SKU 매핑 통계
+  const { data: allOptions } = await supabase
+    .from("coupang_product_options")
+    .select("sku_id, fulfillment_type")
+    .eq("fulfillment_type", "ROCKET_GROWTH");
+
+  const mappedCount = allOptions?.filter((o) => o.sku_id).length || 0;
+  const unmappedCount = (allOptions?.length || 0) - mappedCount;
+
   const stats = {
     total: allInventory?.length || 0,
     outOfStock:
@@ -115,6 +130,8 @@ export async function loader({ request }: Route.LoaderArgs) {
         (sum, i) => sum + (i.total_orderable_quantity || 0),
         0
       ) || 0,
+    mapped: mappedCount,
+    unmapped: unmappedCount,
   };
 
   return {
@@ -139,6 +156,25 @@ function getStockBadge(qty: number) {
   } else {
     return <Badge className="bg-green-100 text-green-800">충분</Badge>;
   }
+}
+
+function getFulfillmentBadge(type: string | null) {
+  if (type === "ROCKET_GROWTH") {
+    return (
+      <Badge className="bg-purple-100 text-purple-800 flex items-center gap-1 w-fit">
+        <RocketIcon className="h-3 w-3" />
+        로켓그로스
+      </Badge>
+    );
+  } else if (type === "MARKETPLACE") {
+    return (
+      <Badge className="bg-orange-100 text-orange-800 flex items-center gap-1 w-fit">
+        <TruckIcon className="h-3 w-3" />
+        판매자배송
+      </Badge>
+    );
+  }
+  return <Badge variant="outline">미지정</Badge>;
 }
 
 export default function CoupangInventoryPage({
@@ -196,7 +232,7 @@ export default function CoupangInventoryPage({
       </div>
 
       {/* 재고 통계 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -249,6 +285,30 @@ export default function CoupangInventoryPage({
             </div>
           </CardContent>
         </Card>
+        <Card className={stats.unmapped > 0 ? "border-orange-200" : ""}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <LinkIcon className="h-4 w-4" />
+              SKU 매핑
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <span className="text-2xl font-bold text-green-600">
+                {stats.mapped}
+              </span>
+              <span className="text-muted-foreground">/</span>
+              <span className="text-sm text-muted-foreground">
+                {stats.mapped + stats.unmapped}
+              </span>
+              {stats.unmapped > 0 && (
+                <Badge variant="outline" className="text-orange-600 ml-2">
+                  {stats.unmapped}개 미연결
+                </Badge>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* 필터 */}
@@ -270,12 +330,12 @@ export default function CoupangInventoryPage({
             </div>
             <div className="w-48">
               <label className="text-sm font-medium mb-2 block">재고 상태</label>
-              <Select name="stock" defaultValue={stockFilter}>
+              <Select name="stock" defaultValue={stockFilter || "all"}>
                 <SelectTrigger>
                   <SelectValue placeholder="전체" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">전체</SelectItem>
+                  <SelectItem value="all">전체</SelectItem>
                   <SelectItem value="out">품절만</SelectItem>
                   <SelectItem value="low">재고부족 (10개 미만)</SelectItem>
                 </SelectContent>
@@ -301,16 +361,18 @@ export default function CoupangInventoryPage({
                 <TableHead className="w-32">VendorItemId</TableHead>
                 <TableHead>상품명 / 옵션</TableHead>
                 <TableHead className="w-24">외부SKU</TableHead>
+                <TableHead className="w-28">판매방식</TableHead>
+                <TableHead className="w-20">SKU</TableHead>
                 <TableHead className="w-24 text-right">재고수량</TableHead>
                 <TableHead className="w-24">상태</TableHead>
-                <TableHead className="w-32 text-right">30일 판매량</TableHead>
-                <TableHead className="w-40">동기화일시</TableHead>
+                <TableHead className="w-28 text-right">30일 판매량</TableHead>
+                <TableHead className="w-36">동기화일시</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {inventories.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={9} className="text-center py-8">
                     <p className="text-muted-foreground">
                       동기화된 재고가 없습니다.
                     </p>
@@ -346,6 +408,16 @@ export default function CoupangInventoryPage({
                       </TableCell>
                       <TableCell className="font-mono text-sm">
                         {option?.external_vendor_sku || "-"}
+                      </TableCell>
+                      <TableCell>
+                        {getFulfillmentBadge(option?.fulfillment_type)}
+                      </TableCell>
+                      <TableCell>
+                        {option?.sku_id ? (
+                          <LinkIcon className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <Link2OffIcon className="h-4 w-4 text-muted-foreground" />
+                        )}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {inv.total_orderable_quantity?.toLocaleString() || 0}개

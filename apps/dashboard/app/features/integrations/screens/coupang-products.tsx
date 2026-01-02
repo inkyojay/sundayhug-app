@@ -8,12 +8,18 @@ import {
   PackageIcon,
   SearchIcon,
   RefreshCwIcon,
-  ExternalLinkIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   FilterIcon,
+  LinkIcon,
+  Link2OffIcon,
+  RocketIcon,
+  TruckIcon,
+  BoxIcon,
 } from "lucide-react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { Link, useFetcher } from "react-router";
 
 import { Badge } from "~/core/components/ui/badge";
@@ -58,7 +64,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const search = url.searchParams.get("search") || "";
   const status = url.searchParams.get("status") || "";
 
-  // 상품 목록 조회
+  // 상품 목록 조회 (옵션 + 재고 포함)
   let query = supabase
     .from("coupang_products")
     .select(
@@ -70,7 +76,9 @@ export async function loader({ request }: Route.LoaderArgs) {
         item_name,
         external_vendor_sku,
         original_price,
-        sale_price
+        sale_price,
+        fulfillment_type,
+        sku_id
       )
     `,
       { count: "exact" }
@@ -84,11 +92,34 @@ export async function loader({ request }: Route.LoaderArgs) {
     );
   }
 
-  if (status) {
+  if (status && status !== "all") {
     query = query.eq("status_name", status);
   }
 
   const { data: products, count } = await query;
+
+  // 옵션별 재고 조회
+  const allVendorItemIds: number[] = [];
+  products?.forEach((p: any) => {
+    p.coupang_product_options?.forEach((opt: any) => {
+      if (opt.vendor_item_id) {
+        allVendorItemIds.push(opt.vendor_item_id);
+      }
+    });
+  });
+
+  const { data: inventoryData } = allVendorItemIds.length > 0
+    ? await supabase
+        .from("coupang_inventory")
+        .select("vendor_item_id, total_orderable_quantity")
+        .in("vendor_item_id", allVendorItemIds)
+    : { data: [] };
+
+  // 재고 맵 생성
+  const inventoryMap: Record<number, number> = {};
+  inventoryData?.forEach((inv: any) => {
+    inventoryMap[inv.vendor_item_id] = inv.total_orderable_quantity || 0;
+  });
 
   // 상태별 통계
   const { data: statusStats } = await supabase
@@ -110,6 +141,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     search,
     status,
     statusCounts,
+    inventoryMap,
   };
 }
 
@@ -137,15 +169,55 @@ function formatPrice(price: number | null) {
   return new Intl.NumberFormat("ko-KR").format(price) + "원";
 }
 
+function getFulfillmentBadge(type: string | null) {
+  switch (type) {
+    case "ROCKET_GROWTH":
+      return (
+        <Badge className="bg-orange-100 text-orange-800 text-xs">
+          <RocketIcon className="h-3 w-3 mr-1" />
+          로켓그로스
+        </Badge>
+      );
+    case "MARKETPLACE":
+      return (
+        <Badge className="bg-blue-100 text-blue-800 text-xs">
+          <TruckIcon className="h-3 w-3 mr-1" />
+          판매자배송
+        </Badge>
+      );
+    default:
+      return <Badge variant="outline" className="text-xs">{type || "미지정"}</Badge>;
+  }
+}
+
+function getSkuMappingStatus(options: any[]) {
+  if (!options || options.length === 0) return { mapped: 0, total: 0 };
+  const mapped = options.filter((o) => o.sku_id).length;
+  return { mapped, total: options.length };
+}
+
 export default function CoupangProductsPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { products, total, page, limit, search, status, statusCounts } =
+  const { products, total, page, limit, search, status, statusCounts, inventoryMap } =
     loaderData;
   const totalPages = Math.ceil(total / limit);
   const syncFetcher = useFetcher();
 
   const [searchInput, setSearchInput] = useState(search);
+  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (productId: string) => {
+    setExpandedProducts((prev) => {
+      const next = new Set(prev);
+      if (next.has(productId)) {
+        next.delete(productId);
+      } else {
+        next.add(productId);
+      }
+      return next;
+    });
+  };
 
   const handleSync = () => {
     // 연동 정보가 있는지 확인 후 동기화
@@ -233,12 +305,12 @@ export default function CoupangProductsPage({
             </div>
             <div className="w-48">
               <label className="text-sm font-medium mb-2 block">상태</label>
-              <Select name="status" defaultValue={status}>
+              <Select name="status" defaultValue={status || "all"}>
                 <SelectTrigger>
                   <SelectValue placeholder="전체 상태" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">전체 상태</SelectItem>
+                  <SelectItem value="all">전체 상태</SelectItem>
                   <SelectItem value="승인완료">승인완료</SelectItem>
                   <SelectItem value="심사중">심사중</SelectItem>
                   <SelectItem value="승인반려">승인반려</SelectItem>
@@ -266,12 +338,12 @@ export default function CoupangProductsPage({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-24">상품ID</TableHead>
+                <TableHead className="w-10"></TableHead>
+                <TableHead className="w-28">상품ID</TableHead>
                 <TableHead>상품명</TableHead>
-                <TableHead className="w-24">상태</TableHead>
-                <TableHead className="w-20">옵션수</TableHead>
-                <TableHead className="w-32 text-right">가격</TableHead>
-                <TableHead className="w-40">동기화일시</TableHead>
+                <TableHead className="w-20">상태</TableHead>
+                <TableHead className="w-20">옵션</TableHead>
+                <TableHead className="w-36">동기화일시</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -292,58 +364,126 @@ export default function CoupangProductsPage({
                 </TableRow>
               ) : (
                 products.map((product: any) => {
-                  const firstOption = product.coupang_product_options?.[0];
+                  const options = product.coupang_product_options || [];
+                  const isExpanded = expandedProducts.has(product.id);
+                  const skuStatus = getSkuMappingStatus(options);
+
                   return (
-                    <TableRow key={product.id}>
-                      <TableCell className="font-mono text-sm">
-                        {product.seller_product_id}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium line-clamp-1">
-                            {product.seller_product_name ||
-                              product.display_product_name}
-                          </p>
-                          {product.brand && (
-                            <p className="text-sm text-muted-foreground">
-                              {product.brand}
-                            </p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{getStatusBadge(product.status_name)}</TableCell>
-                      <TableCell>
-                        {product.coupang_product_options?.length || 0}개
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {firstOption ? (
-                          <div>
-                            {firstOption.sale_price !==
-                            firstOption.original_price ? (
-                              <>
-                                <p className="text-sm line-through text-muted-foreground">
-                                  {formatPrice(firstOption.original_price)}
-                                </p>
-                                <p className="font-medium text-red-600">
-                                  {formatPrice(firstOption.sale_price)}
-                                </p>
-                              </>
+                    <React.Fragment key={product.id}>
+                      {/* 상품 행 */}
+                      <TableRow
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => toggleExpand(product.id)}
+                      >
+                        <TableCell className="w-10">
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                            {isExpanded ? (
+                              <ChevronUpIcon className="h-4 w-4" />
                             ) : (
-                              <p className="font-medium">
-                                {formatPrice(firstOption.sale_price)}
+                              <ChevronDownIcon className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {product.seller_product_id}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium line-clamp-1">
+                              {product.seller_product_name ||
+                                product.display_product_name}
+                            </p>
+                            {product.brand && (
+                              <p className="text-sm text-muted-foreground">
+                                {product.brand}
                               </p>
                             )}
                           </div>
-                        ) : (
-                          "-"
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {product.synced_at
-                          ? new Date(product.synced_at).toLocaleString("ko-KR")
-                          : "-"}
-                      </TableCell>
-                    </TableRow>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(product.status_name)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <BoxIcon className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm">{options.length}개</span>
+                            {skuStatus.total > 0 && (
+                              <span className={`text-xs ml-1 ${skuStatus.mapped === skuStatus.total ? 'text-green-600' : skuStatus.mapped > 0 ? 'text-yellow-600' : 'text-gray-400'}`}>
+                                ({skuStatus.mapped}/{skuStatus.total})
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {product.synced_at
+                            ? new Date(product.synced_at).toLocaleString("ko-KR")
+                            : "-"}
+                        </TableCell>
+                      </TableRow>
+
+                      {/* 옵션 행 (확장 시) */}
+                      {isExpanded && options.length > 0 && (
+                        <TableRow>
+                          <TableCell colSpan={6} className="p-0 bg-muted/30">
+                            <div className="px-4 py-3">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="hover:bg-transparent">
+                                    <TableHead className="text-xs h-8">옵션명</TableHead>
+                                    <TableHead className="text-xs w-28 h-8">판매방식</TableHead>
+                                    <TableHead className="text-xs w-32 h-8">외부SKU</TableHead>
+                                    <TableHead className="text-xs w-20 h-8">SKU 연결</TableHead>
+                                    <TableHead className="text-xs w-24 text-right h-8">재고</TableHead>
+                                    <TableHead className="text-xs w-28 text-right h-8">판매가</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {options.map((option: any) => {
+                                    const stock = inventoryMap[option.vendor_item_id];
+                                    return (
+                                      <TableRow key={option.id} className="hover:bg-muted/50">
+                                        <TableCell className="py-2">
+                                          <span className="text-sm">{option.item_name || "-"}</span>
+                                        </TableCell>
+                                        <TableCell className="py-2">
+                                          {getFulfillmentBadge(option.fulfillment_type)}
+                                        </TableCell>
+                                        <TableCell className="py-2 font-mono text-xs">
+                                          {option.external_vendor_sku || "-"}
+                                        </TableCell>
+                                        <TableCell className="py-2">
+                                          {option.sku_id ? (
+                                            <LinkIcon className="h-4 w-4 text-green-600" />
+                                          ) : (
+                                            <Link2OffIcon className="h-4 w-4 text-gray-400" />
+                                          )}
+                                        </TableCell>
+                                        <TableCell className="py-2 text-right">
+                                          {stock !== undefined ? (
+                                            <span className={stock === 0 ? "text-red-600 font-medium" : stock < 10 ? "text-yellow-600" : ""}>
+                                              {stock.toLocaleString()}개
+                                            </span>
+                                          ) : (
+                                            <span className="text-gray-400">-</span>
+                                          )}
+                                        </TableCell>
+                                        <TableCell className="py-2 text-right">
+                                          {option.sale_price ? (
+                                            <span className="font-medium">
+                                              {formatPrice(option.sale_price)}
+                                            </span>
+                                          ) : (
+                                            "-"
+                                          )}
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  })}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
                   );
                 })
               )}

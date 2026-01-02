@@ -7,6 +7,7 @@
 import type { Route } from "./+types/coupang-sync-inventory";
 import { createClient } from "@supabase/supabase-js";
 import {
+  getCoupangCredentials,
   getCoupangCredentialsByVendorId,
   getAllCoupangInventory,
 } from "../lib/coupang.server";
@@ -18,14 +19,12 @@ export async function action({ request }: Route.ActionArgs) {
   );
 
   const formData = await request.formData();
-  const vendorId = formData.get("vendor_id") as string;
+  const vendorIdParam = formData.get("vendor_id") as string;
 
-  if (!vendorId) {
-    return { error: "판매자 ID가 필요합니다." };
-  }
-
-  // 인증 정보 조회
-  const credentials = await getCoupangCredentialsByVendorId(vendorId);
+  // 인증 정보 조회 ("auto"인 경우 활성화된 첫 번째 인증정보 사용)
+  const credentials = vendorIdParam === "auto"
+    ? await getCoupangCredentials()
+    : await getCoupangCredentialsByVendorId(vendorIdParam);
 
   if (!credentials) {
     return { error: "쿠팡 연동 정보가 없습니다. 먼저 연동을 설정해주세요." };
@@ -34,6 +33,8 @@ export async function action({ request }: Route.ActionArgs) {
   if (!credentials.is_active) {
     return { error: "쿠팡 연동이 비활성화되어 있습니다." };
   }
+
+  const vendorId = credentials.vendor_id;
 
   const startTime = Date.now();
   let syncedCount = 0;
@@ -90,15 +91,103 @@ export async function action({ request }: Route.ActionArgs) {
       }
     }
 
-    // coupang_product_options 테이블에도 재고 연결 (vendor_item_id 기준)
+    // =====================================================
+    // 로켓그로스 창고 재고 동기화 (inventory_locations)
+    // =====================================================
+
+    // 1. 로켓그로스 창고 조회
+    const { data: warehouse } = await adminClient
+      .from("warehouses")
+      .select("id")
+      .eq("warehouse_code", "WH-COUPANG-RG")
+      .single();
+
+    if (!warehouse) {
+      console.warn("[Coupang] 로켓그로스 창고(WH-COUPANG-RG)가 없습니다. inventory_locations 동기화 건너뜀");
+    }
+
+    // 2. SKU 매핑된 로켓그로스 옵션 조회
+    const { data: optionsWithSku } = await adminClient
+      .from("coupang_product_options")
+      .select("vendor_item_id, external_vendor_sku, sku_id, fulfillment_type")
+      .not("sku_id", "is", null)
+      .eq("fulfillment_type", "ROCKET_GROWTH");
+
+    // vendor_item_id를 키로 하는 재고 맵 생성
+    const inventoryMap: Record<number, typeof inventoryList[0]> = {};
+    for (const inv of inventoryList) {
+      inventoryMap[inv.vendorItemId] = inv;
+    }
+
+    // 3. inventory_locations에 재고 반영 + 이력 기록
+    let locationSyncCount = 0;
+    if (warehouse && optionsWithSku) {
+      for (const opt of optionsWithSku) {
+        const inv = inventoryMap[opt.vendor_item_id];
+        if (!inv || !opt.external_vendor_sku) continue;
+
+        const newQty = inv.inventoryDetails?.totalOrderableQuantity || 0;
+
+        // 기존 재고 조회 (이력 기록용)
+        const { data: existing } = await adminClient
+          .from("inventory_locations")
+          .select("quantity")
+          .eq("warehouse_id", warehouse.id)
+          .eq("sku", opt.external_vendor_sku)
+          .single();
+
+        const prevQty = existing?.quantity || 0;
+
+        // inventory_locations upsert
+        const { error: locError } = await adminClient
+          .from("inventory_locations")
+          .upsert(
+            {
+              warehouse_id: warehouse.id,
+              sku: opt.external_vendor_sku,
+              product_id: opt.sku_id,
+              quantity: newQty,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "warehouse_id,sku" }
+          );
+
+        if (locError) {
+          console.error(`[Coupang] inventory_locations upsert error:`, locError);
+        } else {
+          locationSyncCount++;
+
+          // 재고 변동이 있을 때만 이력 기록
+          if (prevQty !== newQty) {
+            await adminClient.from("inventory_history").insert({
+              sku: opt.external_vendor_sku,
+              product_id: opt.sku_id,
+              warehouse_id: warehouse.id,
+              change_type: "sync",
+              stock_before: prevQty,
+              stock_after: newQty,
+              stock_change: newQty - prevQty,
+              change_reason: "쿠팡 로켓그로스 재고 동기화",
+            });
+          }
+        }
+      }
+    }
+
+    console.log(`[Coupang] inventory_locations 동기화: ${locationSyncCount}건`);
+
+    // coupang_product_options 테이블에도 재고 연결 (vendor_item_id 기준) - SKU 매핑이 안된 것만
     for (const inv of inventoryList) {
       // 옵션에 external_vendor_sku가 있으면 내부 products 테이블과 매핑 시도
       if (inv.externalSkuId) {
         const { data: option } = await adminClient
           .from("coupang_product_options")
-          .select("id, external_vendor_sku")
+          .select("id, external_vendor_sku, sku_id")
           .eq("vendor_item_id", inv.vendorItemId)
           .single();
+
+        // 이미 SKU 매핑이 되어 있으면 건너뜀
+        if (option?.sku_id) continue;
 
         if (option?.external_vendor_sku) {
           // 내부 SKU와 매핑
@@ -134,15 +223,16 @@ export async function action({ request }: Route.ActionArgs) {
       .eq("vendor_id", vendorId);
 
     console.log(
-      `[Coupang] Inventory sync completed: ${syncedCount} items synced`
+      `[Coupang] Inventory sync completed: ${syncedCount} items synced, ${locationSyncCount} locations updated`
     );
 
     return {
       success: true,
       synced: syncedCount,
       failed: failedCount,
+      locationSynced: locationSyncCount,
       total: inventoryList.length,
-      message: `${syncedCount}개 재고 정보가 동기화되었습니다.`,
+      message: `${syncedCount}개 재고 정보가 동기화되었습니다. (창고 재고 ${locationSyncCount}건 반영)`,
     };
   } catch (error: any) {
     console.error("[Coupang] Inventory sync error:", error);

@@ -1,15 +1,15 @@
 /**
  * 쿠팡 로켓그로스 API 클라이언트
  *
- * 인증: HMAC-SHA256 서명 방식
+ * Railway 프록시를 통해 쿠팡 API 호출 (고정 IP 필요)
  * Rate Limit: 분당 50회
- * Base URL: https://api-gateway.coupang.com
  */
 
-import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 
-const COUPANG_API_BASE = "https://api-gateway.coupang.com";
+// Railway 프록시 설정
+const COUPANG_PROXY_URL = process.env.COUPANG_PROXY_URL || "https://sundayhug-app-production.up.railway.app";
+const PROXY_API_KEY = process.env.PROXY_API_KEY || "sundayhug-proxy-2024";
 
 // =====================================================
 // 타입 정의
@@ -143,7 +143,18 @@ export interface CoupangProductDetail {
         salePrice: number;
       };
     } | null;
-    marketplaceItemData: any | null;
+    marketplaceItemData: {
+      sellerProductItemId: number;
+      vendorItemId: number;
+      itemId: number;
+      externalVendorSku: string;
+      modelNo: string;
+      barcode: string;
+      priceData: {
+        originalPrice: number;
+        salePrice: number;
+      };
+    } | null;
   }>;
   rocketGrowthAdditionalInformation?: {
     rfmInboundName: string;
@@ -188,52 +199,14 @@ class RateLimiter {
 const rateLimiter = new RateLimiter();
 
 // =====================================================
-// HMAC-SHA256 서명 생성
+// 공통 API 호출 함수 (Railway 프록시 경유)
 // =====================================================
 
 /**
- * 쿠팡 API Gateway 인증용 HMAC-SHA256 서명 생성
+ * Railway 프록시를 통해 쿠팡 API 호출
  *
- * 서명 메시지 형식: {timestamp}{method}{path}
+ * 프록시가 HMAC 서명을 생성하고, 고정 IP로 요청을 전달함
  */
-function generateHmacSignature(
-  method: string,
-  path: string,
-  timestamp: string,
-  secretKey: string
-): string {
-  const message = `${timestamp}${method}${path}`;
-  return crypto.createHmac("sha256", secretKey).update(message).digest("hex");
-}
-
-/**
- * 쿠팡 API 인증 헤더 생성
- *
- * Authorization: CEA algorithm=HmacSHA256, access-key={accessKey}, signed-date={timestamp}, signature={signature}
- */
-function getAuthHeaders(
-  method: string,
-  path: string,
-  credentials: CoupangCredentials
-): HeadersInit {
-  const timestamp = new Date().toISOString();
-  const signature = generateHmacSignature(
-    method,
-    path,
-    timestamp,
-    credentials.secret_key
-  );
-
-  return {
-    "Content-Type": "application/json",
-    Authorization: `CEA algorithm=HmacSHA256, access-key=${credentials.access_key}, signed-date=${timestamp}, signature=${signature}`,
-  };
-}
-
-// =====================================================
-// 공통 API 호출 함수
-// =====================================================
-
 async function coupangFetch<T>(
   method: string,
   path: string,
@@ -243,23 +216,31 @@ async function coupangFetch<T>(
   // Rate limit 확인
   await rateLimiter.waitIfNeeded();
 
-  const headers = getAuthHeaders(method, path, credentials);
+  console.log(`[Coupang] ${method} ${path} (via proxy)`);
 
-  console.log(`[Coupang] ${method} ${path}`);
-
-  const response = await fetch(`${COUPANG_API_BASE}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
+  // Railway 프록시로 요청
+  const proxyResponse = await fetch(`${COUPANG_PROXY_URL}/api/coupang/proxy`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-proxy-api-key": PROXY_API_KEY,
+    },
+    body: JSON.stringify({
+      method,
+      path,
+      accessKey: credentials.access_key,
+      secretKey: credentials.secret_key,
+      body: body || undefined,
+    }),
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`[Coupang] API Error: ${response.status} - ${errorText}`);
-    throw new Error(`Coupang API Error: ${response.status} - ${errorText}`);
+  if (!proxyResponse.ok) {
+    const errorText = await proxyResponse.text();
+    console.error(`[Coupang] Proxy Error: ${proxyResponse.status} - ${errorText}`);
+    throw new Error(`Coupang Proxy Error: ${proxyResponse.status} - ${errorText}`);
   }
 
-  const data = await response.json();
+  const data = await proxyResponse.json();
 
   // 쿠팡 API 에러 코드 확인
   if (data.code && data.code !== 200 && data.code !== "SUCCESS") {
@@ -448,7 +429,9 @@ export async function getAllCoupangInventory(
 // =====================================================
 
 /**
- * 상품 목록 조회 (로켓그로스 전용)
+ * 상품 목록 조회
+ *
+ * @param options.businessTypes - 'rocketGrowth' | 'marketplace' | 'all' (기본: all)
  */
 export async function getCoupangProducts(
   credentials: CoupangCredentials,
@@ -457,14 +440,21 @@ export async function getCoupangProducts(
     maxPerPage?: number;
     status?: string;
     sellerProductName?: string;
+    businessTypes?: "rocketGrowth" | "marketplace" | "all";
   }
 ): Promise<CoupangApiResponse<CoupangProduct[]>> {
   let path = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products`;
 
-  const params = [
-    `vendorId=${credentials.vendor_id}`,
-    `businessTypes=rocketGrowth`, // 로켓그로스 전용
-  ];
+  const params = [`vendorId=${credentials.vendor_id}`];
+
+  // businessTypes 설정 (기본값: 둘 다 조회)
+  const businessTypes = options?.businessTypes || "all";
+  if (businessTypes === "rocketGrowth") {
+    params.push(`businessTypes=rocketGrowth`);
+  } else if (businessTypes === "marketplace") {
+    params.push(`businessTypes=marketplace`);
+  }
+  // 'all'인 경우 businessTypes 파라미터 생략 (전체 조회)
 
   if (options?.nextToken) params.push(`nextToken=${options.nextToken}`);
   if (options?.maxPerPage) params.push(`maxPerPage=${options.maxPerPage}`);
@@ -479,10 +469,15 @@ export async function getCoupangProducts(
 
 /**
  * 전체 상품 조회 (페이징)
+ *
+ * @param options.businessTypes - 'rocketGrowth' | 'marketplace' | 'all' (기본: all)
  */
 export async function getAllCoupangProducts(
   credentials: CoupangCredentials,
-  status?: string
+  options?: {
+    status?: string;
+    businessTypes?: "rocketGrowth" | "marketplace" | "all";
+  }
 ): Promise<CoupangProduct[]> {
   const allProducts: CoupangProduct[] = [];
   let nextToken: string | undefined;
@@ -492,7 +487,8 @@ export async function getAllCoupangProducts(
     const response = await getCoupangProducts(credentials, {
       nextToken,
       maxPerPage: 100,
-      status,
+      status: options?.status,
+      businessTypes: options?.businessTypes,
     });
 
     if (response.data && Array.isArray(response.data)) {
