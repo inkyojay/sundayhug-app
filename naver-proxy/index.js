@@ -72,19 +72,22 @@ function getCoupangDatetime() {
 
 /**
  * 쿠팡 API HMAC-SHA256 서명 생성
+ * message = datetime + method + path + query (? 없이 바로 붙임)
  */
-function generateCoupangSignature(method, path, datetime, secretKey) {
-  // message = datetime + method + path (쿼리스트링 포함)
-  const message = `${datetime}${method}${path}`;
+function generateCoupangSignature(method, path, query, datetime, secretKey) {
+  const message = datetime + method + path + query;
+  console.log(`[쿠팡 서명] message: ${message}`);
   return crypto.createHmac("sha256", secretKey).update(message).digest("hex");
 }
 
 /**
  * 쿠팡 API 인증 헤더 생성
+ * @param path - 쿼리 스트링 제외한 경로
+ * @param query - 쿼리 스트링 (? 제외, 예: "key=value&key2=value2")
  */
-function getCoupangAuthHeaders(method, path, accessKey, secretKey) {
+function getCoupangAuthHeaders(method, path, query, accessKey, secretKey) {
   const datetime = getCoupangDatetime();
-  const signature = generateCoupangSignature(method, path, datetime, secretKey);
+  const signature = generateCoupangSignature(method, path, query, datetime, secretKey);
   return {
     "Content-Type": "application/json;charset=UTF-8",
     "Authorization": `CEA algorithm=HmacSHA256, access-key=${accessKey}, signed-date=${datetime}, signature=${signature}`,
@@ -363,9 +366,9 @@ app.post("/api/proxy", verifyApiKey, async (req, res) => {
  */
 app.post("/api/coupang/proxy", verifyApiKey, async (req, res) => {
   try {
-    const { method = "GET", path, accessKey, secretKey, body } = req.body;
+    const { method = "GET", path: fullPath, accessKey, secretKey, body } = req.body;
 
-    if (!path) {
+    if (!fullPath) {
       return res.status(400).json({ error: "path is required" });
     }
 
@@ -373,8 +376,10 @@ app.post("/api/coupang/proxy", verifyApiKey, async (req, res) => {
       return res.status(400).json({ error: "accessKey and secretKey are required" });
     }
 
-    const url = `${COUPANG_BASE_URL}${path}`;
-    const headers = getCoupangAuthHeaders(method, path, accessKey, secretKey);
+    // path와 query 분리
+    const [path, query] = fullPath.includes("?") ? fullPath.split("?") : [fullPath, ""];
+    const url = `${COUPANG_BASE_URL}${fullPath}`;
+    const headers = getCoupangAuthHeaders(method, path, query, accessKey, secretKey);
 
     console.log(`[쿠팡 프록시] ${method} ${url}`);
 
@@ -441,7 +446,7 @@ app.get("/api/coupang/orders", verifyApiKey, async (req, res) => {
     }
 
     // 쿠팡 주문 조회 API 경로
-    let path = `/v2/providers/openapi/apis/api/v4/vendors/${vendorId}/ordersheets`;
+    const path = `/v2/providers/openapi/apis/api/v4/vendors/${vendorId}/ordersheets`;
     const params = new URLSearchParams();
     if (createdAtFrom) params.append("createdAtFrom", createdAtFrom);
     if (createdAtTo) params.append("createdAtTo", createdAtTo);
@@ -449,11 +454,9 @@ app.get("/api/coupang/orders", verifyApiKey, async (req, res) => {
     params.append("maxPerPage", maxPerPage);
     if (nextToken) params.append("nextToken", nextToken);
 
-    const queryString = params.toString();
-    if (queryString) path += `?${queryString}`;
-
-    const url = `${COUPANG_BASE_URL}${path}`;
-    const headers = getCoupangAuthHeaders("GET", path.split("?")[0], accessKey, secretKey);
+    const query = params.toString();
+    const url = `${COUPANG_BASE_URL}${path}${query ? "?" + query : ""}`;
+    const headers = getCoupangAuthHeaders("GET", path, query, accessKey, secretKey);
 
     console.log(`[쿠팡 주문 조회] ${url}`);
 
@@ -496,18 +499,16 @@ app.get("/api/coupang/products", verifyApiKey, async (req, res) => {
     }
 
     // 쿠팡 상품 조회 API (로켓그로스)
-    let path = `/v2/providers/seller_api/apis/api/v1/vendors/${vendorId}/products`;
+    const path = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products`;
     const params = new URLSearchParams();
+    params.append("vendorId", vendorId);
     params.append("maxPerPage", maxPerPage);
-    params.append("businessTypes", "rocketGrowth"); // 로켓그로스 전용
     if (nextToken) params.append("nextToken", nextToken);
     if (status) params.append("status", status);
 
-    const queryString = params.toString();
-    if (queryString) path += `?${queryString}`;
-
-    const url = `${COUPANG_BASE_URL}${path}`;
-    const headers = getCoupangAuthHeaders("GET", path.split("?")[0], accessKey, secretKey);
+    const query = params.toString();
+    const url = `${COUPANG_BASE_URL}${path}${query ? "?" + query : ""}`;
+    const headers = getCoupangAuthHeaders("GET", path, query, accessKey, secretKey);
 
     console.log(`[쿠팡 상품 조회] ${url}`);
 
@@ -551,8 +552,9 @@ app.get("/api/coupang/inventory", verifyApiKey, async (req, res) => {
 
     // 쿠팡 재고 조회 API
     const path = `/v2/providers/fms_api/apis/api/v2/vendors/${vendorId}/inventories`;
-    const url = `${COUPANG_BASE_URL}${path}?vendorItemIds=${vendorItemIds}`;
-    const headers = getCoupangAuthHeaders("GET", path, accessKey, secretKey);
+    const query = `vendorItemIds=${vendorItemIds}`;
+    const url = `${COUPANG_BASE_URL}${path}?${query}`;
+    const headers = getCoupangAuthHeaders("GET", path, query, accessKey, secretKey);
 
     console.log(`[쿠팡 재고 조회] ${url}`);
 
