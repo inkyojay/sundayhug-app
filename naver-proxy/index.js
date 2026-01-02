@@ -1,12 +1,13 @@
 /**
- * 네이버 커머스 API 프록시 서버
+ * 커머스 API 프록시 서버 (네이버 + 쿠팡)
  * - Railway에 배포하여 고정 IP 사용
- * - Vercel 대시보드에서 이 프록시를 통해 네이버 API 호출
+ * - 대시보드에서 이 프록시를 통해 네이버/쿠팡 API 호출
  */
 
 const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 
 const app = express();
 app.use(cors());
@@ -19,6 +20,9 @@ const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID;
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET;
 const NAVER_ACCOUNT_ID = process.env.NAVER_ACCOUNT_ID; // 스마트스토어 계정 ID
 const PROXY_API_KEY = process.env.PROXY_API_KEY; // 프록시 보안용 키
+
+// 쿠팡 API 설정
+const COUPANG_BASE_URL = "https://api-gateway.coupang.com";
 
 /**
  * 프록시 API 키 검증 미들웨어
@@ -53,12 +57,32 @@ async function generateSignature(clientId, clientSecret, timestamp) {
 }
 
 /**
+ * 쿠팡 API HMAC-SHA256 서명 생성
+ */
+function generateCoupangSignature(method, path, timestamp, secretKey) {
+  const message = `${timestamp}${method}${path}`;
+  return crypto.createHmac("sha256", secretKey).update(message).digest("hex");
+}
+
+/**
+ * 쿠팡 API 인증 헤더 생성
+ */
+function getCoupangAuthHeaders(method, path, accessKey, secretKey) {
+  const timestamp = new Date().toISOString();
+  const signature = generateCoupangSignature(method, path, timestamp, secretKey);
+  return {
+    "Content-Type": "application/json",
+    "Authorization": `CEA algorithm=HmacSHA256, access-key=${accessKey}, signed-date=${timestamp}, signature=${signature}`,
+  };
+}
+
+/**
  * 헬스체크
  */
 app.get("/", (req, res) => {
-  res.json({ 
-    status: "ok", 
-    service: "naver-commerce-proxy",
+  res.json({
+    status: "ok",
+    service: "commerce-proxy (naver + coupang)",
     timestamp: new Date().toISOString()
   });
 });
@@ -74,9 +98,9 @@ app.get("/my-ip", async (req, res) => {
   try {
     const response = await fetch("https://api.ipify.org?format=json");
     const data = await response.json();
-    res.json({ 
+    res.json({
       outbound_ip: data.ip,
-      message: "이 IP를 네이버 커머스 API 센터에 등록하세요!",
+      message: "이 IP를 네이버/쿠팡 API 센터에 등록하세요!",
       railway_static_ip: "208.77.246.15"
     });
   } catch (error) {
@@ -313,12 +337,236 @@ app.post("/api/proxy", verifyApiKey, async (req, res) => {
   }
 });
 
+// =====================================================
+// 쿠팡 로켓그로스 API 프록시
+// =====================================================
+
+/**
+ * 쿠팡 범용 프록시 API
+ * POST /api/coupang/proxy
+ * body: { method, path, accessKey, secretKey, body? }
+ */
+app.post("/api/coupang/proxy", verifyApiKey, async (req, res) => {
+  try {
+    const { method = "GET", path, accessKey, secretKey, body } = req.body;
+
+    if (!path) {
+      return res.status(400).json({ error: "path is required" });
+    }
+
+    if (!accessKey || !secretKey) {
+      return res.status(400).json({ error: "accessKey and secretKey are required" });
+    }
+
+    const url = `${COUPANG_BASE_URL}${path}`;
+    const headers = getCoupangAuthHeaders(method, path, accessKey, secretKey);
+
+    console.log(`[쿠팡 프록시] ${method} ${url}`);
+
+    const fetchOptions = {
+      method,
+      headers,
+    };
+
+    if (body && method !== "GET") {
+      fetchOptions.body = JSON.stringify(body);
+    }
+
+    const response = await fetch(url, fetchOptions);
+    const responseText = await response.text();
+
+    console.log(`[쿠팡 프록시] 응답 status: ${response.status}`);
+    console.log(`[쿠팡 프록시] 응답 body (처음 500자): ${responseText.slice(0, 500)}`);
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error(`[쿠팡 프록시 JSON 파싱 실패] 원본: ${responseText.slice(0, 1000)}`);
+      return res.status(response.status || 500).json({
+        error: "쿠팡 API가 JSON이 아닌 응답을 반환했습니다",
+        status: response.status,
+        rawResponse: responseText.slice(0, 500)
+      });
+    }
+
+    if (!response.ok) {
+      console.error(`[쿠팡 프록시 실패] ${response.status}`, data);
+      return res.status(response.status).json(data);
+    }
+
+    console.log(`[쿠팡 프록시 성공]`);
+    res.json(data);
+
+  } catch (error) {
+    console.error("[쿠팡 프록시 에러]", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * 쿠팡 주문 조회 API
+ * GET /api/coupang/orders
+ * query: vendorId, createdAtFrom, createdAtTo, status
+ * headers: x-coupang-access-key, x-coupang-secret-key
+ */
+app.get("/api/coupang/orders", verifyApiKey, async (req, res) => {
+  try {
+    const accessKey = req.headers["x-coupang-access-key"];
+    const secretKey = req.headers["x-coupang-secret-key"];
+
+    if (!accessKey || !secretKey) {
+      return res.status(401).json({ error: "Coupang access key and secret key required" });
+    }
+
+    const { vendorId, createdAtFrom, createdAtTo, status, maxPerPage = 50, nextToken } = req.query;
+
+    if (!vendorId) {
+      return res.status(400).json({ error: "vendorId is required" });
+    }
+
+    // 쿠팡 주문 조회 API 경로
+    let path = `/v2/providers/openapi/apis/api/v4/vendors/${vendorId}/ordersheets`;
+    const params = new URLSearchParams();
+    if (createdAtFrom) params.append("createdAtFrom", createdAtFrom);
+    if (createdAtTo) params.append("createdAtTo", createdAtTo);
+    if (status) params.append("status", status);
+    params.append("maxPerPage", maxPerPage);
+    if (nextToken) params.append("nextToken", nextToken);
+
+    const queryString = params.toString();
+    if (queryString) path += `?${queryString}`;
+
+    const url = `${COUPANG_BASE_URL}${path}`;
+    const headers = getCoupangAuthHeaders("GET", path.split("?")[0], accessKey, secretKey);
+
+    console.log(`[쿠팡 주문 조회] ${url}`);
+
+    const response = await fetch(url, { method: "GET", headers });
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error(`[쿠팡 주문 조회 실패] ${response.status}`, data);
+      return res.status(response.status).json(data);
+    }
+
+    console.log(`[쿠팡 주문 조회 성공] ${data.data?.length || 0}건`);
+    res.json(data);
+
+  } catch (error) {
+    console.error("[쿠팡 주문 조회 에러]", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * 쿠팡 상품 조회 API
+ * GET /api/coupang/products
+ * query: vendorId, nextToken, maxPerPage, status
+ * headers: x-coupang-access-key, x-coupang-secret-key
+ */
+app.get("/api/coupang/products", verifyApiKey, async (req, res) => {
+  try {
+    const accessKey = req.headers["x-coupang-access-key"];
+    const secretKey = req.headers["x-coupang-secret-key"];
+
+    if (!accessKey || !secretKey) {
+      return res.status(401).json({ error: "Coupang access key and secret key required" });
+    }
+
+    const { vendorId, nextToken, maxPerPage = 100, status } = req.query;
+
+    if (!vendorId) {
+      return res.status(400).json({ error: "vendorId is required" });
+    }
+
+    // 쿠팡 상품 조회 API (로켓그로스)
+    let path = `/v2/providers/seller_api/apis/api/v1/vendors/${vendorId}/products`;
+    const params = new URLSearchParams();
+    params.append("maxPerPage", maxPerPage);
+    params.append("businessTypes", "rocketGrowth"); // 로켓그로스 전용
+    if (nextToken) params.append("nextToken", nextToken);
+    if (status) params.append("status", status);
+
+    const queryString = params.toString();
+    if (queryString) path += `?${queryString}`;
+
+    const url = `${COUPANG_BASE_URL}${path}`;
+    const headers = getCoupangAuthHeaders("GET", path.split("?")[0], accessKey, secretKey);
+
+    console.log(`[쿠팡 상품 조회] ${url}`);
+
+    const response = await fetch(url, { method: "GET", headers });
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error(`[쿠팡 상품 조회 실패] ${response.status}`, data);
+      return res.status(response.status).json(data);
+    }
+
+    console.log(`[쿠팡 상품 조회 성공] ${data.data?.length || 0}건`);
+    res.json(data);
+
+  } catch (error) {
+    console.error("[쿠팡 상품 조회 에러]", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * 쿠팡 재고 조회 API
+ * GET /api/coupang/inventory
+ * query: vendorId, vendorItemIds (comma separated)
+ * headers: x-coupang-access-key, x-coupang-secret-key
+ */
+app.get("/api/coupang/inventory", verifyApiKey, async (req, res) => {
+  try {
+    const accessKey = req.headers["x-coupang-access-key"];
+    const secretKey = req.headers["x-coupang-secret-key"];
+
+    if (!accessKey || !secretKey) {
+      return res.status(401).json({ error: "Coupang access key and secret key required" });
+    }
+
+    const { vendorId, vendorItemIds } = req.query;
+
+    if (!vendorId || !vendorItemIds) {
+      return res.status(400).json({ error: "vendorId and vendorItemIds are required" });
+    }
+
+    // 쿠팡 재고 조회 API
+    const path = `/v2/providers/fms_api/apis/api/v2/vendors/${vendorId}/inventories`;
+    const url = `${COUPANG_BASE_URL}${path}?vendorItemIds=${vendorItemIds}`;
+    const headers = getCoupangAuthHeaders("GET", path, accessKey, secretKey);
+
+    console.log(`[쿠팡 재고 조회] ${url}`);
+
+    const response = await fetch(url, { method: "GET", headers });
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error(`[쿠팡 재고 조회 실패] ${response.status}`, data);
+      return res.status(response.status).json(data);
+    }
+
+    console.log(`[쿠팡 재고 조회 성공]`);
+    res.json(data);
+
+  } catch (error) {
+    console.error("[쿠팡 재고 조회 에러]", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 네이버 커머스 API 프록시 서버 시작 (v1.4-static-ip): http://0.0.0.0:${PORT}`);
+  console.log(`🚀 커머스 API 프록시 서버 시작 (v2.0-naver-coupang): http://0.0.0.0:${PORT}`);
   console.log(`📌 환경변수 설정 상태:`);
   console.log(`   - NAVER_CLIENT_ID: ${NAVER_CLIENT_ID ? "✅ 설정됨" : "❌ 미설정"}`);
   console.log(`   - NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET ? "✅ 설정됨" : "❌ 미설정"}`);
   console.log(`   - NAVER_ACCOUNT_ID: ${NAVER_ACCOUNT_ID ? "✅ 설정됨 (" + NAVER_ACCOUNT_ID + ")" : "❌ 미설정"}`);
   console.log(`   - PROXY_API_KEY: ${PROXY_API_KEY ? "✅ 설정됨" : "⚠️ 미설정 (개발 모드)"}`);
+  console.log(`📌 지원 API:`);
+  console.log(`   - 네이버: /api/token, /api/orders, /api/products, /api/proxy`);
+  console.log(`   - 쿠팡: /api/coupang/proxy, /api/coupang/orders, /api/coupang/products, /api/coupang/inventory`);
 });
 

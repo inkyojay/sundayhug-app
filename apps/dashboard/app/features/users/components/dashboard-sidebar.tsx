@@ -90,6 +90,10 @@ const data = {
           url: "/dashboard/orders",
         },
         {
+          title: "쿠팡 주문",
+          url: "/dashboard/integrations/coupang/orders",
+        },
+        {
           title: "B2B 업체",
           url: "/dashboard/b2b/customers",
         },
@@ -122,6 +126,10 @@ const data = {
           title: "스마트스토어 제품",
           url: "/dashboard/products-naver",
         },
+        {
+          title: "쿠팡 제품",
+          url: "/dashboard/integrations/coupang/products",
+        },
       ],
     },
 
@@ -134,6 +142,10 @@ const data = {
         {
           title: "재고 현황",
           url: "/dashboard/inventory",
+        },
+        {
+          title: "쿠팡 재고",
+          url: "/dashboard/integrations/coupang/inventory",
         },
         {
           title: "재고 이력",
@@ -243,6 +255,10 @@ const data = {
           title: "스마트스토어",
           url: "/dashboard/integrations/naver",
         },
+        {
+          title: "쿠팡 로켓그로스",
+          url: "/dashboard/integrations/coupang",
+        },
       ],
     },
 
@@ -273,8 +289,8 @@ const data = {
       icon: StoreIcon,
     },
     {
-      name: "쿠팡 (준비중)",
-      url: "#",
+      name: "쿠팡 로켓그로스",
+      url: "/dashboard/integrations/coupang",
       icon: StoreIcon,
     },
   ],

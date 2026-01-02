@@ -233,6 +233,9 @@ export default [
           route("/cafe24", "features/integrations/screens/cafe24-status.tsx"),
           route("/naver", "features/integrations/screens/naver-status.tsx"),
           route("/coupang", "features/integrations/screens/coupang-status.tsx"),
+          route("/coupang/products", "features/integrations/screens/coupang-products.tsx"),
+          route("/coupang/inventory", "features/integrations/screens/coupang-inventory.tsx"),
+          route("/coupang/orders", "features/integrations/screens/coupang-orders.tsx"),
         ]),
         
         // 재고/물류 관리
