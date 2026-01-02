@@ -3,13 +3,14 @@
  */
 import type { Route } from "./+types/inventory";
 
-import { 
-  PackageIcon, 
-  SearchIcon, 
-  RefreshCwIcon, 
-  AlertTriangleIcon, 
+import {
+  PackageIcon,
+  SearchIcon,
+  RefreshCwIcon,
+  AlertTriangleIcon,
   FilterIcon,
   DownloadIcon,
+  UploadIcon,
   PencilIcon,
   CheckIcon,
   XIcon,
@@ -25,6 +26,7 @@ import {
   WarehouseIcon,
   ExternalLinkIcon,
   SendIcon,
+  FileUpIcon,
 } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useFetcher, useRevalidator } from "react-router";
@@ -770,6 +772,77 @@ export async function action({ request }: Route.ActionArgs) {
     return { success: true, message: `${quantity}개가 ${fromWarehouseName}에서 ${toWarehouseName}(으)로 이동되었습니다.` };
   }
 
+  // CSV 일괄 재고 수정
+  if (actionType === "csvImport") {
+    const itemsStr = formData.get("items") as string;
+    const items = JSON.parse(itemsStr) as Array<{
+      sku: string;
+      warehouseId: string;
+      warehouseName: string;
+      oldQuantity: number;
+      newQuantity: number;
+    }>;
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const item of items) {
+      // product_id 조회
+      const { data: product } = await adminClient
+        .from("products")
+        .select("id")
+        .eq("sku", item.sku)
+        .single();
+
+      // 기존 재고 조회
+      const { data: existing } = await adminClient
+        .from("inventory_locations")
+        .select("quantity")
+        .eq("sku", item.sku)
+        .eq("warehouse_id", item.warehouseId)
+        .single();
+
+      const previousQty = existing?.quantity || 0;
+
+      // upsert
+      const { error } = await adminClient
+        .from("inventory_locations")
+        .upsert({
+          warehouse_id: item.warehouseId,
+          sku: item.sku,
+          product_id: product?.id || null,
+          quantity: item.newQuantity,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "warehouse_id,sku" });
+
+      if (error) {
+        failCount++;
+        continue;
+      }
+
+      successCount++;
+
+      // 재고 이력 기록
+      if (product?.id && previousQty !== item.newQuantity) {
+        await adminClient.from("inventory_history").insert({
+          product_id: product.id,
+          sku: item.sku,
+          warehouse_id: item.warehouseId,
+          change_type: "csv_import",
+          stock_before: previousQty,
+          stock_after: item.newQuantity,
+          stock_change: item.newQuantity - previousQty,
+          change_reason: `CSV 일괄 수정 (${item.warehouseName}): ${previousQty} → ${item.newQuantity}`,
+        });
+      }
+    }
+
+    return {
+      success: failCount === 0,
+      message: `${successCount}개 항목 수정 완료${failCount > 0 ? `, ${failCount}개 실패` : ""}`,
+    };
+  }
+
   return { success: false, error: "지원하지 않는 액션입니다." };
 }
 
@@ -998,6 +1071,18 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
 
+  // CSV 업로드 모달 상태
+  const [showCsvUploadDialog, setShowCsvUploadDialog] = useState(false);
+  const [csvData, setCsvData] = useState<Array<{
+    sku: string;
+    warehouseId: string;
+    warehouseName: string;
+    oldQuantity: number;
+    newQuantity: number;
+    productName?: string;
+  }>>([]);
+  const [csvParseError, setCsvParseError] = useState<string | null>(null);
+
   // 창고 목록
   const warehouses = filterOptions.warehouses as Warehouse[];
   const defaultWarehouse = warehouses.find(w => w.is_default);
@@ -1162,6 +1247,126 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
     setStockPushModal({ open: false, item: null });
   };
 
+  // CSV 다운로드
+  const handleCsvDownload = () => {
+    const headers = ["SKU", "제품명", "색상", "사이즈"];
+    warehouses.forEach(w => headers.push(w.warehouse_name));
+    headers.push("총 재고", "카페24 재고", "네이버 재고");
+
+    const rows = sortedInventory.map((item) => {
+      const row = [
+        item.sku,
+        item.products?.product_name || "",
+        item.products?.color_kr || "",
+        item.products?.sku_6_size || "",
+      ];
+      warehouses.forEach(w => {
+        row.push(String(item.warehouse_stocks?.[w.id] || 0));
+      });
+      row.push(String(item.current_stock));
+      row.push(item.cafe24_stock !== null ? String(item.cafe24_stock) : "");
+      row.push(item.naver_stock !== null ? String(item.naver_stock) : "");
+      return row;
+    });
+
+    const csvContent = [headers.join(","), ...rows.map(r => r.map(v => `"${v}"`).join(","))].join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `inventory-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // CSV 파일 파싱
+  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setCsvParseError(null);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const lines = text.split("\n").map(l => l.trim()).filter(l => l);
+        if (lines.length < 2) {
+          setCsvParseError("CSV 파일에 데이터가 없습니다.");
+          return;
+        }
+
+        const headers = lines[0].split(",").map(h => h.replace(/"/g, "").trim());
+        const skuIndex = headers.findIndex(h => h.toUpperCase() === "SKU");
+        if (skuIndex === -1) {
+          setCsvParseError("SKU 컬럼을 찾을 수 없습니다.");
+          return;
+        }
+
+        // 창고 컬럼 인덱스 찾기
+        const warehouseColumns: { index: number; warehouse: Warehouse }[] = [];
+        warehouses.forEach(w => {
+          const idx = headers.findIndex(h => h === w.warehouse_name);
+          if (idx !== -1) warehouseColumns.push({ index: idx, warehouse: w });
+        });
+
+        if (warehouseColumns.length === 0) {
+          setCsvParseError("창고 컬럼을 찾을 수 없습니다. (예: 본사 창고)");
+          return;
+        }
+
+        const parsed: typeof csvData = [];
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(",").map(v => v.replace(/"/g, "").trim());
+          const sku = values[skuIndex];
+          if (!sku) continue;
+
+          // 현재 재고 찾기
+          const currentItem = sortedInventory.find(item => item.sku === sku);
+
+          warehouseColumns.forEach(({ index, warehouse }) => {
+            const newQuantity = parseInt(values[index]) || 0;
+            const oldQuantity = currentItem?.warehouse_stocks?.[warehouse.id] || 0;
+
+            // 변경된 경우만 추가
+            if (newQuantity !== oldQuantity) {
+              parsed.push({
+                sku,
+                warehouseId: warehouse.id,
+                warehouseName: warehouse.warehouse_name,
+                oldQuantity,
+                newQuantity,
+                productName: currentItem?.products?.product_name || "",
+              });
+            }
+          });
+        }
+
+        if (parsed.length === 0) {
+          setCsvParseError("변경된 재고가 없습니다.");
+          return;
+        }
+
+        setCsvData(parsed);
+      } catch (err) {
+        setCsvParseError("CSV 파일 파싱 중 오류가 발생했습니다.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // CSV 업로드 적용
+  const handleCsvImport = () => {
+    if (csvData.length === 0) return;
+
+    fetcher.submit({
+      actionType: "csvImport",
+      items: JSON.stringify(csvData),
+    }, { method: "POST" });
+
+    setShowCsvUploadDialog(false);
+    setCsvData([]);
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     window.location.href = buildUrl({ search: searchInput || null });
@@ -1284,21 +1489,6 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
     setSelectedItems(new Set());
   };
 
-  const handleExportCSV = () => {
-    const headers = ["SKU", "제품명", "분류", "색상", "사이즈", "현재고", "안전재고", "Cafe24재고", "네이버재고"];
-    const rows = sortedInventory.map((item) => [
-      item.sku, item.products?.product_name || "", item.products?.parent_sku || "",
-      item.products?.color_kr || "", item.products?.sku_6_size || "",
-      item.current_stock, item.alert_threshold, item.cafe24_stock ?? "", item.naver_stock ?? "",
-    ]);
-    const csvContent = [headers.join(","), ...rows.map(r => r.map((v: any) => `"${v}"`).join(","))].join("\n");
-    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `inventory_${new Date().toISOString().split("T")[0]}.csv`;
-    link.click();
-  };
 
   const hasActiveFilters = search || filters.stockFilter !== "all" || filters.parentSku || filters.color || filters.size || filters.warehouse !== "all";
 
@@ -1509,8 +1699,11 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
             <p className="text-muted-foreground">SKU별 재고 현황 및 채널 동기화</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleExportCSV}>
-              <DownloadIcon className="h-4 w-4 mr-2" />CSV
+            <Button variant="outline" size="sm" onClick={handleCsvDownload}>
+              <DownloadIcon className="h-4 w-4 mr-2" />CSV 다운로드
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => { setShowCsvUploadDialog(true); setCsvData([]); setCsvParseError(null); }}>
+              <UploadIcon className="h-4 w-4 mr-2" />CSV 업로드
             </Button>
           </div>
         </div>
@@ -2087,6 +2280,104 @@ export default function Inventory({ loaderData }: Route.ComponentProps) {
               >
                 <WarehouseIcon className="h-4 w-4 mr-2" />
                 {syncing ? "이동 중..." : "재고 이동"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* CSV 업로드 모달 */}
+        <Dialog open={showCsvUploadDialog} onOpenChange={setShowCsvUploadDialog}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileUpIcon className="h-5 w-5" />
+                CSV 재고 일괄 수정
+              </DialogTitle>
+              <DialogDescription>
+                CSV 파일을 업로드하여 창고별 재고를 일괄 수정합니다.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 overflow-auto flex-1">
+              {/* 파일 업로드 */}
+              <div className="border-2 border-dashed rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleCsvFileChange}
+                  className="hidden"
+                  id="csv-upload"
+                />
+                <label htmlFor="csv-upload" className="cursor-pointer">
+                  <UploadIcon className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground mb-1">
+                    CSV 파일을 선택하거나 여기로 드래그하세요
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    CSV 다운로드로 받은 파일의 창고 재고 열을 수정하세요
+                  </p>
+                  <Button variant="outline" size="sm" className="mt-3">
+                    파일 선택
+                  </Button>
+                </label>
+              </div>
+
+              {/* 파싱 오류 */}
+              {csvParseError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {csvParseError}
+                </div>
+              )}
+
+              {/* 변경 미리보기 */}
+              {csvData.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium text-sm">변경 미리보기 ({csvData.length}건)</h4>
+                    <Badge variant="secondary">{csvData.length}개 항목이 변경됩니다</Badge>
+                  </div>
+                  <div className="border rounded-lg max-h-[300px] overflow-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">SKU</th>
+                          <th className="px-3 py-2 text-left font-medium">제품명</th>
+                          <th className="px-3 py-2 text-left font-medium">창고</th>
+                          <th className="px-3 py-2 text-right font-medium">현재</th>
+                          <th className="px-3 py-2 text-center font-medium">→</th>
+                          <th className="px-3 py-2 text-right font-medium">변경</th>
+                          <th className="px-3 py-2 text-right font-medium">차이</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {csvData.map((item, idx) => {
+                          const diff = item.newQuantity - item.oldQuantity;
+                          return (
+                            <tr key={idx} className="border-t hover:bg-muted/30">
+                              <td className="px-3 py-2 font-mono text-xs">{item.sku}</td>
+                              <td className="px-3 py-2 text-xs truncate max-w-[150px]">{item.productName}</td>
+                              <td className="px-3 py-2 text-xs">{item.warehouseName}</td>
+                              <td className="px-3 py-2 text-right font-mono">{item.oldQuantity}</td>
+                              <td className="px-3 py-2 text-center text-muted-foreground">→</td>
+                              <td className="px-3 py-2 text-right font-mono font-medium">{item.newQuantity}</td>
+                              <td className={`px-3 py-2 text-right font-mono font-medium ${diff > 0 ? "text-green-600" : diff < 0 ? "text-red-600" : ""}`}>
+                                {diff > 0 ? "+" : ""}{diff}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowCsvUploadDialog(false)}>취소</Button>
+              <Button
+                onClick={handleCsvImport}
+                disabled={syncing || csvData.length === 0}
+              >
+                {syncing ? "적용 중..." : `${csvData.length}개 항목 적용`}
               </Button>
             </DialogFooter>
           </DialogContent>

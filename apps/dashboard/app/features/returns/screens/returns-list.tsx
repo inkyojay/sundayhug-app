@@ -3,9 +3,9 @@
  */
 import type { Route } from "./+types/returns-list";
 
-import { 
-  RotateCcwIcon, 
-  PlusIcon, 
+import {
+  RotateCcwIcon,
+  PlusIcon,
   SearchIcon,
   PackageIcon,
   CalendarIcon,
@@ -20,9 +20,11 @@ import {
   SaveIcon,
   TrashIcon,
   EyeIcon,
+  ReceiptIcon,
+  LoaderIcon,
 } from "lucide-react";
 import { useState } from "react";
-import { useFetcher, useNavigate } from "react-router";
+import { useFetcher, useNavigate, Link } from "react-router";
 
 import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
@@ -73,7 +75,12 @@ const returnTypes = [
 
 const returnStatuses = [
   { value: "received", label: "접수", color: "secondary" },
-  { value: "processing", label: "처리중", color: "outline" },
+  { value: "pickup_scheduled", label: "수거예정", color: "outline" },
+  { value: "pickup_completed", label: "수거완료", color: "outline" },
+  { value: "inspecting", label: "검수중", color: "outline" },
+  { value: "processing", label: "처리중", color: "default" },
+  { value: "shipped", label: "발송완료", color: "default" },
+  { value: "refunded", label: "환불완료", color: "default" },
   { value: "completed", label: "완료", color: "default" },
   { value: "cancelled", label: "취소", color: "destructive" },
 ];
@@ -161,12 +168,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   const newReturnNumber = `RE-${today}-${String((count || 0) + 1).padStart(4, "0")}`;
 
   // 통계
+  const activeStatuses = ["received", "pickup_scheduled", "pickup_completed", "inspecting", "processing", "shipped", "refunded"];
   const stats = {
     received: returns?.filter(r => r.status === "received").length || 0,
-    processing: returns?.filter(r => r.status === "processing").length || 0,
-    exchange: returns?.filter(r => r.return_type === "exchange").length || 0,
-    return: returns?.filter(r => r.return_type === "return").length || 0,
-    repair: returns?.filter(r => r.return_type === "repair").length || 0,
+    processing: returns?.filter(r => activeStatuses.includes(r.status) && r.status !== "received").length || 0,
+    exchange: returns?.filter(r => r.return_type === "exchange" && activeStatuses.includes(r.status)).length || 0,
+    return: returns?.filter(r => r.return_type === "return" && activeStatuses.includes(r.status)).length || 0,
+    repair: returns?.filter(r => r.return_type === "repair" && activeStatuses.includes(r.status)).length || 0,
   };
 
   return { 
@@ -307,6 +315,71 @@ export async function action({ request }: Route.ActionArgs) {
     return { success: true };
   }
 
+  // 주문 검색 - orders 테이블에서 검색
+  if (intent === "search_order") {
+    const searchQuery = formData.get("search_query") as string;
+
+    if (!searchQuery) {
+      return { orders: [] };
+    }
+
+    // orders 테이블에서 검색 (Cafe24, 네이버 통합)
+    const { data: ordersData } = await supabase
+      .from("orders")
+      .select(`
+        id, shop_ord_no, ord_time, to_name, to_tel, to_htel,
+        shop_cd, shop_sale_name, shop_opt_name, shop_sku_cd, sale_cnt
+      `)
+      .in("shop_cd", ["cafe24", "naver"])
+      .or(`shop_ord_no.ilike.%${searchQuery}%,to_name.ilike.%${searchQuery}%,to_tel.ilike.%${searchQuery}%,to_htel.ilike.%${searchQuery}%`)
+      .order("ord_time", { ascending: false })
+      .limit(50);
+
+    // 주문번호별로 그룹핑
+    const ordersMap = new Map<string, {
+      channel: string;
+      order_number: string;
+      order_date: string;
+      customer_name: string;
+      customer_phone: string;
+      items: Array<{
+        sku: string;
+        product_name: string;
+        option_name: string;
+        quantity: number;
+      }>;
+    }>();
+
+    for (const row of ordersData || []) {
+      const key = `${row.shop_cd}_${row.shop_ord_no}`;
+
+      if (!ordersMap.has(key)) {
+        ordersMap.set(key, {
+          channel: row.shop_cd || "direct",
+          order_number: row.shop_ord_no || "",
+          order_date: row.ord_time || "",
+          customer_name: row.to_name || "",
+          customer_phone: row.to_tel || row.to_htel || "",
+          items: [],
+        });
+      }
+
+      const order = ordersMap.get(key)!;
+      order.items.push({
+        sku: row.shop_sku_cd || "",
+        product_name: row.shop_sale_name || "",
+        option_name: row.shop_opt_name || "",
+        quantity: row.sale_cnt || 1,
+      });
+    }
+
+    const orders = Array.from(ordersMap.values())
+      .sort((a, b) => new Date(b.order_date).getTime() - new Date(a.order_date).getTime())
+      .slice(0, 20);
+
+    return { orders };
+  }
+
   return { error: "Unknown action" };
 }
 
@@ -359,6 +432,13 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
 
+  // 주문 검색
+  const orderSearchFetcher = useFetcher();
+  const [orderSearchQuery, setOrderSearchQuery] = useState("");
+  const [showOrderSearch, setShowOrderSearch] = useState(true);
+  const searchingOrders = orderSearchFetcher.state === "submitting" || orderSearchFetcher.state === "loading";
+  const orderSearchResults = (orderSearchFetcher.data as any)?.orders || [];
+
   const handleSearch = () => {
     const params = new URLSearchParams();
     if (searchTerm) params.set("search", searchTerm);
@@ -383,7 +463,43 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
       notes: "",
     });
     setItems([]);
+    setShowOrderSearch(true);
+    setOrderSearchQuery("");
+    orderSearchFetcher.data = null;
     setIsDialogOpen(true);
+  };
+
+  // 주문 검색 실행
+  const handleOrderSearch = () => {
+    if (!orderSearchQuery.trim()) return;
+    orderSearchFetcher.submit(
+      { intent: "search_order", search_query: orderSearchQuery },
+      { method: "post" }
+    );
+  };
+
+  // 주문 선택 시 폼 데이터 자동 입력
+  const selectOrder = (order: any) => {
+    setFormData({
+      ...formData,
+      order_number: order.order_number,
+      channel: order.channel,
+      customer_name: order.customer_name || "",
+      customer_phone: order.customer_phone || "",
+    });
+
+    // 주문 품목 추가
+    const newItems: ReturnItem[] = order.items.map((item: any) => ({
+      product_id: null,
+      sku: item.sku,
+      product_name: item.product_name || "",
+      option_name: item.option_name || "",
+      quantity: item.quantity || 1,
+      return_reason: "",
+      condition: "good",
+    }));
+    setItems(newItems);
+    setShowOrderSearch(false);
   };
 
   const addProduct = (product: any) => {
@@ -466,9 +582,11 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
             쇼핑몰 교환, 반품, AS를 관리합니다.
           </p>
         </div>
-        <Button onClick={openCreateDialog}>
-          <PlusIcon className="w-4 h-4 mr-2" />
-          등록
+        <Button asChild>
+          <Link to="/dashboard/returns/new">
+            <PlusIcon className="w-4 h-4 mr-2" />
+            등록
+          </Link>
         </Button>
       </div>
 
@@ -666,7 +784,20 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={statusInfo.color as any}>
+                        <Badge
+                          variant={statusInfo.color as any}
+                          className={
+                            returnItem.status === "received" ? "bg-gray-500 text-white" :
+                            returnItem.status === "pickup_scheduled" ? "bg-yellow-500 text-white" :
+                            returnItem.status === "pickup_completed" ? "bg-blue-500 text-white" :
+                            returnItem.status === "inspecting" ? "bg-purple-500 text-white" :
+                            returnItem.status === "processing" ? "bg-orange-500 text-white" :
+                            returnItem.status === "shipped" ? "bg-cyan-500 text-white" :
+                            returnItem.status === "refunded" ? "bg-green-500 text-white" :
+                            returnItem.status === "completed" ? "bg-green-600 text-white" :
+                            returnItem.status === "cancelled" ? "bg-red-500 text-white" : ""
+                          }
+                        >
                           {statusInfo.label}
                         </Badge>
                       </TableCell>
@@ -674,9 +805,11 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => openStatusDialog(returnItem)}
+                          asChild
                         >
-                          <EyeIcon className="w-4 h-4" />
+                          <Link to={`/dashboard/returns/${returnItem.id}/edit`}>
+                            <EyeIcon className="w-4 h-4" />
+                          </Link>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -690,18 +823,127 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
 
       {/* 등록 다이얼로그 */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>교환/반품/AS 등록</DialogTitle>
+            <DialogDescription>
+              주문을 검색하여 정보를 불러오거나 직접 입력할 수 있습니다.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6">
+            {/* 주문 검색 섹션 */}
+            {showOrderSearch && (
+              <div className="p-4 bg-muted/30 rounded-lg border-2 border-dashed space-y-4">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <ReceiptIcon className="w-4 h-4" />
+                  주문 검색 (선택사항)
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="주문번호, 고객명, 연락처로 검색..."
+                      value={orderSearchQuery}
+                      onChange={(e) => setOrderSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleOrderSearch()}
+                      className="pl-10"
+                    />
+                  </div>
+                  <Button onClick={handleOrderSearch} disabled={searchingOrders}>
+                    {searchingOrders ? (
+                      <>
+                        <LoaderIcon className="w-4 h-4 mr-2 animate-spin" />
+                        검색 중...
+                      </>
+                    ) : (
+                      "검색"
+                    )}
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowOrderSearch(false)}>
+                    직접 입력
+                  </Button>
+                </div>
+
+                {/* 검색 결과 */}
+                {orderSearchResults.length > 0 && (
+                  <div className="border rounded-lg max-h-[250px] overflow-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>채널</TableHead>
+                          <TableHead>주문번호</TableHead>
+                          <TableHead>주문일</TableHead>
+                          <TableHead>고객</TableHead>
+                          <TableHead>품목</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {orderSearchResults.map((order: any, idx: number) => (
+                          <TableRow key={idx} className="hover:bg-muted/50">
+                            <TableCell>
+                              <Badge variant={order.channel === "cafe24" ? "default" : "secondary"}>
+                                {channels.find(c => c.value === order.channel)?.label || order.channel}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-mono text-sm">{order.order_number}</TableCell>
+                            <TableCell>{formatDate(order.order_date)}</TableCell>
+                            <TableCell>
+                              <div className="text-sm">{order.customer_name}</div>
+                              <div className="text-xs text-muted-foreground">{order.customer_phone}</div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-sm">
+                                {order.items.slice(0, 2).map((i: any, iIdx: number) => (
+                                  <div key={iIdx} className="truncate max-w-[200px]">
+                                    {i.product_name} {i.option_name && `(${i.option_name})`}
+                                  </div>
+                                ))}
+                                {order.items.length > 2 && (
+                                  <div className="text-muted-foreground">외 {order.items.length - 2}건</div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Button size="sm" onClick={() => selectOrder(order)}>
+                                선택
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                {orderSearchFetcher.data && orderSearchResults.length === 0 && !searchingOrders && (
+                  <div className="text-center py-4 text-muted-foreground">
+                    검색 결과가 없습니다.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 주문 선택 완료 시 안내 */}
+            {!showOrderSearch && formData.order_number && (
+              <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center gap-2 text-sm text-green-700">
+                  <CheckCircleIcon className="w-4 h-4" />
+                  주문 정보가 입력되었습니다: {formData.order_number}
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setShowOrderSearch(true)}>
+                  다른 주문 검색
+                </Button>
+              </div>
+            )}
+
             {/* 유형 선택 */}
             <div className="flex gap-4">
               {returnTypes.map((type) => {
                 const TypeIcon = type.icon;
                 return (
-                  <Button 
+                  <Button
                     key={type.value}
                     variant={formData.return_type === type.value ? "default" : "outline"}
                     onClick={() => setFormData({ ...formData, return_type: type.value })}
@@ -714,7 +956,7 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
             </div>
 
             {/* 기본 정보 */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label>번호</Label>
                 <Input value={formData.return_number} disabled className="font-mono" />
@@ -742,10 +984,18 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
                   placeholder="쇼핑몰 주문번호"
                 />
               </div>
+              <div className="space-y-2">
+                <Label>접수일</Label>
+                <Input
+                  type="date"
+                  value={formData.return_date}
+                  onChange={(e) => setFormData({ ...formData, return_date: e.target.value })}
+                />
+              </div>
             </div>
 
             {/* 고객 정보 */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>고객명</Label>
                 <Input
@@ -760,14 +1010,6 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
                   onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>접수일</Label>
-                <Input
-                  type="date"
-                  value={formData.return_date}
-                  onChange={(e) => setFormData({ ...formData, return_date: e.target.value })}
-                />
-              </div>
             </div>
 
             {/* 사유 */}
@@ -777,6 +1019,7 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
                 value={formData.reason}
                 onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
                 rows={2}
+                placeholder="교환/반품/AS 사유를 입력하세요"
               />
             </div>
 

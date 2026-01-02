@@ -10,27 +10,17 @@
  * - 콘텐츠 관리: 블로그/AI 상담 지식
  */
 import {
-  ArrowLeftRightIcon,
-  BarChart3Icon,
   BookOpenIcon,
   BoxIcon,
-  BuildingIcon,
-  ClipboardListIcon,
-  FactoryIcon,
   LayoutDashboardIcon,
   LinkIcon,
-  MegaphoneIcon,
-  PackageIcon,
-  RotateCcwIcon,
   Settings2Icon,
   ShieldCheckIcon,
   ShoppingCartIcon,
   StarIcon,
   StoreIcon,
-  TruckIcon,
   UsersIcon,
   WarehouseIcon,
-  ZapIcon,
 } from "lucide-react";
 
 import {
@@ -71,10 +61,10 @@ const data = {
         },
       ],
     },
-    
-    // ===== 고객/주문 관리 =====
+
+    // ===== 고객/회원 =====
     {
-      title: "회원 관리",
+      title: "고객/회원",
       url: "/dashboard/members",
       icon: UsersIcon,
       items: [
@@ -82,15 +72,21 @@ const data = {
           title: "회원 목록",
           url: "/dashboard/members",
         },
+        {
+          title: "고객 분석",
+          url: "/dashboard/customer-analytics",
+        },
       ],
     },
+
+    // ===== 주문 관리 =====
     {
       title: "주문 관리",
       url: "/dashboard/orders",
       icon: ShoppingCartIcon,
       items: [
         {
-          title: "주문 목록",
+          title: "주문 목록 (B2C)",
           url: "/dashboard/orders",
         },
         {
@@ -103,48 +99,8 @@ const data = {
         },
       ],
     },
-    {
-      title: "보증서 관리",
-      url: "/dashboard/warranty",
-      icon: ShieldCheckIcon,
-      items: [
-        {
-          title: "전체 보증서",
-          url: "/dashboard/warranty",
-        },
-        {
-          title: "승인 대기",
-          url: "/dashboard/warranty/pending",
-        },
-        {
-          title: "A/S 관리",
-          url: "/dashboard/warranty/as",
-        },
-      ],
-    },
-    
-    // ===== 후기/이벤트 =====
-    {
-      title: "후기 관리",
-      url: "/dashboard/reviews",
-      icon: StarIcon,
-      items: [
-        {
-          title: "후기 인증",
-          url: "/dashboard/reviews",
-        },
-        {
-          title: "이벤트 목록",
-          url: "/dashboard/events",
-        },
-        {
-          title: "새 이벤트",
-          url: "/dashboard/events/new",
-        },
-      ],
-    },
-    
-    // ===== 제품/재고 =====
+
+    // ===== 제품 관리 =====
     {
       title: "제품 관리",
       url: "/dashboard/products",
@@ -166,26 +122,30 @@ const data = {
           title: "스마트스토어 제품",
           url: "/dashboard/products-naver",
         },
+      ],
+    },
+
+    // ===== 재고/물류 =====
+    {
+      title: "재고/물류",
+      url: "/dashboard/inventory",
+      icon: WarehouseIcon,
+      items: [
         {
           title: "재고 현황",
           url: "/dashboard/inventory",
         },
-      ],
-    },
-    
-    // ===== 재고/물류 =====
-    {
-      title: "재고/물류",
-      url: "/dashboard/purchase-orders",
-      icon: TruckIcon,
-      items: [
         {
-          title: "공장 관리",
-          url: "/dashboard/factories",
+          title: "재고 이력",
+          url: "/dashboard/inventory-history",
         },
         {
           title: "창고 관리",
           url: "/dashboard/warehouses",
+        },
+        {
+          title: "공장 관리",
+          url: "/dashboard/factories",
         },
         {
           title: "발주 관리",
@@ -205,8 +165,50 @@ const data = {
         },
       ],
     },
-    
-    // ===== 콘텐츠 =====
+
+    // ===== 보증서 관리 =====
+    {
+      title: "보증서 관리",
+      url: "/dashboard/warranty",
+      icon: ShieldCheckIcon,
+      items: [
+        {
+          title: "전체 보증서",
+          url: "/dashboard/warranty",
+        },
+        {
+          title: "승인 대기",
+          url: "/dashboard/warranty/pending",
+        },
+        {
+          title: "A/S 관리",
+          url: "/dashboard/warranty/as",
+        },
+      ],
+    },
+
+    // ===== 후기/이벤트 =====
+    {
+      title: "후기/이벤트",
+      url: "/dashboard/reviews",
+      icon: StarIcon,
+      items: [
+        {
+          title: "후기 인증",
+          url: "/dashboard/reviews",
+        },
+        {
+          title: "이벤트 목록",
+          url: "/dashboard/events",
+        },
+        {
+          title: "새 이벤트",
+          url: "/dashboard/events/new",
+        },
+      ],
+    },
+
+    // ===== 콘텐츠 관리 =====
     {
       title: "콘텐츠 관리",
       url: "/dashboard/blog",
@@ -226,28 +228,7 @@ const data = {
         },
       ],
     },
-    
-    // ===== 분석 =====
-    {
-      title: "분석",
-      url: "/dashboard/customer-analytics",
-      icon: BarChart3Icon,
-      items: [
-        {
-          title: "고객 분석",
-          url: "/dashboard/customer-analytics",
-        },
-        {
-          title: "광고 분석",
-          url: "#",
-        },
-        {
-          title: "출고/배송",
-          url: "#",
-        },
-      ],
-    },
-    
+
     // ===== 외부 연동 =====
     {
       title: "외부 연동",
@@ -259,16 +240,16 @@ const data = {
           url: "/dashboard/integrations/cafe24",
         },
         {
-          title: "스마트스토어 (네이버)",
+          title: "스마트스토어",
           url: "/dashboard/integrations/naver",
         },
       ],
     },
-    
+
     // ===== 설정 =====
     {
       title: "설정",
-      url: "#",
+      url: "/account/edit",
       icon: Settings2Icon,
       items: [
         {

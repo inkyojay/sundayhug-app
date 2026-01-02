@@ -66,6 +66,13 @@ export default [
       route("/sync-orders", "features/integrations/api/naver-sync-orders.tsx"),
       route("/sync-products", "features/integrations/api/naver-sync-products.tsx"),
     ]),
+    // 쿠팡 로켓그로스 연동 API
+    ...prefix("/integrations/coupang", [
+      route("/auth/save", "features/integrations/api/coupang-auth-save.tsx"),
+      route("/sync-orders", "features/integrations/api/coupang-sync-orders.tsx"),
+      route("/sync-products", "features/integrations/api/coupang-sync-products.tsx"),
+      route("/sync-inventory", "features/integrations/api/coupang-sync-inventory.tsx"),
+    ]),
     // 재고 위치 API
     route("/inventory-locations", "features/inventory/api/inventory-locations.tsx"),
     // B2B 문서 생성 API
@@ -148,6 +155,7 @@ export default [
         
         // 재고 관리
         route("/inventory", "features/inventory/screens/inventory.tsx"),
+        route("/inventory-history", "features/inventory/screens/inventory-history.tsx"),
         
         // 주문 관리 (Cafe24 + 네이버)
         route("/orders", "features/orders-direct/screens/orders-direct.tsx"),
@@ -224,6 +232,7 @@ export default [
         ...prefix("/integrations", [
           route("/cafe24", "features/integrations/screens/cafe24-status.tsx"),
           route("/naver", "features/integrations/screens/naver-status.tsx"),
+          route("/coupang", "features/integrations/screens/coupang-status.tsx"),
         ]),
         
         // 재고/물류 관리
@@ -239,7 +248,12 @@ export default [
         ]),
         route("/stock-receipts", "features/stock-receipts/screens/stock-receipt-list.tsx"),
         route("/stock-transfers", "features/stock-transfers/screens/stock-transfer-list.tsx"),
-        route("/returns", "features/returns/screens/returns-list.tsx"),
+        // 교환/반품/AS
+        ...prefix("/returns", [
+          index("features/returns/screens/returns-list.tsx"),
+          route("/new", "features/returns/screens/returns-form.tsx", { id: "returns-new" }),
+          route("/:id/edit", "features/returns/screens/returns-form.tsx", { id: "returns-edit" }),
+        ]),
       ]),
       
       // 계정 설정
