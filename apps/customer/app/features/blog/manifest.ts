@@ -1,0 +1,23 @@
+/**
+ * Blog Feature Manifest
+ * 기능 메타데이터 및 경계 정의
+ */
+export const manifest = {
+  name: "blog",
+  description: "블로그 콘텐츠 관리 기능",
+
+  // 다른 feature 의존성
+  featureDependencies: [],
+
+  // shared 서비스 의존성
+  sharedDependencies: ["storage"],
+
+  // 소유 라우트
+  routes: [
+    "/api/blog/*",
+    "/customer/blog/*",
+  ],
+
+  // 소유 테이블
+  tables: [],
+} as const;

@@ -10,7 +10,7 @@ import { data } from "react-router";
 import { z } from "zod";
 
 import adminClient from "~/core/lib/supa-admin-client.server";
-import { generateOTP, sendSmsOTP } from "../lib/solapi.server";
+import { generateOTP, sendSmsOTP } from "~/shared/services/notification";
 
 const requestSchema = z.object({
   phoneNumber: z.string().min(10).max(15),

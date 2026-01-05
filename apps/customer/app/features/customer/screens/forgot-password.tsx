@@ -91,7 +91,7 @@ export async function action({ request }: Route.ActionArgs) {
 
     // SMS 발송
     try {
-      const { sendSmsOTP } = await import("~/features/auth/lib/solapi.server");
+      const { sendSmsOTP } = await import("~/shared/services/notification");
       const result = await sendSmsOTP(normalizedPhone, otp);
       
       if (!result.success) {

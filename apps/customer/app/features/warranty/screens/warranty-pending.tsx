@@ -37,7 +37,7 @@ import { Textarea } from "~/core/components/ui/textarea";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 import { createAdminClient } from "~/core/lib/supa-admin.server";
-import { sendWarrantyApprovalAlimtalk, sendWarrantyRejectionAlimtalk } from "~/features/auth/lib/solapi.server";
+import { sendWarrantyApprovalAlimtalk, sendWarrantyRejectionAlimtalk } from "~/shared/services/notification";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: `승인 대기 | 보증서 관리 | Sundayhug Admin` }];

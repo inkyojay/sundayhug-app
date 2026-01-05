@@ -54,7 +54,7 @@ import {
 
 import makeServerClient from "~/core/lib/supa-client.server";
 import { createAdminClient } from "~/core/lib/supa-admin.server";
-import { sendWarrantyApprovalAlimtalk, sendWarrantyRejectionAlimtalk } from "~/features/auth/lib/solapi.server";
+import { sendWarrantyApprovalAlimtalk, sendWarrantyRejectionAlimtalk } from "~/shared/services/notification";
 
 export const meta: Route.MetaFunction = ({ data }) => {
   return [{ title: `${data?.warranty?.warranty_number || "보증서"} | Sundayhug Admin` }];
