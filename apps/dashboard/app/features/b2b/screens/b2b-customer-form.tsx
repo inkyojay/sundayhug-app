@@ -29,33 +29,13 @@ import { Switch } from "~/core/components/ui/switch";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
-// 국가 코드 목록
-const countries = [
-  { code: "KR", name: "한국" },
-  { code: "US", name: "미국" },
-  { code: "JP", name: "일본" },
-  { code: "CN", name: "중국" },
-  { code: "VN", name: "베트남" },
-  { code: "TH", name: "태국" },
-  { code: "SG", name: "싱가포르" },
-  { code: "MY", name: "말레이시아" },
-  { code: "ID", name: "인도네시아" },
-  { code: "PH", name: "필리핀" },
-  { code: "AU", name: "호주" },
-  { code: "DE", name: "독일" },
-  { code: "FR", name: "프랑스" },
-  { code: "GB", name: "영국" },
-  { code: "CA", name: "캐나다" },
-];
-
-// 통화 목록
-const currencies = [
-  { code: "KRW", name: "원 (KRW)" },
-  { code: "USD", name: "달러 (USD)" },
-  { code: "EUR", name: "유로 (EUR)" },
-  { code: "JPY", name: "엔 (JPY)" },
-  { code: "CNY", name: "위안 (CNY)" },
-];
+import {
+  getCustomer,
+  generateCustomerCode,
+  saveCustomer,
+  parseCustomerFormData,
+} from "../lib/b2b.server";
+import { COUNTRIES, CURRENCIES } from "../lib/b2b.shared";
 
 export const meta: Route.MetaFunction = ({ params }) => {
   return [{ title: params.id ? "업체 수정 | Sundayhug Admin" : "업체 등록 | Sundayhug Admin" }];
@@ -66,27 +46,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const { id } = params;
 
   if (id) {
-    // 수정 모드: 기존 데이터 조회
-    const { data: customer, error } = await supabase
-      .from("b2b_customers")
-      .select("*")
-      .eq("id", id)
-      .single();
-
-    if (error || !customer) {
+    const customer = await getCustomer(supabase, id);
+    if (!customer) {
       throw new Response("업체를 찾을 수 없습니다", { status: 404 });
     }
-
     return { customer, isEdit: true };
   }
 
-  // 등록 모드: 새 업체 코드 생성
-  const { count } = await supabase
-    .from("b2b_customers")
-    .select("*", { count: "exact", head: true });
-
-  const newCode = `B2B-${String((count || 0) + 1).padStart(4, "0")}`;
-
+  const newCode = await generateCustomerCode(supabase);
   return { customer: null, isEdit: false, newCode };
 }
 
@@ -95,53 +62,8 @@ export async function action({ request, params }: Route.ActionArgs) {
   const formData = await request.formData();
   const { id } = params;
 
-  const customerData = {
-    customer_code: formData.get("customer_code") as string,
-    company_name: formData.get("company_name") as string,
-    company_name_en: (formData.get("company_name_en") as string) || null,
-    business_type: formData.get("business_type") as string,
-    country_code: formData.get("country_code") as string,
-    business_registration_no: (formData.get("business_registration_no") as string) || null,
-    representative_name: (formData.get("representative_name") as string) || null,
-    contact_name: (formData.get("contact_name") as string) || null,
-    contact_phone: (formData.get("contact_phone") as string) || null,
-    contact_email: (formData.get("contact_email") as string) || null,
-    contact_position: (formData.get("contact_position") as string) || null,
-    address: (formData.get("address") as string) || null,
-    address_en: (formData.get("address_en") as string) || null,
-    shipping_address: (formData.get("shipping_address") as string) || null,
-    shipping_address_en: (formData.get("shipping_address_en") as string) || null,
-    payment_terms: (formData.get("payment_terms") as string) || null,
-    currency: formData.get("currency") as string,
-    notes: (formData.get("notes") as string) || null,
-    is_active: formData.get("is_active") === "true",
-    updated_at: new Date().toISOString(),
-  };
-
-  if (id) {
-    // 수정
-    const { error } = await supabase
-      .from("b2b_customers")
-      .update(customerData)
-      .eq("id", id);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, message: "업체 정보가 수정되었습니다." };
-  } else {
-    // 등록
-    const { error } = await supabase
-      .from("b2b_customers")
-      .insert(customerData);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, message: "업체가 등록되었습니다.", redirect: true };
-  }
+  const customerData = parseCustomerFormData(formData);
+  return saveCustomer(supabase, id || null, customerData);
 }
 
 export default function B2BCustomerForm({ loaderData }: Route.ComponentProps) {
@@ -319,7 +241,7 @@ export default function B2BCustomerForm({ loaderData }: Route.ComponentProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {countries.map((c) => (
+                    {COUNTRIES.map((c) => (
                       <SelectItem key={c.code} value={c.code}>
                         {c.name} ({c.code})
                       </SelectItem>
@@ -337,7 +259,7 @@ export default function B2BCustomerForm({ loaderData }: Route.ComponentProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {currencies.map((c) => (
+                    {CURRENCIES.map((c) => (
                       <SelectItem key={c.code} value={c.code}>
                         {c.name}
                       </SelectItem>

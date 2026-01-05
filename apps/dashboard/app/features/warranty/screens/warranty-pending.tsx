@@ -39,6 +39,12 @@ import makeServerClient from "~/core/lib/supa-client.server";
 import { createAdminClient } from "~/core/lib/supa-admin.server";
 import { sendWarrantyApprovalAlimtalk, sendWarrantyRejectionAlimtalk } from "~/features/auth/lib/solapi.server";
 
+import {
+  approveWarranty,
+  rejectWarranty,
+  updateKakaoSentStatus,
+} from "../lib/warranty.server";
+
 export const meta: Route.MetaFunction = () => {
   return [{ title: `승인 대기 | 보증서 관리 | Sundayhug Admin` }];
 };
@@ -61,7 +67,7 @@ export async function action({ request }: Route.ActionArgs) {
   // RLS를 우회하기 위해 Admin 클라이언트 사용
   const adminClient = createAdminClient();
   const formData = await request.formData();
-  
+
   const warrantyId = formData.get("warrantyId") as string;
   const actionType = formData.get("action") as string;
   const rejectionReason = formData.get("rejectionReason") as string;
@@ -69,107 +75,66 @@ export async function action({ request }: Route.ActionArgs) {
   console.log("Action received:", { warrantyId, actionType, rejectionReason });
 
   if (actionType === "approve") {
-    // 승인 처리
-    const today = new Date();
-    const warrantyEnd = new Date(today);
-    warrantyEnd.setFullYear(warrantyEnd.getFullYear() + 1); // 1년 보증
+    const result = await approveWarranty(adminClient, warrantyId);
 
-    const warrantyStartStr = today.toISOString().split("T")[0];
-    const warrantyEndStr = warrantyEnd.toISOString().split("T")[0];
-
-    const { data, error } = await adminClient
-      .from("warranties")
-      .update({
-        status: "approved",
-        approved_at: new Date().toISOString(),
-        approved_by: "admin",
-        warranty_start: warrantyStartStr,
-        warranty_end: warrantyEndStr,
-      })
-      .eq("id", warrantyId)
-      .select("*, customers(name)")
-      .single();
-
-    console.log("Approve result:", { data, error });
-
-    if (error) {
-      console.error("Approve error:", error);
-      return { success: false, error: error.message };
+    if (!result.success) {
+      console.error("Approve error:", result.error);
+      return { success: false, error: result.error };
     }
 
     // 카카오 알림톡 발송
-    if (data?.customer_phone) {
+    if (result.data?.customer_phone) {
       try {
         const alimtalkResult = await sendWarrantyApprovalAlimtalk(
-          data.customer_phone,
+          result.data.customer_phone,
           {
-            customerName: data.buyer_name || data.customers?.name || "고객",
-            productName: data.product_name || "제품",
-            warrantyNumber: data.warranty_number,
-            startDate: warrantyStartStr,
-            endDate: warrantyEndStr,
+            customerName: result.data.buyer_name || result.data.customers?.name || "고객",
+            productName: result.data.product_name || "제품",
+            warrantyNumber: result.data.warranty_number,
+            startDate: result.warrantyStartStr!,
+            endDate: result.warrantyEndStr!,
           }
         );
 
         if (alimtalkResult.success) {
-          // 알림톡 발송 성공 기록
-          await adminClient
-            .from("warranties")
-            .update({
-              kakao_sent: true,
-              kakao_sent_at: new Date().toISOString(),
-              kakao_message_id: alimtalkResult.messageId,
-            })
-            .eq("id", warrantyId);
-          
-          console.log("✅ 승인 알림톡 발송 완료:", alimtalkResult.messageId);
+          await updateKakaoSentStatus(adminClient, warrantyId, alimtalkResult.messageId!);
+          console.log("승인 알림톡 발송 완료:", alimtalkResult.messageId);
         } else {
-          console.error("⚠️ 알림톡 발송 실패 (승인은 완료됨):", alimtalkResult.error);
+          console.error("알림톡 발송 실패 (승인은 완료됨):", alimtalkResult.error);
         }
       } catch (alimtalkError) {
-        console.error("⚠️ 알림톡 발송 중 오류 (승인은 완료됨):", alimtalkError);
+        console.error("알림톡 발송 중 오류 (승인은 완료됨):", alimtalkError);
       }
     }
 
     return { success: true, message: "보증서가 승인되었습니다." };
   } else if (actionType === "reject") {
-    // 거절 처리
-    const { data, error } = await adminClient
-      .from("warranties")
-      .update({
-        status: "rejected",
-        rejection_reason: rejectionReason,
-      })
-      .eq("id", warrantyId)
-      .select("*, customers(name)")
-      .single();
+    const result = await rejectWarranty(adminClient, warrantyId, rejectionReason || "제출하신 정보 확인이 어렵습니다.");
 
-    console.log("Reject result:", { data, error });
-
-    if (error) {
-      console.error("Reject error:", error);
-      return { success: false, error: error.message };
+    if (!result.success) {
+      console.error("Reject error:", result.error);
+      return { success: false, error: result.error };
     }
 
     // 카카오 알림톡 발송 (거절)
-    if (data?.customer_phone) {
+    if (result.data?.customer_phone) {
       try {
         const alimtalkResult = await sendWarrantyRejectionAlimtalk(
-          data.customer_phone,
+          result.data.customer_phone,
           {
-            customerName: data.buyer_name || data.customers?.name || "고객",
+            customerName: result.data.buyer_name || result.data.customers?.name || "고객",
             rejectionReason: rejectionReason || "제출하신 정보 확인이 어렵습니다.",
             registerUrl: "https://app-sundayhug-members.vercel.app/customer/warranty",
           }
         );
 
         if (alimtalkResult.success) {
-          console.log("✅ 거절 알림톡 발송 완료:", alimtalkResult.messageId);
+          console.log("거절 알림톡 발송 완료:", alimtalkResult.messageId);
         } else {
-          console.error("⚠️ 알림톡 발송 실패 (거절은 완료됨):", alimtalkResult.error);
+          console.error("알림톡 발송 실패 (거절은 완료됨):", alimtalkResult.error);
         }
       } catch (alimtalkError) {
-        console.error("⚠️ 알림톡 발송 중 오류 (거절은 완료됨):", alimtalkError);
+        console.error("알림톡 발송 중 오류 (거절은 완료됨):", alimtalkError);
       }
     }
 

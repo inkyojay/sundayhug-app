@@ -4,7 +4,7 @@
  * 통계 카드를 위한 공통 컴포넌트
  */
 import { cn } from "~/core/lib/utils";
-import { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 interface StatsCardProps {
   title: string;

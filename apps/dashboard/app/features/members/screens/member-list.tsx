@@ -1,6 +1,6 @@
 /**
  * 회원 관리 - 회원 목록
- * 
+ *
  * 기능:
  * - 가입 회원 목록 조회
  * - 검색 (이름, 전화번호, 이메일)
@@ -41,7 +41,14 @@ import {
 } from "~/core/components/ui/dialog";
 import { Badge } from "~/core/components/ui/badge";
 
-// 서버 전용 모듈은 loader/action 내부에서 동적 import
+import {
+  getCurrentUserRole,
+  getMemberList,
+  approveMember,
+  rejectMember,
+  deleteMember,
+} from "../lib/members.server";
+import { formatDate } from "../lib/members.shared";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const { default: makeServerClient } = await import("~/core/lib/supa-client.server");
@@ -52,61 +59,29 @@ export async function loader({ request }: Route.LoaderArgs) {
   const approvalFilter = url.searchParams.get("approval") ?? "all";
   const page = parseInt(url.searchParams.get("page") ?? "1");
   const limit = 20;
-  const offset = (page - 1) * limit;
 
   // Admin 클라이언트로 전체 회원 조회 (RLS 우회)
   const adminClient = createAdminClient();
 
   // 현재 로그인한 사용자 역할 확인
-  const { data: { user: currentUser } } = await client.auth.getUser();
-  let currentUserRole = null;
-  if (currentUser) {
-    const { data: currentProfile } = await adminClient
-      .from("profiles")
-      .select("role")
-      .eq("id", currentUser.id)
-      .single();
-    currentUserRole = currentProfile?.role;
-  }
+  const currentUserRole = await getCurrentUserRole(client, adminClient);
 
-  let query = adminClient
-    .from("profiles")
-    .select("*", { count: "exact" })
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
-
-  // 검색어가 있으면 필터 적용
-  if (search) {
-    query = query.or(
-      `name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`
-    );
-  }
-
-  // 승인 상태 필터
-  if (approvalFilter !== "all") {
-    query = query.eq("approval_status", approvalFilter);
-  }
-
-  const { data: members, count, error } = await query;
-
-  // 승인 대기 회원 수 (알림용)
-  const { count: pendingCount } = await adminClient
-    .from("profiles")
-    .select("*", { count: "exact", head: true })
-    .eq("approval_status", "pending");
-
-  if (error) {
-    console.error("회원 목록 조회 오류:", error);
-  }
+  // 회원 목록 조회
+  const { members, total, pendingCount } = await getMemberList(adminClient, {
+    search,
+    approvalFilter,
+    page,
+    limit,
+  });
 
   return {
-    members: members ?? [],
-    total: count ?? 0,
+    members,
+    total,
     page,
     limit,
     search,
     approvalFilter,
-    pendingCount: pendingCount ?? 0,
+    pendingCount,
     currentUserRole,
     headers,
   };
@@ -115,102 +90,41 @@ export async function loader({ request }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent");
-  
+
   const { createAdminClient } = await import("~/core/lib/supa-admin.server");
   const adminClient = createAdminClient();
 
   // 빠른 승인 처리
   if (intent === "approve") {
     const userId = formData.get("userId") as string;
-    const newRole = formData.get("role") as string || "admin";
-    
+    const newRole = (formData.get("role") as string) || "admin";
+
     if (!userId) {
       return { error: "사용자 ID가 필요합니다" };
     }
 
-    const { error } = await adminClient
-      .from("profiles")
-      .update({ 
-        approval_status: "approved",
-        role: newRole,
-      })
-      .eq("id", userId);
-
-    if (error) {
-      console.error("승인 처리 오류:", error);
-      return { error: `승인 실패: ${error.message}` };
-    }
-
-    return { success: true, message: "회원이 승인되었습니다" };
+    return approveMember(adminClient, userId, newRole);
   }
 
   // 거절 처리
   if (intent === "reject") {
     const userId = formData.get("userId") as string;
-    
+
     if (!userId) {
       return { error: "사용자 ID가 필요합니다" };
     }
 
-    const { error } = await adminClient
-      .from("profiles")
-      .update({ approval_status: "rejected" })
-      .eq("id", userId);
-
-    if (error) {
-      console.error("거절 처리 오류:", error);
-      return { error: `거절 실패: ${error.message}` };
-    }
-
-    return { success: true, message: "회원이 거절되었습니다" };
+    return rejectMember(adminClient, userId);
   }
 
   if (intent === "delete") {
     const userId = formData.get("userId") as string;
-    
+
     if (!userId) {
       return { error: "사용자 ID가 필요합니다" };
     }
 
-    try {
-      // 1. auth.users에서 먼저 삭제 (CASCADE 설정된 테이블은 자동 삭제)
-      const { error: authError } = await adminClient.auth.admin.deleteUser(userId);
-      
-      // auth 삭제 실패해도 일단 관련 데이터 정리 시도
-      if (authError) {
-        console.warn("auth.users 삭제 경고:", authError.message);
-      }
-
-      // 2. 관련 데이터 정리 (남아있을 수 있는 데이터)
-      await adminClient.from("warranties").update({ user_id: null }).eq("user_id", userId);
-      await adminClient.from("as_requests").update({ user_id: null }).eq("user_id", userId);
-      await adminClient.from("sleep_analyses").update({ user_id: null }).eq("user_id", userId);
-      await adminClient.from("review_submissions").update({ user_id: null }).eq("user_id", userId);
-      await adminClient.from("blog_posts").update({ author_id: null }).eq("author_id", userId);
-      
-      // 삭제해야 하는 데이터
-      await adminClient.from("baby_profiles").delete().eq("user_id", userId);
-      await adminClient.from("point_transactions").delete().eq("user_id", userId);
-      await adminClient.from("chat_feedback").delete().eq("user_id", userId);
-      await adminClient.from("forecast_logs").delete().eq("user_id", userId);
-      
-      // 채팅 세션/메시지 삭제
-      const { data: sessions } = await adminClient.from("chat_sessions").select("id").eq("user_id", userId);
-      if (sessions && sessions.length > 0) {
-        const sessionIds = sessions.map(s => s.id);
-        await adminClient.from("chat_messages").delete().in("session_id", sessionIds);
-      }
-      await adminClient.from("chat_sessions").delete().eq("user_id", userId);
-      
-      // 3. profiles 삭제 (마지막에)
-      await adminClient.from("profiles").delete().eq("id", userId);
-
-      return { success: true, message: "회원이 삭제되었습니다" };
-    } catch (err: any) {
-      console.error("회원 삭제 중 오류:", err);
-      // 삭제 중 일부 실패해도 성공으로 처리 (이미 삭제된 경우 등)
-      return { success: true, message: "회원이 삭제되었습니다" };
-    }
+    return deleteMember(adminClient, userId);
   }
 
   return { error: "알 수 없는 요청입니다" };

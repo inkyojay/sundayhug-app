@@ -1,6 +1,6 @@
 /**
  * 회원 관리 - 회원 상세정보
- * 
+ *
  * 기능:
  * - 회원 기본 정보 조회
  * - 보증서, 수면분석 등 연관 데이터 확인
@@ -52,8 +52,19 @@ import {
 } from "~/core/components/ui/select";
 import makeServerClient from "~/core/lib/supa-client.server";
 
-// 서버 전용 모듈은 loader/action 내부에서 동적 import
-// import { createAdminClient } from "~/core/lib/supa-admin.server";
+import {
+  getCurrentUserRole,
+  getMemberDetail,
+  changeMemberRole,
+  changeApprovalStatus,
+  deleteMember,
+} from "../lib/members.server";
+import {
+  formatDateLong,
+  calculateAge,
+  getSleepSensitivityLabel,
+  getGenderLabel,
+} from "../lib/members.shared";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { createAdminClient } = await import("~/core/lib/supa-admin.server");
@@ -63,68 +74,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // 현재 로그인한 사용자 정보 가져오기
   const [client] = makeServerClient(request);
   const { data: { user: currentUser } } = await client.auth.getUser();
-  
-  let currentUserRole = null;
-  if (currentUser) {
-    const { data: currentProfile } = await adminClient
-      .from("profiles")
-      .select("role")
-      .eq("id", currentUser.id)
-      .single();
-    currentUserRole = currentProfile?.role;
-  }
 
-  // 회원 프로필 조회
-  const { data: member, error: memberError } = await adminClient
-    .from("profiles")
-    .select("*")
-    .eq("id", id)
-    .single();
+  // 현재 사용자 역할 확인
+  const currentUserRole = await getCurrentUserRole(client, adminClient);
 
-  if (memberError || !member) {
-    throw new Response("회원을 찾을 수 없습니다", { status: 404 });
-  }
-
-  // 해당 회원의 보증서 목록
-  const { data: warranties, count: warrantyCount } = await adminClient
-    .from("warranties")
-    .select("id, warranty_number, product_name, status, created_at", { count: "exact" })
-    .eq("user_id", id)
-    .order("created_at", { ascending: false })
-    .limit(5);
-
-  // 해당 회원의 수면 분석 기록
-  const { data: sleepAnalyses, count: sleepCount } = await adminClient
-    .from("sleep_analyses")
-    .select("id, summary, created_at", { count: "exact" })
-    .eq("user_id", id)
-    .order("created_at", { ascending: false })
-    .limit(5);
-
-  // 아기 프로필
-  const { data: babyProfiles } = await adminClient
-    .from("baby_profiles")
-    .select("*")
-    .eq("user_id", id)
-    .order("created_at", { ascending: false });
-
-  // 후기 참여 이력
-  const { data: reviewSubmissions, count: reviewCount } = await adminClient
-    .from("review_submissions")
-    .select("id, review_type, status, created_at", { count: "exact" })
-    .eq("user_id", id)
-    .order("created_at", { ascending: false })
-    .limit(5);
+  // 회원 상세 정보 조회
+  const memberDetail = await getMemberDetail(adminClient, id);
 
   return {
-    member,
-    warranties: warranties ?? [],
-    warrantyCount: warrantyCount ?? 0,
-    sleepAnalyses: sleepAnalyses ?? [],
-    sleepCount: sleepCount ?? 0,
-    babyProfiles: babyProfiles ?? [],
-    reviewSubmissions: reviewSubmissions ?? [],
-    reviewCount: reviewCount ?? 0,
+    ...memberDetail,
     currentUserRole,
     currentUserId: currentUser?.id,
   };
@@ -136,20 +94,11 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   // 현재 사용자 권한 확인
   const [client] = makeServerClient(request);
-  const { data: { user: currentUser } } = await client.auth.getUser();
-  
+
   const { createAdminClient } = await import("~/core/lib/supa-admin.server");
   const adminClient = createAdminClient();
-  
-  let currentUserRole = null;
-  if (currentUser) {
-    const { data: currentProfile } = await adminClient
-      .from("profiles")
-      .select("role")
-      .eq("id", currentUser.id)
-      .single();
-    currentUserRole = currentProfile?.role;
-  }
+
+  const currentUserRole = await getCurrentUserRole(client, adminClient);
 
   // 역할 변경 (최고관리자만 가능)
   if (intent === "change_role") {
@@ -160,22 +109,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     const newRole = formData.get("role") as string;
     const { id } = params;
 
-    // super_admin은 변경 불가 (보안)
-    if (newRole === "super_admin") {
-      return { error: "최고관리자 권한은 직접 설정할 수 없습니다" };
-    }
-
-    const { error } = await adminClient
-      .from("profiles")
-      .update({ role: newRole })
-      .eq("id", id);
-
-    if (error) {
-      console.error("역할 변경 오류:", error);
-      return { error: `역할 변경 실패: ${error.message}` };
-    }
-
-    return { success: true, message: "역할이 변경되었습니다" };
+    return changeMemberRole(adminClient, id, newRole);
   }
 
   // 승인 상태 변경 (관리자 이상 가능)
@@ -187,55 +121,21 @@ export async function action({ request, params }: Route.ActionArgs) {
     const newStatus = formData.get("approval_status") as string;
     const { id } = params;
 
-    const { error } = await adminClient
-      .from("profiles")
-      .update({ approval_status: newStatus })
-      .eq("id", id);
-
-    if (error) {
-      console.error("승인 상태 변경 오류:", error);
-      return { error: `승인 상태 변경 실패: ${error.message}` };
-    }
-
-    return { success: true, message: "승인 상태가 변경되었습니다" };
+    return changeApprovalStatus(adminClient, id, newStatus);
   }
 
   if (intent === "delete") {
     const { id } = params;
 
     try {
-      // 1. 관련 데이터 먼저 삭제/해제 (외래키 제약조건 해결)
-      await adminClient.from("warranties").update({ user_id: null }).eq("user_id", id);
-      await adminClient.from("as_requests").update({ user_id: null }).eq("user_id", id);
-      await adminClient.from("sleep_analyses").update({ user_id: null }).eq("user_id", id);
-      await adminClient.from("baby_profiles").delete().eq("user_id", id);
-      
-      const { data: sessions } = await adminClient.from("chat_sessions").select("id").eq("user_id", id);
-      if (sessions && sessions.length > 0) {
-        const sessionIds = sessions.map(s => s.id);
-        await adminClient.from("chat_messages").delete().in("session_id", sessionIds);
-        await adminClient.from("chat_sessions").delete().eq("user_id", id);
-      }
-      
-      await adminClient.from("review_submissions").update({ user_id: null }).eq("user_id", id);
-      await adminClient.from("point_transactions").delete().eq("user_id", id);
-      await adminClient.from("chat_feedback").delete().eq("user_id", id);
-      await adminClient.from("forecast_logs").delete().eq("user_id", id);
-      await adminClient.from("blog_posts").update({ author_id: null }).eq("author_id", id);
-      
-      // 2. profiles 삭제
-      await adminClient.from("profiles").delete().eq("id", id);
+      const result = await deleteMember(adminClient, id);
 
-      // 3. auth.users에서 삭제
-      const { error: authError } = await adminClient.auth.admin.deleteUser(id);
-      
-      if (authError) {
-        console.error("사용자 삭제 오류:", authError);
-        return { error: `삭제 실패: ${authError.message}` };
+      if (result.success) {
+        // 삭제 성공 후 목록으로 리다이렉트
+        throw redirect("/dashboard/members?deleted=true");
       }
 
-      // 삭제 성공 후 목록으로 리다이렉트
-      throw redirect("/dashboard/members?deleted=true");
+      return result;
     } catch (err: any) {
       if (err instanceof Response) throw err; // redirect는 그대로 throw
       console.error("회원 삭제 중 오류:", err);

@@ -3,24 +3,17 @@
  */
 import type { Route } from "./+types/stock-transfer-list";
 
-import { 
-  ArrowLeftRightIcon, 
-  PlusIcon, 
+import {
+  ArrowLeftRightIcon,
+  PlusIcon,
   SearchIcon,
-  WarehouseIcon,
-  CalendarIcon,
-  CheckCircleIcon,
-  ClockIcon,
-  TruckIcon,
-  XCircleIcon,
+  ArrowRightIcon,
   SaveIcon,
   TrashIcon,
-  ArrowRightIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { useFetcher, useNavigate } from "react-router";
 
-import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
 import {
   Card,
@@ -51,90 +44,52 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/core/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "~/core/components/ui/alert-dialog";
 import { Label } from "~/core/components/ui/label";
 import { Textarea } from "~/core/components/ui/textarea";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
+import {
+  getStockTransfers,
+  getActiveWarehouses,
+  generateNewTransferNumber,
+  createStockTransfer,
+  deleteStockTransfer,
+  parseStockTransferQueryParams,
+} from "../lib/stock-transfers.server";
+import type {
+  StockTransfer,
+  StockTransferItem,
+  StockTransferFormData,
+  InventoryLocation,
+} from "../lib/stock-transfers.shared";
+import {
+  TRANSFER_STATUSES,
+  EMPTY_TRANSFER_FORM,
+  inventoryToTransferItem,
+} from "../lib/stock-transfers.shared";
+import { StockTransferTable, StockTransferDeleteDialog } from "../components";
+
 export const meta: Route.MetaFunction = () => {
   return [{ title: `재고 이동 | Sundayhug Admin` }];
 };
 
-const transferStatuses = [
-  { value: "pending", label: "대기중", color: "secondary" },
-  { value: "in_transit", label: "이동중", color: "outline" },
-  { value: "completed", label: "완료", color: "default" },
-  { value: "cancelled", label: "취소", color: "destructive" },
-];
-
-const getStatusInfo = (status: string) => {
-  return transferStatuses.find(s => s.value === status) || transferStatuses[0];
-};
-
 export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
-  
   const url = new URL(request.url);
-  const search = url.searchParams.get("search") || "";
-  const statusFilter = url.searchParams.get("status") || "";
+  const params = parseStockTransferQueryParams(url);
 
-  // 창고 목록 조회
-  const { data: warehouses } = await supabase
-    .from("warehouses")
-    .select("id, warehouse_name, warehouse_code")
-    .eq("is_active", true)
-    .order("warehouse_name");
+  const [transfers, warehouses, newTransferNumber] = await Promise.all([
+    getStockTransfers(supabase, params),
+    getActiveWarehouses(supabase),
+    generateNewTransferNumber(supabase),
+  ]);
 
-  // 재고 이동 목록 조회 (삭제되지 않은 것만)
-  let query = supabase
-    .from("stock_transfers")
-    .select(`
-      *,
-      from_warehouse:warehouses!stock_transfers_from_warehouse_id_fkey(id, warehouse_name),
-      to_warehouse:warehouses!stock_transfers_to_warehouse_id_fkey(id, warehouse_name),
-      items:stock_transfer_items(id, sku, product_name, quantity)
-    `)
-    .or("is_deleted.is.null,is_deleted.eq.false")
-    .order("created_at", { ascending: false });
-
-  if (search) {
-    query = query.ilike("transfer_number", `%${search}%`);
-  }
-
-  if (statusFilter && statusFilter !== "__all__") {
-    query = query.eq("status", statusFilter);
-  }
-
-  const { data: transfers, error } = await query;
-
-  if (error) {
-    console.error("Failed to load stock transfers:", error);
-  }
-
-  // 새 이동번호 생성
-  const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const { count } = await supabase
-    .from("stock_transfers")
-    .select("*", { count: "exact", head: true })
-    .ilike("transfer_number", `ST-${today}%`);
-  
-  const newTransferNumber = `ST-${today}-${String((count || 0) + 1).padStart(4, "0")}`;
-
-  return { 
-    transfers: transfers || [], 
-    warehouses: warehouses || [],
-    search, 
-    statusFilter, 
+  return {
+    transfers,
+    warehouses,
+    search: params.search,
+    statusFilter: params.statusFilter,
     newTransferNumber,
   };
 }
@@ -145,153 +100,44 @@ export async function action({ request }: Route.ActionArgs) {
   const intent = formData.get("intent");
 
   if (intent === "create") {
-    const transferData = {
-      transfer_number: formData.get("transfer_number") as string,
-      from_warehouse_id: formData.get("from_warehouse_id") as string,
-      to_warehouse_id: formData.get("to_warehouse_id") as string,
-      transfer_date: formData.get("transfer_date") as string,
-      status: "completed",
-      notes: formData.get("notes") as string || null,
-      total_quantity: parseInt(formData.get("total_quantity") as string) || 0,
-    };
-
     const items = JSON.parse(formData.get("items") as string || "[]");
+    const totalQuantity = parseInt(formData.get("total_quantity") as string) || 0;
 
-    // 출발 창고 재고 확인 및 차감
-    for (const item of items) {
-      const { data: fromStock } = await supabase
-        .from("inventory_locations")
-        .select("id, quantity")
-        .eq("warehouse_id", transferData.from_warehouse_id)
-        .eq("sku", item.sku)
-        .single();
-
-      if (!fromStock || fromStock.quantity < item.quantity) {
-        return { error: `${item.sku} 재고가 부족합니다. (보유: ${fromStock?.quantity || 0}, 요청: ${item.quantity})` };
-      }
-    }
-
-    // 이동 헤더 생성
-    const { data: newTransfer, error: transferError } = await supabase
-      .from("stock_transfers")
-      .insert(transferData)
-      .select()
-      .single();
-
-    if (transferError) return { error: transferError.message };
-
-    // 이동 품목 생성
-    if (items.length > 0 && newTransfer) {
-      const itemsToInsert = items.map((item: any) => ({
-        stock_transfer_id: newTransfer.id,
-        product_id: item.product_id || null,
-        sku: item.sku,
-        product_name: item.product_name,
-        quantity: item.quantity,
-      }));
-
-      await supabase.from("stock_transfer_items").insert(itemsToInsert);
-
-      // 출발 창고 재고 차감
-      for (const item of items) {
-        const { data: fromStock } = await supabase
-          .from("inventory_locations")
-          .select("id, quantity")
-          .eq("warehouse_id", transferData.from_warehouse_id)
-          .eq("sku", item.sku)
-          .single();
-
-        if (fromStock) {
-          await supabase
-            .from("inventory_locations")
-            .update({ 
-              quantity: fromStock.quantity - item.quantity,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", fromStock.id);
-        }
-      }
-
-      // 도착 창고 재고 증가
-      for (const item of items) {
-        const { data: toStock } = await supabase
-          .from("inventory_locations")
-          .select("id, quantity")
-          .eq("warehouse_id", transferData.to_warehouse_id)
-          .eq("sku", item.sku)
-          .single();
-
-        if (toStock) {
-          await supabase
-            .from("inventory_locations")
-            .update({ 
-              quantity: toStock.quantity + item.quantity,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", toStock.id);
-        } else {
-          await supabase
-            .from("inventory_locations")
-            .insert({
-              warehouse_id: transferData.to_warehouse_id,
-              product_id: item.product_id || null,
-              sku: item.sku,
-              quantity: item.quantity,
-            });
-        }
-      }
-    }
-
-    return { success: true, message: "재고 이동이 완료되었습니다." };
+    return createStockTransfer(supabase, {
+      transferNumber: formData.get("transfer_number") as string,
+      fromWarehouseId: formData.get("from_warehouse_id") as string,
+      toWarehouseId: formData.get("to_warehouse_id") as string,
+      transferDate: formData.get("transfer_date") as string,
+      notes: formData.get("notes") as string || null,
+      totalQuantity,
+      items,
+    });
   }
 
   if (intent === "delete") {
     const id = formData.get("id") as string;
-    
-    // 소프트 삭제 (is_deleted = true, deleted_at 설정)
-    const { error } = await supabase
-      .from("stock_transfers")
-      .update({ 
-        is_deleted: true, 
-        deleted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id);
-    
-    if (error) return { error: error.message };
-    return { success: true, message: "재고 이동이 삭제되었습니다." };
+    return deleteStockTransfer(supabase, id);
   }
 
   return { error: "Unknown action" };
 }
 
-interface TransferItem {
-  product_id: string | null;
-  sku: string;
-  product_name: string;
-  quantity: number;
-  available_quantity: number;
-}
-
-export default function StockTransferList({ loaderData, actionData }: Route.ComponentProps) {
+export default function StockTransferList({ loaderData }: Route.ComponentProps) {
   const { transfers, warehouses, search, statusFilter, newTransferNumber } = loaderData;
   const navigate = useNavigate();
   const fetcher = useFetcher();
 
   const [searchTerm, setSearchTerm] = useState(search);
   const [selectedStatus, setSelectedStatus] = useState(statusFilter);
-  const [deleteTransfer, setDeleteTransfer] = useState<any | null>(null);
+  const [deleteTransfer, setDeleteTransfer] = useState<StockTransfer | null>(null);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<StockTransferFormData>({
+    ...EMPTY_TRANSFER_FORM,
     transfer_number: newTransferNumber,
-    from_warehouse_id: "",
-    to_warehouse_id: "",
-    transfer_date: new Date().toISOString().slice(0, 10),
-    notes: "",
   });
-  const [items, setItems] = useState<TransferItem[]>([]);
-  const [fromWarehouseStock, setFromWarehouseStock] = useState<any[]>([]);
+  const [items, setItems] = useState<StockTransferItem[]>([]);
+  const [fromWarehouseStock, setFromWarehouseStock] = useState<InventoryLocation[]>([]);
   const [loadingStock, setLoadingStock] = useState(false);
 
   const handleSearch = () => {
@@ -312,11 +158,8 @@ export default function StockTransferList({ loaderData, actionData }: Route.Comp
 
   const openCreateDialog = () => {
     setFormData({
+      ...EMPTY_TRANSFER_FORM,
       transfer_number: newTransferNumber,
-      from_warehouse_id: "",
-      to_warehouse_id: "",
-      transfer_date: new Date().toISOString().slice(0, 10),
-      notes: "",
     });
     setItems([]);
     setFromWarehouseStock([]);
@@ -326,7 +169,7 @@ export default function StockTransferList({ loaderData, actionData }: Route.Comp
   const handleFromWarehouseChange = async (warehouseId: string) => {
     setFormData({ ...formData, from_warehouse_id: warehouseId });
     setItems([]);
-    
+
     if (!warehouseId) {
       setFromWarehouseStock([]);
       return;
@@ -345,7 +188,7 @@ export default function StockTransferList({ loaderData, actionData }: Route.Comp
     setLoadingStock(false);
   };
 
-  const addItem = (stockItem: any) => {
+  const addItem = (stockItem: InventoryLocation) => {
     const existingIndex = items.findIndex(item => item.sku === stockItem.sku);
     if (existingIndex >= 0) {
       const newItems = [...items];
@@ -355,13 +198,7 @@ export default function StockTransferList({ loaderData, actionData }: Route.Comp
       );
       setItems(newItems);
     } else {
-      setItems([...items, {
-        product_id: stockItem.product_id,
-        sku: stockItem.sku,
-        product_name: stockItem.product_name || stockItem.sku,
-        quantity: 1,
-        available_quantity: stockItem.quantity,
-      }]);
+      setItems([...items, inventoryToTransferItem(stockItem)]);
     }
   };
 
@@ -397,14 +234,9 @@ export default function StockTransferList({ loaderData, actionData }: Route.Comp
       product_name: item.product_name,
       quantity: item.quantity,
     }))));
-    
+
     fetcher.submit(form, { method: "post" });
     setIsDialogOpen(false);
-  };
-
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "-";
-    return new Date(dateString).toLocaleDateString("ko-KR");
   };
 
   return (
@@ -444,7 +276,7 @@ export default function StockTransferList({ loaderData, actionData }: Route.Comp
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">상태 전체</SelectItem>
-                {transferStatuses.map((status) => (
+                {TRANSFER_STATUSES.map((status) => (
                   <SelectItem key={status.value} value={status.value}>
                     {status.label}
                   </SelectItem>
@@ -457,101 +289,19 @@ export default function StockTransferList({ loaderData, actionData }: Route.Comp
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>이동번호</TableHead>
-                <TableHead>출발 창고</TableHead>
-                <TableHead></TableHead>
-                <TableHead>도착 창고</TableHead>
-                <TableHead>이동일</TableHead>
-                <TableHead className="text-center">품목수</TableHead>
-                <TableHead className="text-right">총 수량</TableHead>
-                <TableHead>상태</TableHead>
-                <TableHead className="w-[80px]">액션</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {transfers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                    이동 내역이 없습니다.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                transfers.map((transfer: any) => {
-                  const statusInfo = getStatusInfo(transfer.status);
-                  return (
-                    <TableRow key={transfer.id}>
-                      <TableCell className="font-mono text-sm font-medium">
-                        {transfer.transfer_number}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <WarehouseIcon className="w-4 h-4 text-muted-foreground" />
-                          {transfer.from_warehouse?.warehouse_name || "-"}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <ArrowRightIcon className="w-4 h-4 text-muted-foreground" />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <WarehouseIcon className="w-4 h-4 text-muted-foreground" />
-                          {transfer.to_warehouse?.warehouse_name || "-"}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {formatDate(transfer.transfer_date)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {transfer.items?.length || 0}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {transfer.total_quantity?.toLocaleString() || 0}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={statusInfo.color as any}>
-                          {statusInfo.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeleteTransfer(transfer)}
-                        >
-                          <TrashIcon className="w-4 h-4 text-destructive" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+          <StockTransferTable
+            transfers={transfers}
+            onDelete={setDeleteTransfer}
+          />
         </CardContent>
       </Card>
 
-      {/* 삭제 확인 다이얼로그 */}
-      <AlertDialog open={!!deleteTransfer} onOpenChange={(open) => !open && setDeleteTransfer(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>재고 이동 삭제</AlertDialogTitle>
-            <AlertDialogDescription>
-              재고 이동 "{deleteTransfer?.transfer_number}"를 삭제하시겠습니까?
-              <br />
-              이 작업은 되돌릴 수 없습니다.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>취소</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              삭제
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <StockTransferDeleteDialog
+        open={!!deleteTransfer}
+        onOpenChange={(open) => !open && setDeleteTransfer(null)}
+        transfer={deleteTransfer}
+        onConfirm={handleDelete}
+      />
 
       {/* 재고 이동 등록 다이얼로그 */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -584,8 +334,8 @@ export default function StockTransferList({ loaderData, actionData }: Route.Comp
             <div className="grid grid-cols-5 gap-4 items-end">
               <div className="col-span-2 space-y-2">
                 <Label>출발 창고 *</Label>
-                <Select 
-                  value={formData.from_warehouse_id} 
+                <Select
+                  value={formData.from_warehouse_id}
                   onValueChange={handleFromWarehouseChange}
                 >
                   <SelectTrigger>
@@ -605,8 +355,8 @@ export default function StockTransferList({ loaderData, actionData }: Route.Comp
               </div>
               <div className="col-span-2 space-y-2">
                 <Label>도착 창고 *</Label>
-                <Select 
-                  value={formData.to_warehouse_id} 
+                <Select
+                  value={formData.to_warehouse_id}
                   onValueChange={(v) => setFormData({ ...formData, to_warehouse_id: v })}
                 >
                   <SelectTrigger>
@@ -649,9 +399,9 @@ export default function StockTransferList({ loaderData, actionData }: Route.Comp
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {fromWarehouseStock.map((stockItem: any) => (
-                          <TableRow 
-                            key={stockItem.id} 
+                        {fromWarehouseStock.map((stockItem) => (
+                          <TableRow
+                            key={stockItem.id}
                             className="cursor-pointer hover:bg-accent"
                             onClick={() => addItem(stockItem)}
                           >
@@ -738,8 +488,8 @@ export default function StockTransferList({ loaderData, actionData }: Route.Comp
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               취소
             </Button>
-            <Button 
-              onClick={handleSubmit} 
+            <Button
+              onClick={handleSubmit}
               disabled={!formData.from_warehouse_id || !formData.to_warehouse_id || items.length === 0}
             >
               <SaveIcon className="w-4 h-4 mr-2" />
@@ -751,4 +501,3 @@ export default function StockTransferList({ loaderData, actionData }: Route.Comp
     </div>
   );
 }
-

@@ -1,68 +1,34 @@
 /**
- * Payment Failure Page Component
+ * 결제 실패 페이지
  *
- * This file implements the payment failure page that displays error information
- * when a payment process fails. It provides users with clear feedback about what
- * went wrong during their payment attempt.
- *
- * Key features:
- * - Displays payment error codes and messages from Toss Payments
- * - Extracts error details from URL parameters
- * - Provides clear visual feedback with error styling
- * - Sets appropriate page metadata for error state
+ * 결제 과정에서 오류 발생 시 표시되는 페이지
+ * URL 파라미터에서 오류 코드와 메시지를 추출하여 표시
  */
 
 import { type MetaFunction, useSearchParams } from "react-router";
 
+import { PaymentErrorDisplay } from "../components";
+
 /**
- * Meta function for setting page metadata
- *
- * This function sets the page title for the payment failure page,
- * indicating to the user that there was an error with their payment.
- *
- * @returns Array of metadata objects for the page
+ * 페이지 메타데이터
  */
 export const meta: MetaFunction = () => {
-  return [{ title: `Payment Error | ${import.meta.env.VITE_APP_NAME}` }];
+  return [{ title: `결제 오류 | ${import.meta.env.VITE_APP_NAME}` }];
 };
 
 /**
- * Failure component for displaying payment error information
- *
- * This component displays error information when a payment process fails.
- * It extracts error details from URL parameters and presents them to the user
- * in a clear, visually distinct format to indicate the error state.
- *
- * The component handles two key pieces of information:
- * 1. Error code - A specific code identifying the type of error
- * 2. Error message - A human-readable description of what went wrong
- *
- * These details come from either:
- * - The Toss Payments API (for payment processing errors)
- * - Internal validation (for validation errors in the success page)
- *
- * @returns JSX element representing the payment failure page
+ * 결제 실패 페이지 컴포넌트
  */
 export default function Failure() {
-  // Extract error details from URL parameters
   const [searchParams] = useSearchParams();
   const errorCode = searchParams.get("code");
-  const errorDescription = searchParams.get("message");
-  
+  const errorMessage = searchParams.get("message");
+
   return (
-    <div className="flex flex-col items-center justify-center gap-2">
-      {/* Error heading with distinct error styling */}
-      <h1 className="text-center text-3xl font-semibold tracking-tight text-red-500 md:text-5xl dark:text-red-400">
-        Payment VerificationError
-      </h1>
-      
-      {/* Error code display */}
-      <p className="text-muted-foreground text-center">
-        Error code: {errorCode}
-      </p>
-      
-      {/* Error description display */}
-      <p className="text-muted-foreground text-center">{errorDescription}</p>
-    </div>
+    <PaymentErrorDisplay
+      code={errorCode}
+      message={errorMessage}
+      title="결제 오류"
+    />
   );
 }

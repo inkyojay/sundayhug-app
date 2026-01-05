@@ -56,6 +56,19 @@ import makeServerClient from "~/core/lib/supa-client.server";
 import { createAdminClient } from "~/core/lib/supa-admin.server";
 import { sendWarrantyApprovalAlimtalk, sendWarrantyRejectionAlimtalk } from "~/features/auth/lib/solapi.server";
 
+import {
+  getWarrantyDetail,
+  getWarrantyOrderInfo,
+  getWarrantyLogs,
+  getWarrantyAsRequests,
+  approveWarranty,
+  rejectWarranty,
+  searchOrders,
+  linkOrder,
+  unlinkOrder,
+  updateKakaoSentStatus,
+} from "../lib/warranty.server";
+
 export const meta: Route.MetaFunction = ({ data }) => {
   return [{ title: `${data?.warranty?.warranty_number || "보증서"} | Sundayhug Admin` }];
 };
@@ -66,85 +79,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const { id } = params;
 
   // 보증서 상세 정보
-  const { data: warranty, error } = await supabase
-    .from("warranties")
-    .select(`
-      *,
-      customers (
-        id,
-        name,
-        phone,
-        email,
-        kakao_id,
-        kakao_nickname
-      ),
-      warranty_products (
-        id,
-        product_code,
-        product_name,
-        category,
-        warranty_months,
-        product_image_url
-      )
-    `)
-    .eq("id", id)
-    .single();
-
-  if (error || !warranty) {
-    throw new Response("보증서를 찾을 수 없습니다.", { status: 404 });
-  }
+  const warranty = await getWarrantyDetail(supabase, id);
 
   // 주문 정보 조회 (order_id가 있는 경우)
-  let orderInfo = null;
-  let orderItems: any[] = [];
-  if (warranty.order_id) {
-    const { data: order } = await supabase
-      .from("orders")
-      .select(`
-        id,
-        uniq,
-        shop_ord_no,
-        shop_name,
-        shop_sale_name,
-        shop_opt_name,
-        ord_time,
-        ord_status,
-        to_name,
-        to_tel,
-        to_htel,
-        to_addr1,
-        to_addr2,
-        to_zipcd,
-        invoice_no,
-        pay_amt,
-        ship_cost,
-        ship_msg
-      `)
-      .eq("id", warranty.order_id)
-      .single();
-    
-    orderInfo = order;
-
-    // 주문 상품 목록
-    if (order) {
-      const { data: items } = await supabase
-        .from("order_items")
-        .select("*")
-        .eq("order_id", order.id);
-      orderItems = items || [];
-    }
-  }
+  const { orderInfo, orderItems } = await getWarrantyOrderInfo(supabase, warranty.order_id);
 
   // 자동 연동 후보 주문 검색 (order_id가 없고 pending 상태인 경우)
   let suggestedOrders: any[] = [];
   if (!warranty.order_id && warranty.status === "pending") {
     // 구매자명 (buyer_name)
     const buyerName = warranty.buyer_name?.trim() || "";
-    
+
     // 전화번호로 검색 (하이픈 제거하고 뒤 8자리로 매칭)
     const phone = warranty.customer_phone?.replace(/-/g, "") || "";
     const phoneLast8 = phone.slice(-8);
-    
+
     // 송장번호로 검색
     const trackingNumber = warranty.tracking_number;
 
@@ -173,7 +122,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         .or(`to_tel.ilike.%${phoneLast8}%,to_htel.ilike.%${phoneLast8}%`)
         .order("ord_time", { ascending: false })
         .limit(20);
-      
+
       if (byNameAndPhone && byNameAndPhone.length > 0) {
         suggestedOrders = byNameAndPhone;
       }
@@ -186,7 +135,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         .select(orderSelectQuery)
         .eq("invoice_no", trackingNumber)
         .limit(10);
-      
+
       if (byInvoice && byInvoice.length > 0) {
         suggestedOrders = byInvoice;
       }
@@ -200,7 +149,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         .ilike("to_name", `%${buyerName}%`)
         .order("ord_time", { ascending: false })
         .limit(20);
-      
+
       if (byName) {
         suggestedOrders = byName;
       }
@@ -214,7 +163,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         .or(`to_tel.ilike.%${phoneLast8}%,to_htel.ilike.%${phoneLast8}%`)
         .order("ord_time", { ascending: false })
         .limit(20);
-      
+
       if (byPhone) {
         suggestedOrders = byPhone;
       }
@@ -222,15 +171,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
     // 이미 다른 보증서에 연결된 주문 제외
     if (suggestedOrders.length > 0) {
-      const orderIds = suggestedOrders.map(o => o.id);
+      const orderIds = suggestedOrders.map((o) => o.id);
       const { data: linkedWarranties } = await adminClient
         .from("warranties")
         .select("order_id")
         .in("order_id", orderIds)
         .neq("id", id); // 현재 보증서 제외
 
-      const linkedOrderIds = new Set(linkedWarranties?.map(w => w.order_id) || []);
-      suggestedOrders = suggestedOrders.map(order => ({
+      const linkedOrderIds = new Set(linkedWarranties?.map((w) => w.order_id) || []);
+      suggestedOrders = suggestedOrders.map((order) => ({
         ...order,
         already_linked: linkedOrderIds.has(order.id),
       }));
@@ -238,26 +187,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   // 보증서 이력
-  const { data: logs } = await supabase
-    .from("warranty_logs")
-    .select("*")
-    .eq("warranty_id", id)
-    .order("created_at", { ascending: false });
+  const logs = await getWarrantyLogs(supabase, id);
 
   // A/S 신청 이력
-  const { data: asRequests } = await supabase
-    .from("as_requests")
-    .select("*")
-    .eq("warranty_id", id)
-    .order("created_at", { ascending: false });
+  const asRequests = await getWarrantyAsRequests(supabase, id);
 
   return {
     warranty,
     orderInfo,
     orderItems,
     suggestedOrders,
-    logs: logs || [],
-    asRequests: asRequests || [],
+    logs,
+    asRequests,
   };
 }
 
@@ -273,183 +214,50 @@ export async function action({ request, params }: Route.ActionArgs) {
   // 주문 검색
   if (actionType === "searchOrders") {
     const searchQuery = formData.get("searchQuery") as string;
-    
-    if (!searchQuery || searchQuery.length < 3) {
-      return { success: false, error: "검색어를 3자 이상 입력해주세요." };
-    }
-
-    // 검색어로 주문 검색 (송장번호, 전화번호, 주문번호, 수령인명)
-    const { data: searchResults, error } = await adminClient
-      .from("orders")
-      .select(`
-        id,
-        uniq,
-        shop_ord_no,
-        shop_name,
-        shop_sale_name,
-        shop_opt_name,
-        ord_time,
-        ord_status,
-        to_name,
-        to_tel,
-        to_htel,
-        invoice_no,
-        pay_amt
-      `)
-      .or(`invoice_no.ilike.%${searchQuery}%,to_tel.ilike.%${searchQuery}%,to_htel.ilike.%${searchQuery}%,shop_ord_no.ilike.%${searchQuery}%,to_name.ilike.%${searchQuery}%`)
-      .order("ord_time", { ascending: false })
-      .limit(20);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    // 이미 다른 보증서에 연결된 주문 체크
-    if (searchResults && searchResults.length > 0) {
-      const orderIds = searchResults.map(o => o.id);
-      const { data: linkedWarranties } = await adminClient
-        .from("warranties")
-        .select("order_id")
-        .in("order_id", orderIds)
-        .neq("id", id);
-
-      const linkedOrderIds = new Set(linkedWarranties?.map(w => w.order_id) || []);
-      const resultsWithStatus = searchResults.map(order => ({
-        ...order,
-        already_linked: linkedOrderIds.has(order.id),
-      }));
-
-      return { success: true, searchResults: resultsWithStatus };
-    }
-
-    return { success: true, searchResults: [] };
+    return searchOrders(adminClient, searchQuery, id);
   }
 
   // 주문 연결
   if (actionType === "linkOrder") {
     const orderId = formData.get("orderId") as string;
-
-    // 해당 주문이 이미 다른 보증서에 연결되어 있는지 확인
-    const { data: existingLink } = await adminClient
-      .from("warranties")
-      .select("id, warranty_number")
-      .eq("order_id", orderId)
-      .neq("id", id)
-      .single();
-
-    if (existingLink) {
-      return { 
-        success: false, 
-        error: `이 주문은 이미 다른 보증서(${existingLink.warranty_number})에 연결되어 있습니다.` 
-      };
-    }
-
-    // 주문 정보 가져와서 보증서에 연결
-    const { data: order } = await adminClient
-      .from("orders")
-      .select("id, shop_sale_name, shop_opt_name, invoice_no, ord_time, shop_name")
-      .eq("id", orderId)
-      .single();
-
-    if (!order) {
-      return { success: false, error: "주문을 찾을 수 없습니다." };
-    }
-
-    const { error } = await adminClient
-      .from("warranties")
-      .update({
-        order_id: orderId,
-        tracking_number: order.invoice_no,
-        product_name: order.shop_sale_name,
-        product_option: order.shop_opt_name,
-        sales_channel: order.shop_name,
-        order_date: order.ord_time ? new Date(order.ord_time).toISOString().split("T")[0] : null,
-      })
-      .eq("id", id);
-
-    if (error) {
-      return { success: false, error: `연결 실패: ${error.message}` };
-    }
-
-    return { success: true, message: "주문이 연결되었습니다." };
+    return linkOrder(adminClient, id, orderId);
   }
 
   // 주문 연결 해제
   if (actionType === "unlinkOrder") {
-    const { error } = await adminClient
-      .from("warranties")
-      .update({
-        order_id: null,
-      })
-      .eq("id", id);
-
-    if (error) {
-      return { success: false, error: `연결 해제 실패: ${error.message}` };
-    }
-
-    return { success: true, message: "주문 연결이 해제되었습니다." };
+    return unlinkOrder(adminClient, id);
   }
 
   // 승인
   if (actionType === "approve") {
-    const today = new Date();
-    const warrantyEnd = new Date(today);
-    warrantyEnd.setFullYear(warrantyEnd.getFullYear() + 1);
+    const result = await approveWarranty(adminClient, id);
 
-    const warrantyStartStr = today.toISOString().split("T")[0];
-    const warrantyEndStr = warrantyEnd.toISOString().split("T")[0];
-
-    const { data, error } = await adminClient
-      .from("warranties")
-      .update({
-        status: "approved",
-        approved_at: new Date().toISOString(),
-        approved_by: "admin",
-        warranty_start: warrantyStartStr,
-        warranty_end: warrantyEndStr,
-      })
-      .eq("id", id)
-      .select("*, customers(name)")
-      .single();
-
-    console.log("Detail approve result:", { data, error });
-
-    if (error) {
-      console.error("승인 오류:", error);
-      return { success: false, error: `승인 실패: ${error.message}` };
+    if (!result.success) {
+      return result;
     }
 
     // 카카오 알림톡 발송
-    if (data?.customer_phone) {
+    if (result.data?.customer_phone) {
       try {
         const alimtalkResult = await sendWarrantyApprovalAlimtalk(
-          data.customer_phone,
+          result.data.customer_phone,
           {
-            customerName: data.buyer_name || data.customers?.name || "고객",
-            productName: data.product_name || "제품",
-            warrantyNumber: data.warranty_number,
-            startDate: warrantyStartStr,
-            endDate: warrantyEndStr,
+            customerName: result.data.buyer_name || result.data.customers?.name || "고객",
+            productName: result.data.product_name || "제품",
+            warrantyNumber: result.data.warranty_number,
+            startDate: result.warrantyStartStr!,
+            endDate: result.warrantyEndStr!,
           }
         );
 
         if (alimtalkResult.success) {
-          // 알림톡 발송 성공 기록
-          await adminClient
-            .from("warranties")
-            .update({
-              kakao_sent: true,
-              kakao_sent_at: new Date().toISOString(),
-              kakao_message_id: alimtalkResult.messageId,
-            })
-            .eq("id", id);
-          
-          console.log("✅ 승인 알림톡 발송 완료:", alimtalkResult.messageId);
+          await updateKakaoSentStatus(adminClient, id, alimtalkResult.messageId!);
+          console.log("승인 알림톡 발송 완료:", alimtalkResult.messageId);
         } else {
-          console.error("⚠️ 알림톡 발송 실패 (승인은 완료됨):", alimtalkResult.error);
+          console.error("알림톡 발송 실패 (승인은 완료됨):", alimtalkResult.error);
         }
       } catch (alimtalkError) {
-        console.error("⚠️ 알림톡 발송 중 오류 (승인은 완료됨):", alimtalkError);
+        console.error("알림톡 발송 중 오류 (승인은 완료됨):", alimtalkError);
       }
     }
 
@@ -460,43 +268,32 @@ export async function action({ request, params }: Route.ActionArgs) {
   if (actionType === "reject") {
     const reason = formData.get("reason") as string;
     const rejectionReason = reason || "관리자에 의해 거절됨";
-    
-    const { data, error } = await adminClient
-      .from("warranties")
-      .update({
-        status: "rejected",
-        rejection_reason: rejectionReason,
-      })
-      .eq("id", id)
-      .select("*, customers(name)")
-      .single();
 
-    console.log("Detail reject result:", { data, error });
+    const result = await rejectWarranty(adminClient, id, rejectionReason);
 
-    if (error) {
-      console.error("거절 오류:", error);
-      return { success: false, error: `거절 실패: ${error.message}` };
+    if (!result.success) {
+      return result;
     }
 
     // 카카오 알림톡 발송 (거절)
-    if (data?.customer_phone) {
+    if (result.data?.customer_phone) {
       try {
         const alimtalkResult = await sendWarrantyRejectionAlimtalk(
-          data.customer_phone,
+          result.data.customer_phone,
           {
-            customerName: data.buyer_name || data.customers?.name || "고객",
+            customerName: result.data.buyer_name || result.data.customers?.name || "고객",
             rejectionReason: rejectionReason,
             registerUrl: "https://app-sundayhug-members.vercel.app/customer/warranty",
           }
         );
 
         if (alimtalkResult.success) {
-          console.log("✅ 거절 알림톡 발송 완료:", alimtalkResult.messageId);
+          console.log("거절 알림톡 발송 완료:", alimtalkResult.messageId);
         } else {
-          console.error("⚠️ 알림톡 발송 실패 (거절은 완료됨):", alimtalkResult.error);
+          console.error("알림톡 발송 실패 (거절은 완료됨):", alimtalkResult.error);
         }
       } catch (alimtalkError) {
-        console.error("⚠️ 알림톡 발송 중 오류 (거절은 완료됨):", alimtalkError);
+        console.error("알림톡 발송 중 오류 (거절은 완료됨):", alimtalkError);
       }
     }
 
@@ -537,14 +334,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     }
 
     // 발송 기록 업데이트
-    await adminClient
-      .from("warranties")
-      .update({
-        kakao_sent: true,
-        kakao_sent_at: new Date().toISOString(),
-        kakao_message_id: alimtalkResult.messageId,
-      })
-      .eq("id", id);
+    await updateKakaoSentStatus(adminClient, id, alimtalkResult.messageId!);
 
     return { success: true, message: "카카오톡이 발송되었습니다." };
   }

@@ -3,32 +3,23 @@
  */
 import type { Route } from "./+types/stock-receipt-list";
 
-import { 
-  PackageIcon, 
-  PlusIcon, 
-  EyeIcon, 
+import {
+  PackageIcon,
+  PlusIcon,
   SearchIcon,
-  WarehouseIcon,
-  CalendarIcon,
-  CheckCircleIcon,
-  ClockIcon,
-  XCircleIcon,
   ClipboardListIcon,
   SaveIcon,
   TrashIcon,
-  ArrowLeftIcon,
 } from "lucide-react";
 import { useState } from "react";
-import { Link, useFetcher, useNavigate } from "react-router";
+import { useFetcher, useNavigate } from "react-router";
 
 import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
 } from "~/core/components/ui/card";
 import { Input } from "~/core/components/ui/input";
 import {
@@ -47,14 +38,6 @@ import {
   SelectValue,
 } from "~/core/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "~/core/components/ui/dialog";
-import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -62,119 +45,62 @@ import {
   SheetTitle,
   SheetFooter,
 } from "~/core/components/ui/sheet";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "~/core/components/ui/alert-dialog";
 import { Label } from "~/core/components/ui/label";
 import { Textarea } from "~/core/components/ui/textarea";
 import { Checkbox } from "~/core/components/ui/checkbox";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
+import {
+  getStockReceipts,
+  getActiveWarehouses,
+  getReceivablePurchaseOrders,
+  getActiveProducts,
+  generateNewReceiptNumber,
+  createStockReceipt,
+  deleteStockReceipt,
+  parseStockReceiptQueryParams,
+} from "../lib/stock-receipts.server";
+import type {
+  StockReceipt,
+  StockReceiptItem,
+  StockReceiptFormData,
+  PurchaseOrder,
+  Product,
+} from "../lib/stock-receipts.shared";
+import {
+  RECEIPT_STATUSES,
+  EMPTY_RECEIPT_FORM,
+  purchaseOrderItemsToReceiptItems,
+  productToReceiptItem,
+} from "../lib/stock-receipts.shared";
+import { StockReceiptTable, StockReceiptDeleteDialog } from "../components";
+
 export const meta: Route.MetaFunction = () => {
   return [{ title: `입고 관리 | Sundayhug Admin` }];
 };
 
-const receiptStatuses = [
-  { value: "pending", label: "대기중", color: "secondary" },
-  { value: "completed", label: "완료", color: "default" },
-  { value: "cancelled", label: "취소", color: "destructive" },
-];
-
-const getStatusInfo = (status: string) => {
-  return receiptStatuses.find(s => s.value === status) || receiptStatuses[0];
-};
-
 export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
-  
   const url = new URL(request.url);
-  const search = url.searchParams.get("search") || "";
-  const statusFilter = url.searchParams.get("status") || "";
-  const warehouseFilter = url.searchParams.get("warehouse") || "";
+  const params = parseStockReceiptQueryParams(url);
 
-  // 창고 목록 조회
-  const { data: warehouses } = await supabase
-    .from("warehouses")
-    .select("id, warehouse_name, warehouse_code")
-    .eq("is_active", true)
-    .order("warehouse_name");
+  const [receipts, warehouses, purchaseOrders, products, newReceiptNumber] = await Promise.all([
+    getStockReceipts(supabase, params),
+    getActiveWarehouses(supabase),
+    getReceivablePurchaseOrders(supabase),
+    getActiveProducts(supabase),
+    generateNewReceiptNumber(supabase),
+  ]);
 
-  // 발주서 목록 조회 (입고 연결용)
-  const { data: purchaseOrders } = await supabase
-    .from("purchase_orders")
-    .select(`
-      id, order_number, factory_id, status, order_date, total_quantity,
-      factory:factories(factory_name),
-      items:purchase_order_items(id, sku, product_name, quantity, received_quantity)
-    `)
-    .in("status", ["sent", "in_production", "shipping"])
-    .order("order_date", { ascending: false });
-
-  // 입고 목록 조회 (삭제되지 않은 것만)
-  let query = supabase
-    .from("stock_receipts")
-    .select(`
-      *,
-      warehouse:warehouses(id, warehouse_name, warehouse_code),
-      purchase_order:purchase_orders(id, order_number),
-      items:stock_receipt_items(id, sku, product_name, received_quantity)
-    `)
-    .or("is_deleted.is.null,is_deleted.eq.false")
-    .order("created_at", { ascending: false });
-
-  if (search) {
-    query = query.ilike("receipt_number", `%${search}%`);
-  }
-
-  if (statusFilter && statusFilter !== "__all__") {
-    query = query.eq("status", statusFilter);
-  }
-
-  if (warehouseFilter && warehouseFilter !== "__all__") {
-    query = query.eq("warehouse_id", warehouseFilter);
-  }
-
-  const { data: receipts, error } = await query;
-
-  if (error) {
-    console.error("Failed to load stock receipts:", error);
-  }
-
-  // 제품 목록 (직접 입고용)
-  const { data: products } = await supabase
-    .from("products")
-    .select(`
-      id, sku, product_name, color_kr, sku_6_size, parent_sku,
-      parent_product:parent_products!fk_parent_product(id, product_name)
-    `)
-    .eq("is_active", true)
-    .order("sku");
-
-  // 새 입고번호 생성
-  const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const { count } = await supabase
-    .from("stock_receipts")
-    .select("*", { count: "exact", head: true })
-    .ilike("receipt_number", `SR-${today}%`);
-  
-  const newReceiptNumber = `SR-${today}-${String((count || 0) + 1).padStart(4, "0")}`;
-
-  return { 
-    receipts: receipts || [], 
-    warehouses: warehouses || [],
-    purchaseOrders: purchaseOrders || [],
-    products: products || [],
-    search, 
-    statusFilter, 
-    warehouseFilter,
+  return {
+    receipts,
+    warehouses,
+    purchaseOrders,
+    products,
+    search: params.search,
+    statusFilter: params.statusFilter,
+    warehouseFilter: params.warehouseFilter,
     newReceiptNumber,
   };
 }
@@ -185,147 +111,54 @@ export async function action({ request }: Route.ActionArgs) {
   const intent = formData.get("intent");
 
   if (intent === "create") {
-    const receiptData = {
-      receipt_number: formData.get("receipt_number") as string,
-      purchase_order_id: formData.get("purchase_order_id") as string || null,
-      warehouse_id: formData.get("warehouse_id") as string,
-      receipt_date: formData.get("receipt_date") as string,
-      status: "completed",
-      notes: formData.get("notes") as string || null,
-      total_quantity: parseInt(formData.get("total_quantity") as string) || 0,
-    };
-
     const items = JSON.parse(formData.get("items") as string || "[]");
+    const totalQuantity = parseInt(formData.get("total_quantity") as string) || 0;
 
-    // 입고 헤더 생성
-    const { data: newReceipt, error: receiptError } = await supabase
-      .from("stock_receipts")
-      .insert(receiptData)
-      .select()
-      .single();
-
-    if (receiptError) return { error: receiptError.message };
-
-    // 입고 품목 생성
-    if (items.length > 0 && newReceipt) {
-      const itemsToInsert = items.map((item: any) => ({
-        stock_receipt_id: newReceipt.id,
-        purchase_order_item_id: item.purchase_order_item_id || null,
-        product_id: item.product_id || null,
-        sku: item.sku,
-        product_name: item.product_name,
-        expected_quantity: item.expected_quantity || 0,
-        received_quantity: item.received_quantity,
-        damaged_quantity: item.damaged_quantity || 0,
-      }));
-
-      await supabase.from("stock_receipt_items").insert(itemsToInsert);
-
-      // 창고 재고 업데이트
-      for (const item of items) {
-        const { data: existing } = await supabase
-          .from("inventory_locations")
-          .select("id, quantity")
-          .eq("warehouse_id", receiptData.warehouse_id)
-          .eq("sku", item.sku)
-          .single();
-
-        if (existing) {
-          await supabase
-            .from("inventory_locations")
-            .update({ 
-              quantity: existing.quantity + item.received_quantity,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", existing.id);
-        } else {
-          await supabase
-            .from("inventory_locations")
-            .insert({
-              warehouse_id: receiptData.warehouse_id,
-              product_id: item.product_id || null,
-              sku: item.sku,
-              quantity: item.received_quantity,
-            });
-        }
-      }
-
-      // 발주서 품목 입고수량 업데이트
-      if (receiptData.purchase_order_id) {
-        for (const item of items) {
-          if (item.purchase_order_item_id) {
-            const { data: poItem } = await supabase
-              .from("purchase_order_items")
-              .select("received_quantity")
-              .eq("id", item.purchase_order_item_id)
-              .single();
-            
-            if (poItem) {
-              await supabase
-                .from("purchase_order_items")
-                .update({ 
-                  received_quantity: (poItem.received_quantity || 0) + item.received_quantity 
-                })
-                .eq("id", item.purchase_order_item_id);
-            }
-          }
-        }
-      }
-    }
-
-    return { success: true, message: "입고가 완료되었습니다." };
+    return createStockReceipt(supabase, {
+      receiptNumber: formData.get("receipt_number") as string,
+      purchaseOrderId: formData.get("purchase_order_id") as string || null,
+      warehouseId: formData.get("warehouse_id") as string,
+      receiptDate: formData.get("receipt_date") as string,
+      notes: formData.get("notes") as string || null,
+      totalQuantity,
+      items,
+    });
   }
 
   if (intent === "delete") {
     const id = formData.get("id") as string;
-    
-    // 소프트 삭제 (is_deleted = true, deleted_at 설정)
-    const { error } = await supabase
-      .from("stock_receipts")
-      .update({ 
-        is_deleted: true, 
-        deleted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id);
-    
-    if (error) return { error: error.message };
-    return { success: true, message: "입고가 삭제되었습니다." };
+    return deleteStockReceipt(supabase, id);
   }
 
   return { error: "Unknown action" };
 }
 
-interface ReceiptItem {
-  purchase_order_item_id?: string;
-  product_id: string | null;
-  sku: string;
-  product_name: string;
-  expected_quantity: number;
-  received_quantity: number;
-  damaged_quantity: number;
-}
-
-export default function StockReceiptList({ loaderData, actionData }: Route.ComponentProps) {
-  const { receipts, warehouses, purchaseOrders, products, search, statusFilter, warehouseFilter, newReceiptNumber } = loaderData;
+export default function StockReceiptList({ loaderData }: Route.ComponentProps) {
+  const {
+    receipts,
+    warehouses,
+    purchaseOrders,
+    products,
+    search,
+    statusFilter,
+    warehouseFilter,
+    newReceiptNumber,
+  } = loaderData;
   const navigate = useNavigate();
   const fetcher = useFetcher();
 
   const [searchTerm, setSearchTerm] = useState(search);
   const [selectedStatus, setSelectedStatus] = useState(statusFilter);
   const [selectedWarehouse, setSelectedWarehouse] = useState(warehouseFilter);
-  const [deleteReceipt, setDeleteReceipt] = useState<any | null>(null);
+  const [deleteReceipt, setDeleteReceipt] = useState<StockReceipt | null>(null);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [receiptMode, setReceiptMode] = useState<"po" | "direct">("po");
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<StockReceiptFormData>({
+    ...EMPTY_RECEIPT_FORM,
     receipt_number: newReceiptNumber,
-    purchase_order_id: "",
-    warehouse_id: "",
-    receipt_date: new Date().toISOString().slice(0, 10),
-    notes: "",
   });
-  const [items, setItems] = useState<ReceiptItem[]>([]);
+  const [items, setItems] = useState<StockReceiptItem[]>([]);
 
   // 제품 추가용 다이얼로그
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
@@ -354,11 +187,8 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
 
   const openCreateDialog = () => {
     setFormData({
+      ...EMPTY_RECEIPT_FORM,
       receipt_number: newReceiptNumber,
-      purchase_order_id: "",
-      warehouse_id: "",
-      receipt_date: new Date().toISOString().slice(0, 10),
-      notes: "",
     });
     setItems([]);
     setReceiptMode("po");
@@ -366,35 +196,20 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
   };
 
   const handlePOSelect = (poId: string) => {
-    const po = purchaseOrders.find((p: any) => p.id === poId);
+    const po = purchaseOrders.find((p: PurchaseOrder) => p.id === poId);
     if (po) {
       setFormData({ ...formData, purchase_order_id: poId });
-      setItems(po.items.map((item: any) => ({
-        purchase_order_item_id: item.id,
-        product_id: null,
-        sku: item.sku,
-        product_name: item.product_name,
-        expected_quantity: item.quantity - (item.received_quantity || 0),
-        received_quantity: item.quantity - (item.received_quantity || 0),
-        damaged_quantity: 0,
-      })));
+      setItems(purchaseOrderItemsToReceiptItems(po.items));
     }
   };
 
-  const addDirectProduct = (product: any) => {
-    setItems([...items, {
-      product_id: product.id,
-      sku: product.sku,
-      product_name: `${product.product_name || ""} ${product.color_kr || ""} ${product.sku_6_size || ""}`.trim(),
-      expected_quantity: 0,
-      received_quantity: 1,
-      damaged_quantity: 0,
-    }]);
+  const addDirectProduct = (product: Product) => {
+    setItems([...items, productToReceiptItem(product)]);
     setIsProductDialogOpen(false);
     setProductSearch("");
   };
 
-  const updateItem = (index: number, field: keyof ReceiptItem, value: any) => {
+  const updateItem = (index: number, field: keyof StockReceiptItem, value: any) => {
     const newItems = [...items];
     (newItems[index] as any)[field] = value;
     setItems(newItems);
@@ -416,19 +231,14 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
     form.append("notes", formData.notes);
     form.append("total_quantity", String(totalQuantity));
     form.append("items", JSON.stringify(items));
-    
+
     fetcher.submit(form, { method: "post" });
     setIsDialogOpen(false);
   };
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "-";
-    return new Date(dateString).toLocaleDateString("ko-KR");
-  };
-
   // 필터링된 제품 목록
-  const filteredProducts = products.filter((p: any) => {
-    const matchesSearch = 
+  const filteredProducts = products.filter((p: Product) => {
+    const matchesSearch =
       p.sku?.toLowerCase().includes(productSearch.toLowerCase()) ||
       p.product_name?.toLowerCase().includes(productSearch.toLowerCase());
     const matchesColor = !colorFilter || colorFilter === "__all__" || p.color_kr === colorFilter;
@@ -438,9 +248,9 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
   });
 
   // 사용 가능한 필터 옵션
-  const availableColors = Array.from(new Set(products.map((p: any) => p.color_kr).filter(Boolean))).sort();
-  const availableSizes = Array.from(new Set(products.map((p: any) => p.sku_6_size).filter(Boolean))).sort();
-  const availableCategories = Array.from(new Set(products.map((p: any) => p.parent_product?.product_name).filter(Boolean))).sort();
+  const availableColors = Array.from(new Set(products.map((p: Product) => p.color_kr).filter(Boolean))).sort() as string[];
+  const availableSizes = Array.from(new Set(products.map((p: Product) => p.sku_6_size).filter(Boolean))).sort() as string[];
+  const availableCategories = Array.from(new Set(products.map((p: Product) => p.parent_product?.product_name).filter(Boolean))).sort() as string[];
 
   const toggleProductSelection = (productId: string) => {
     const newSelected = new Set(selectedProducts);
@@ -453,15 +263,8 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
   };
 
   const addSelectedProducts = () => {
-    const productsToAdd = filteredProducts.filter((p: any) => selectedProducts.has(p.id));
-    const newItems = productsToAdd.map((product: any) => ({
-      product_id: product.id,
-      sku: product.sku,
-      product_name: `${product.product_name || ""} ${product.color_kr || ""} ${product.sku_6_size || ""}`.trim(),
-      expected_quantity: 0,
-      received_quantity: 1,
-      damaged_quantity: 0,
-    }));
+    const productsToAdd = filteredProducts.filter((p: Product) => selectedProducts.has(p.id));
+    const newItems = productsToAdd.map((product: Product) => productToReceiptItem(product));
     setItems([...items, ...newItems]);
     setSelectedProducts(new Set());
     setIsProductDialogOpen(false);
@@ -508,7 +311,7 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">상태 전체</SelectItem>
-                {receiptStatuses.map((status) => (
+                {RECEIPT_STATUSES.map((status) => (
                   <SelectItem key={status.value} value={status.value}>
                     {status.label}
                   </SelectItem>
@@ -534,103 +337,19 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>입고번호</TableHead>
-                <TableHead>발주번호</TableHead>
-                <TableHead>창고</TableHead>
-                <TableHead>입고일</TableHead>
-                <TableHead className="text-center">품목수</TableHead>
-                <TableHead className="text-right">총 수량</TableHead>
-                <TableHead>상태</TableHead>
-                <TableHead className="w-[80px]">액션</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {receipts.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                    입고 내역이 없습니다.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                receipts.map((receipt: any) => {
-                  const statusInfo = getStatusInfo(receipt.status);
-                  return (
-                    <TableRow key={receipt.id}>
-                      <TableCell className="font-mono text-sm font-medium">
-                        {receipt.receipt_number}
-                      </TableCell>
-                      <TableCell>
-                        {receipt.purchase_order ? (
-                          <Link 
-                            to={`/dashboard/purchase-orders/${receipt.purchase_order.id}`}
-                            className="text-primary hover:underline"
-                          >
-                            {receipt.purchase_order.order_number}
-                          </Link>
-                        ) : (
-                          <span className="text-muted-foreground">직접입고</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <WarehouseIcon className="w-4 h-4 text-muted-foreground" />
-                          {receipt.warehouse?.warehouse_name || "-"}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {formatDate(receipt.receipt_date)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {receipt.items?.length || 0}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {receipt.total_quantity?.toLocaleString() || 0}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={statusInfo.color as any}>
-                          {statusInfo.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeleteReceipt(receipt)}
-                        >
-                          <TrashIcon className="w-4 h-4 text-destructive" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+          <StockReceiptTable
+            receipts={receipts}
+            onDelete={setDeleteReceipt}
+          />
         </CardContent>
       </Card>
 
-      {/* 삭제 확인 다이얼로그 */}
-      <AlertDialog open={!!deleteReceipt} onOpenChange={(open) => !open && setDeleteReceipt(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>입고 삭제</AlertDialogTitle>
-            <AlertDialogDescription>
-              입고 "{deleteReceipt?.receipt_number}"를 삭제하시겠습니까?
-              <br />
-              이 작업은 되돌릴 수 없습니다.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>취소</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              삭제
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <StockReceiptDeleteDialog
+        open={!!deleteReceipt}
+        onOpenChange={(open) => !open && setDeleteReceipt(null)}
+        receipt={deleteReceipt}
+        onConfirm={handleDelete}
+      />
 
       {/* 입고 등록 Sheet (오른쪽 슬라이드) */}
       <Sheet open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -645,14 +364,14 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
           <div className="space-y-6 px-6">
             {/* 입고 방식 선택 */}
             <div className="flex gap-4">
-              <Button 
+              <Button
                 variant={receiptMode === "po" ? "default" : "outline"}
                 onClick={() => { setReceiptMode("po"); setItems([]); setFormData({ ...formData, purchase_order_id: "" }); }}
               >
                 <ClipboardListIcon className="w-4 h-4 mr-2" />
                 발주서 연결
               </Button>
-              <Button 
+              <Button
                 variant={receiptMode === "direct" ? "default" : "outline"}
                 onClick={() => { setReceiptMode("direct"); setItems([]); setFormData({ ...formData, purchase_order_id: "" }); }}
               >
@@ -669,8 +388,8 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
               </div>
               <div className="space-y-2">
                 <Label>입고 창고 *</Label>
-                <Select 
-                  value={formData.warehouse_id} 
+                <Select
+                  value={formData.warehouse_id}
                   onValueChange={(v) => setFormData({ ...formData, warehouse_id: v })}
                 >
                   <SelectTrigger>
@@ -696,15 +415,15 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
               {receiptMode === "po" && (
                 <div className="space-y-2">
                   <Label>발주서 선택</Label>
-                  <Select 
-                    value={formData.purchase_order_id} 
+                  <Select
+                    value={formData.purchase_order_id}
                     onValueChange={handlePOSelect}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="발주서 선택" />
                     </SelectTrigger>
                     <SelectContent>
-                      {purchaseOrders.map((po: any) => (
+                      {purchaseOrders.map((po: PurchaseOrder) => (
                         <SelectItem key={po.id} value={po.id}>
                           {po.order_number} - {po.factory?.factory_name} ({po.items?.length}품목)
                         </SelectItem>
@@ -802,8 +521,8 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               취소
             </Button>
-            <Button 
-              onClick={handleSubmit} 
+            <Button
+              onClick={handleSubmit}
               disabled={!formData.warehouse_id || items.length === 0}
             >
               <SaveIcon className="w-4 h-4 mr-2" />
@@ -831,7 +550,7 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
               입고할 제품을 선택해주세요. 여러 개 선택 후 한번에 추가할 수 있습니다.
             </SheetDescription>
           </SheetHeader>
-          
+
           <div className="space-y-4 px-6">
             {/* 검색 및 필터 */}
             <div className="space-y-3">
@@ -905,12 +624,12 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
                     <TableRow>
                       <TableHead className="w-[50px]">
                         <Checkbox
-                          checked={filteredProducts.length > 0 && filteredProducts.every((p: any) => selectedProducts.has(p.id))}
+                          checked={filteredProducts.length > 0 && filteredProducts.every((p: Product) => selectedProducts.has(p.id))}
                           onCheckedChange={(checked) => {
                             if (checked) {
-                              setSelectedProducts(new Set(filteredProducts.map((p: any) => p.id)));
+                              setSelectedProducts(new Set(filteredProducts.map((p: Product) => p.id)));
                             } else {
-                              filteredProducts.forEach((p: any) => {
+                              filteredProducts.forEach((p: Product) => {
                                 const newSelected = new Set(selectedProducts);
                                 newSelected.delete(p.id);
                                 setSelectedProducts(newSelected);
@@ -928,8 +647,8 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredProducts.slice(0, 200).map((product: any) => (
-                      <TableRow 
+                    {filteredProducts.slice(0, 200).map((product: Product) => (
+                      <TableRow
                         key={product.id}
                         className={selectedProducts.has(product.id) ? "bg-accent" : ""}
                       >
@@ -940,8 +659,8 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
                           />
                         </TableCell>
                         <TableCell>
-                          <Button 
-                            size="sm" 
+                          <Button
+                            size="sm"
                             variant="ghost"
                             onClick={() => {
                               addDirectProduct(product);
@@ -981,4 +700,3 @@ export default function StockReceiptList({ loaderData, actionData }: Route.Compo
     </div>
   );
 }
-

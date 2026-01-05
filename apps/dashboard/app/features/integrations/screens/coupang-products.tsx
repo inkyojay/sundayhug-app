@@ -63,6 +63,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const offset = (page - 1) * limit;
   const search = url.searchParams.get("search") || "";
   const status = url.searchParams.get("status") || "";
+  const fulfillment = url.searchParams.get("fulfillment") || "all";
 
   // 상품 목록 조회 (옵션 + 재고 포함)
   let query = supabase
@@ -98,9 +99,24 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const { data: products, count } = await query;
 
+  // 판매방식 필터 적용 (클라이언트 사이드에서 옵션 필터링)
+  const filteredProducts = products?.map((product: any) => {
+    if (fulfillment === "all") return product;
+    return {
+      ...product,
+      coupang_product_options: product.coupang_product_options?.filter(
+        (opt: any) => opt.fulfillment_type === fulfillment
+      ),
+    };
+  }).filter((product: any) => {
+    // 해당 판매방식의 옵션이 없는 상품은 제외
+    if (fulfillment === "all") return true;
+    return product.coupang_product_options?.length > 0;
+  });
+
   // 옵션별 재고 조회
   const allVendorItemIds: number[] = [];
-  products?.forEach((p: any) => {
+  filteredProducts?.forEach((p: any) => {
     p.coupang_product_options?.forEach((opt: any) => {
       if (opt.vendor_item_id) {
         allVendorItemIds.push(opt.vendor_item_id);
@@ -121,26 +137,28 @@ export async function loader({ request }: Route.LoaderArgs) {
     inventoryMap[inv.vendor_item_id] = inv.total_orderable_quantity || 0;
   });
 
-  // 상태별 통계
-  const { data: statusStats } = await supabase
-    .from("coupang_products")
-    .select("status_name")
-    .not("status_name", "is", null);
+  // 옵션 통계 조회 (전체 옵션 기준)
+  const { data: optionStats } = await supabase
+    .from("coupang_product_options")
+    .select("fulfillment_type, sku_id");
 
-  const statusCounts: Record<string, number> = {};
-  statusStats?.forEach((item) => {
-    const name = item.status_name || "미지정";
-    statusCounts[name] = (statusCounts[name] || 0) + 1;
-  });
+  const optionCounts = {
+    total: optionStats?.length || 0,
+    rocketGrowth: optionStats?.filter((o) => o.fulfillment_type === "ROCKET_GROWTH").length || 0,
+    marketplace: optionStats?.filter((o) => o.fulfillment_type === "MARKETPLACE").length || 0,
+    mapped: optionStats?.filter((o) => o.sku_id).length || 0,
+    unmapped: optionStats?.filter((o) => !o.sku_id).length || 0,
+  };
 
   return {
-    products: products || [],
+    products: filteredProducts || [],
     total: count || 0,
     page,
     limit,
     search,
     status,
-    statusCounts,
+    fulfillment,
+    optionCounts,
     inventoryMap,
   };
 }
@@ -199,7 +217,7 @@ function getSkuMappingStatus(options: any[]) {
 export default function CoupangProductsPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { products, total, page, limit, search, status, statusCounts, inventoryMap } =
+  const { products, total, page, limit, search, status, fulfillment, optionCounts, inventoryMap } =
     loaderData;
   const totalPages = Math.ceil(total / limit);
   const syncFetcher = useFetcher();
@@ -256,8 +274,29 @@ export default function CoupangProductsPage({
         </div>
       </div>
 
-      {/* 상태별 통계 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* 판매방식 탭 */}
+      <div className="flex gap-2">
+        <Link to={`?search=${search}&status=${status}&fulfillment=all`}>
+          <Button variant={fulfillment === "all" ? "default" : "outline"} size="sm">
+            전체 ({optionCounts.total})
+          </Button>
+        </Link>
+        <Link to={`?search=${search}&status=${status}&fulfillment=ROCKET_GROWTH`}>
+          <Button variant={fulfillment === "ROCKET_GROWTH" ? "default" : "outline"} size="sm">
+            <RocketIcon className="h-4 w-4 mr-1" />
+            로켓그로스 ({optionCounts.rocketGrowth})
+          </Button>
+        </Link>
+        <Link to={`?search=${search}&status=${status}&fulfillment=MARKETPLACE`}>
+          <Button variant={fulfillment === "MARKETPLACE" ? "default" : "outline"} size="sm">
+            <TruckIcon className="h-4 w-4 mr-1" />
+            판매자배송 ({optionCounts.marketplace})
+          </Button>
+        </Link>
+      </div>
+
+      {/* 옵션 통계 */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -268,28 +307,57 @@ export default function CoupangProductsPage({
             <div className="text-2xl font-bold">{total.toLocaleString()}개</div>
           </CardContent>
         </Card>
-        {Object.entries(statusCounts)
-          .slice(0, 3)
-          .map(([name, count]) => (
-            <Card key={name}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {name}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {(count as number).toLocaleString()}개
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <RocketIcon className="h-4 w-4 text-orange-500" />
+              로켓그로스
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">{optionCounts.rocketGrowth}개</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <TruckIcon className="h-4 w-4 text-blue-500" />
+              판매자배송
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">{optionCounts.marketplace}개</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <LinkIcon className="h-4 w-4 text-green-500" />
+              SKU 매핑됨
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{optionCounts.mapped}개</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <Link2OffIcon className="h-4 w-4 text-gray-400" />
+              미매핑
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-gray-500">{optionCounts.unmapped}개</div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* 필터 */}
       <Card>
         <CardContent className="pt-6">
           <form method="GET" className="flex gap-4 items-end">
+            <input type="hidden" name="fulfillment" value={fulfillment} />
             <div className="flex-1">
               <label className="text-sm font-medium mb-2 block">상품 검색</label>
               <div className="relative">
@@ -501,7 +569,7 @@ export default function CoupangProductsPage({
               >
                 {page > 1 ? (
                   <Link
-                    to={`?page=${page - 1}&search=${search}&status=${status}`}
+                    to={`?page=${page - 1}&search=${search}&status=${status}&fulfillment=${fulfillment}`}
                   >
                     <ChevronLeftIcon className="h-4 w-4" />
                     이전
@@ -524,7 +592,7 @@ export default function CoupangProductsPage({
               >
                 {page < totalPages ? (
                   <Link
-                    to={`?page=${page + 1}&search=${search}&status=${status}`}
+                    to={`?page=${page + 1}&search=${search}&status=${status}&fulfillment=${fulfillment}`}
                   >
                     다음
                     <ChevronRightIcon className="h-4 w-4" />

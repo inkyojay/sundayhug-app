@@ -72,11 +72,11 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   if (search) {
     query = query.or(
-      `ord_no.ilike.%${search}%,recv_name.ilike.%${search}%,goods_name.ilike.%${search}%`
+      `ord_no.ilike.%${search}%,to_name.ilike.%${search}%,shop_sale_name.ilike.%${search}%`
     );
   }
 
-  if (status) {
+  if (status && status !== "all") {
     query = query.eq("ord_status", status);
   }
 
@@ -96,14 +96,14 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const { data: recentOrders } = await supabase
     .from("orders")
-    .select("ord_status, sale_price")
+    .select("ord_status, pay_amt")
     .eq("shop_cd", "coupang")
     .gte("ord_time", thirtyDaysAgo.toISOString());
 
   const stats = {
     total: recentOrders?.length || 0,
     totalAmount:
-      recentOrders?.reduce((sum, o) => sum + (parseFloat(o.sale_price) || 0), 0) ||
+      recentOrders?.reduce((sum, o) => sum + (parseFloat(o.pay_amt) || 0), 0) ||
       0,
     pending:
       recentOrders?.filter((o) => o.ord_status === "결제완료").length || 0,
@@ -295,12 +295,12 @@ export default function CoupangOrdersPage({
             </div>
             <div className="w-40">
               <label className="text-sm font-medium mb-2 block">상태</label>
-              <Select name="status" defaultValue={status}>
+              <Select name="status" defaultValue={status || "all"}>
                 <SelectTrigger>
                   <SelectValue placeholder="전체 상태" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">전체 상태</SelectItem>
+                  <SelectItem value="all">전체 상태</SelectItem>
                   <SelectItem value="결제완료">결제완료</SelectItem>
                   <SelectItem value="상품준비중">상품준비중</SelectItem>
                   <SelectItem value="배송중">배송중</SelectItem>
@@ -368,19 +368,19 @@ export default function CoupangOrdersPage({
                     <TableCell>
                       <div>
                         <p className="font-medium line-clamp-1">
-                          {order.goods_name}
+                          {order.shop_sale_name}
                         </p>
-                        {order.option_name && (
+                        {order.shop_opt_name && (
                           <p className="text-sm text-muted-foreground">
-                            {order.option_name}
+                            {order.shop_opt_name}
                           </p>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>{order.recv_name || "-"}</TableCell>
+                    <TableCell>{order.to_name || "-"}</TableCell>
                     <TableCell>{getStatusBadge(order.ord_status)}</TableCell>
                     <TableCell className="text-right font-medium">
-                      {formatPrice(order.sale_price)}
+                      {formatPrice(order.pay_amt)}
                     </TableCell>
                   </TableRow>
                 ))

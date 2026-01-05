@@ -41,75 +41,42 @@ import {
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
+import { getAsRequestList, getAsStats } from "../lib/warranty.server";
+import { AS_STATUS_CONFIG, AS_TYPE_CONFIG, buildAsListUrl } from "../lib/warranty.shared";
+
 export const meta: Route.MetaFunction = () => {
   return [{ title: `A/S 관리 | Sundayhug Admin` }];
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
-  
+
   const url = new URL(request.url);
   const statusFilter = url.searchParams.get("status") || "all";
   const typeFilter = url.searchParams.get("type") || "all";
   const page = parseInt(url.searchParams.get("page") || "1");
   const limit = 20;
-  const offset = (page - 1) * limit;
 
-  // A/S 신청 목록 쿼리
-  let query = supabase
-    .from("as_requests")
-    .select(`
-      id,
-      request_type,
-      issue_description,
-      status,
-      contact_name,
-      contact_phone,
-      created_at,
-      completed_at,
-      warranties (
-        warranty_number,
-        product_name,
-        customers (
-          name
-        )
-      )
-    `, { count: "exact" })
-    .order("created_at", { ascending: false });
+  // A/S 신청 목록 조회
+  const { asRequests, totalCount, currentPage, totalPages } = await getAsRequestList(
+    supabase,
+    {
+      statusFilter,
+      typeFilter,
+      page,
+      limit,
+    }
+  );
 
-  // 상태 필터
-  if (statusFilter !== "all") {
-    query = query.eq("status", statusFilter);
-  }
-
-  // 유형 필터
-  if (typeFilter !== "all") {
-    query = query.eq("request_type", typeFilter);
-  }
-
-  // 페이지네이션
-  query = query.range(offset, offset + limit - 1);
-
-  const { data: asRequests, count } = await query;
-
-  // 통계
-  const { data: allRequests } = await supabase
-    .from("as_requests")
-    .select("status, request_type");
-
-  const stats = {
-    total: allRequests?.length || 0,
-    received: allRequests?.filter(r => r.status === "received").length || 0,
-    processing: allRequests?.filter(r => r.status === "processing").length || 0,
-    completed: allRequests?.filter(r => r.status === "completed").length || 0,
-  };
+  // 통계 조회
+  const stats = await getAsStats(supabase);
 
   return {
-    asRequests: asRequests || [],
+    asRequests,
     stats,
-    totalCount: count || 0,
-    currentPage: page,
-    totalPages: Math.ceil((count || 0) / limit),
+    totalCount,
+    currentPage,
+    totalPages,
     statusFilter,
     typeFilter,
   };

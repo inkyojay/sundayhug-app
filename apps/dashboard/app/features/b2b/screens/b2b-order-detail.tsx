@@ -19,7 +19,6 @@ import {
   CalendarIcon,
   CheckCircleIcon,
   ClockIcon,
-  DollarSignIcon,
   MapPinIcon,
   GlobeIcon,
   DownloadIcon,
@@ -28,7 +27,6 @@ import {
 import { useState, useEffect } from "react";
 import { Link, useFetcher, useRevalidator } from "react-router";
 
-import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
 import {
   Card,
@@ -63,78 +61,54 @@ import {
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
+import {
+  getOrder,
+  getShipments,
+  getDocuments,
+  updateOrderStatus,
+  updatePaymentStatus,
+  updateShipmentStatus,
+} from "../lib/b2b.server";
+import {
+  ORDER_STATUS_OPTIONS,
+  PAYMENT_STATUS_OPTIONS,
+  SHIPMENT_STATUS_OPTIONS,
+  formatDate,
+  formatDateTime,
+  formatCurrency,
+  getOrderStatusInfo,
+} from "../lib/b2b.shared";
+import {
+  OrderStatusBadge,
+  PaymentStatusBadge,
+  ShipmentStatusBadge,
+  CustomerTypeBadge,
+} from "../components";
+
 export const meta: Route.MetaFunction = ({ data }) => {
   return [{ title: `주문 ${data?.order?.order_number || ""} | Sundayhug Admin` }];
 };
 
-// 주문 상태 정의
-const orderStatuses = [
-  { value: "quote_draft", label: "견적 작성중", color: "secondary" },
-  { value: "quote_sent", label: "견적 발송", color: "default" },
-  { value: "confirmed", label: "주문 확정", color: "default" },
-  { value: "invoice_created", label: "인보이스 발행", color: "outline" },
-  { value: "shipping", label: "출고 준비", color: "outline" },
-  { value: "shipped", label: "출고 완료", color: "default" },
-  { value: "completed", label: "완료", color: "default" },
-  { value: "cancelled", label: "취소", color: "destructive" },
-];
-
-const getStatusInfo = (status: string) => {
-  return orderStatuses.find((s) => s.value === status) || orderStatuses[0];
-};
-
 export async function loader({ request, params }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
-  const orderId = params.id;
+  const orderId = params.id!;
 
   // 주문 조회
-  const { data: order, error } = await supabase
-    .from("b2b_orders")
-    .select(`
-      *,
-      customer:b2b_customers(
-        id, customer_code, company_name, company_name_en, business_type,
-        contact_name, contact_phone, contact_email,
-        address, address_en, shipping_address, shipping_address_en,
-        payment_terms, currency
-      )
-    `)
-    .eq("id", orderId)
-    .single();
+  const { order, items } = await getOrder(supabase, orderId);
 
-  if (error || !order) {
+  if (!order) {
     throw new Response("주문을 찾을 수 없습니다.", { status: 404 });
   }
 
-  // 주문 품목 조회
-  const { data: items } = await supabase
-    .from("b2b_order_items")
-    .select("*")
-    .eq("order_id", orderId)
-    .order("created_at");
-
-  // 출고 목록 조회
-  const { data: shipments } = await supabase
-    .from("b2b_shipments")
-    .select(`
-      *,
-      items:b2b_shipment_items(*)
-    `)
-    .eq("order_id", orderId)
-    .order("created_at", { ascending: false });
-
-  // 문서 목록 조회
-  const { data: documents } = await supabase
-    .from("b2b_documents")
-    .select("*")
-    .eq("order_id", orderId)
-    .order("generated_at", { ascending: false });
+  // 출고 및 문서 목록 조회
+  const shipments = await getShipments(supabase, orderId);
+  const documents = await getDocuments(supabase, orderId);
 
   return {
     order,
-    items: items || [],
-    shipments: shipments || [],
-    documents: documents || [],
+    items,
+    shipments,
+    documents,
   };
 }
 
@@ -142,169 +116,23 @@ export async function action({ request, params }: Route.ActionArgs) {
   const [supabase] = makeServerClient(request);
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
-  const orderId = params.id;
+  const orderId = params.id!;
 
   if (intent === "update_status") {
     const status = formData.get("status") as string;
-
-    const updateData: Record<string, any> = {
-      status,
-      updated_at: new Date().toISOString(),
-    };
-
-    // 상태별 추가 필드 업데이트
-    if (status === "confirmed") {
-      updateData.confirmed_at = new Date().toISOString();
-    } else if (status === "shipped") {
-      updateData.shipped_at = new Date().toISOString();
-    }
-
-    const { error } = await supabase
-      .from("b2b_orders")
-      .update(updateData)
-      .eq("id", orderId);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, message: "상태가 변경되었습니다." };
+    return updateOrderStatus(supabase, orderId, status);
   }
 
   if (intent === "update_payment_status") {
     const payment_status = formData.get("payment_status") as string;
-
-    const { error } = await supabase
-      .from("b2b_orders")
-      .update({
-        payment_status,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", orderId);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, message: "결제 상태가 변경되었습니다." };
+    return updatePaymentStatus(supabase, orderId, payment_status);
   }
 
-  // 출고 상태 변경 (재고 차감/복원 포함)
   if (intent === "update_shipment_status") {
     const shipmentId = formData.get("shipment_id") as string;
     const newStatus = formData.get("status") as string;
     const trackingNumber = formData.get("tracking_number") as string;
-
-    // 현재 출고 정보 조회
-    const { data: shipment, error: shipmentError } = await supabase
-      .from("b2b_shipments")
-      .select("*, items:b2b_shipment_items(*)")
-      .eq("id", shipmentId)
-      .single();
-
-    if (shipmentError || !shipment) {
-      return { success: false, error: "출고 정보를 찾을 수 없습니다." };
-    }
-
-    const previousStatus = shipment.status;
-
-    // 출고 완료로 변경 시 재고 차감
-    if (newStatus === "shipped" && previousStatus !== "shipped") {
-      // 창고 확인
-      if (!shipment.warehouse_id) {
-        return { success: false, error: "출고 창고가 지정되지 않았습니다." };
-      }
-
-      // 각 품목에 대해 재고 차감
-      for (const item of shipment.items || []) {
-        // 창고별 재고 차감 (RPC 함수 사용)
-        const { error: decreaseError } = await supabase.rpc("decrease_inventory_location", {
-          p_warehouse_id: shipment.warehouse_id,
-          p_sku: item.sku,
-          p_quantity: item.quantity,
-          p_reason: `B2B 출고: ${shipment.shipment_number}`,
-        });
-
-        if (decreaseError) {
-          console.error(`재고 차감 실패 (${item.sku}):`, decreaseError);
-          // 경고만 하고 계속 진행 (재고 부족해도 출고는 가능)
-        }
-
-        // 전체 재고(inventory)도 차감
-        const { error: decreaseMainError } = await supabase.rpc("decrease_inventory", {
-          p_sku: item.sku,
-          p_quantity: item.quantity,
-          p_reason: `B2B 출고: ${shipment.shipment_number}`,
-        });
-
-        if (decreaseMainError) {
-          console.error(`전체 재고 차감 실패 (${item.sku}):`, decreaseMainError);
-        }
-      }
-    }
-
-    // 출고 취소 시 재고 복원 (이미 출고 완료된 경우에만)
-    if (newStatus === "cancelled" && previousStatus === "shipped") {
-      for (const item of shipment.items || []) {
-        // 창고별 재고 복원
-        const { error: increaseError } = await supabase.rpc("increase_inventory_location", {
-          p_warehouse_id: shipment.warehouse_id,
-          p_sku: item.sku,
-          p_quantity: item.quantity,
-          p_reason: `B2B 출고 취소: ${shipment.shipment_number}`,
-        });
-
-        if (increaseError) {
-          console.error(`재고 복원 실패 (${item.sku}):`, increaseError);
-        }
-      }
-    }
-
-    // 출고 상태 업데이트
-    const updateData: Record<string, any> = {
-      status: newStatus,
-      updated_at: new Date().toISOString(),
-    };
-
-    if (newStatus === "shipped") {
-      updateData.shipped_date = new Date().toISOString().slice(0, 10);
-    }
-
-    if (trackingNumber) {
-      updateData.tracking_number = trackingNumber;
-    }
-
-    const { error: updateError } = await supabase
-      .from("b2b_shipments")
-      .update(updateData)
-      .eq("id", shipmentId);
-
-    if (updateError) {
-      return { success: false, error: updateError.message };
-    }
-
-    // 주문 상태도 업데이트
-    if (newStatus === "shipped") {
-      await supabase
-        .from("b2b_orders")
-        .update({ status: "shipped", shipped_at: new Date().toISOString() })
-        .eq("id", orderId);
-    }
-
-    const statusLabels: Record<string, string> = {
-      pending: "대기",
-      preparing: "준비중",
-      shipped: "출고완료",
-      delivered: "배송완료",
-      cancelled: "취소",
-    };
-
-    return {
-      success: true,
-      message: `출고 상태가 '${statusLabels[newStatus] || newStatus}'(으)로 변경되었습니다.${
-        newStatus === "shipped" ? " 재고가 차감되었습니다." : ""
-      }${newStatus === "cancelled" && previousStatus === "shipped" ? " 재고가 복원되었습니다." : ""}`,
-    };
+    return updateShipmentStatus(supabase, orderId, shipmentId, newStatus, trackingNumber);
   }
 
   return { success: false, error: "Unknown intent" };
@@ -342,24 +170,7 @@ export default function B2BOrderDetail({ loaderData }: Route.ComponentProps) {
     );
   };
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "-";
-    return new Date(dateString).toLocaleDateString("ko-KR");
-  };
-
-  const formatDateTime = (dateString: string | null) => {
-    if (!dateString) return "-";
-    return new Date(dateString).toLocaleString("ko-KR");
-  };
-
-  const formatCurrency = (amount: number, currency: string = "KRW") => {
-    if (currency === "USD") {
-      return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
-    }
-    return new Intl.NumberFormat("ko-KR", { style: "currency", currency: "KRW" }).format(amount);
-  };
-
-  const statusInfo = getStatusInfo(order.status);
+  const statusInfo = getOrderStatusInfo(order.status);
   const customer = order.customer;
   const isOverseas = customer?.business_type === "overseas";
 
@@ -437,7 +248,7 @@ export default function B2BOrderDetail({ loaderData }: Route.ComponentProps) {
                 <ShoppingCartIcon className="w-6 h-6" />
                 {order.order_number}
               </h1>
-              <Badge variant={statusInfo.color as any}>{statusInfo.label}</Badge>
+              <OrderStatusBadge status={order.status} />
             </div>
             <p className="text-muted-foreground">
               {customer?.company_name} | {formatDate(order.order_date)}
@@ -478,7 +289,7 @@ export default function B2BOrderDetail({ loaderData }: Route.ComponentProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {orderStatuses.map((status) => (
+                    {ORDER_STATUS_OPTIONS.map((status) => (
                       <SelectItem key={status.value} value={status.value}>
                         {status.label}
                       </SelectItem>
@@ -493,9 +304,11 @@ export default function B2BOrderDetail({ loaderData }: Route.ComponentProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pending">미결제</SelectItem>
-                    <SelectItem value="partial">부분결제</SelectItem>
-                    <SelectItem value="paid">결제완료</SelectItem>
+                    {PAYMENT_STATUS_OPTIONS.map((status) => (
+                      <SelectItem key={status.value} value={status.value}>
+                        {status.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -546,19 +359,7 @@ export default function B2BOrderDetail({ loaderData }: Route.ComponentProps) {
                 <>
                   <div className="flex items-center justify-between">
                     <span className="font-medium">{customer.company_name}</span>
-                    <Badge variant={isOverseas ? "secondary" : "default"}>
-                      {isOverseas ? (
-                        <>
-                          <GlobeIcon className="w-3 h-3 mr-1" />
-                          해외
-                        </>
-                      ) : (
-                        <>
-                          <MapPinIcon className="w-3 h-3 mr-1" />
-                          국내
-                        </>
-                      )}
-                    </Badge>
+                    <CustomerTypeBadge type={customer.business_type} />
                   </div>
                   {customer.company_name_en && (
                     <div className="text-sm text-muted-foreground">{customer.company_name_en}</div>
@@ -772,28 +573,7 @@ export default function B2BOrderDetail({ loaderData }: Route.ComponentProps) {
                         <span className="font-mono text-sm font-medium">
                           {shipment.shipment_number}
                         </span>
-                        <Badge
-                          variant={
-                            shipment.status === "delivered" || shipment.status === "shipped"
-                              ? "default"
-                              : shipment.status === "cancelled"
-                              ? "destructive"
-                              : "secondary"
-                          }
-                          className="ml-2"
-                        >
-                          {shipment.status === "pending"
-                            ? "대기"
-                            : shipment.status === "preparing"
-                            ? "준비중"
-                            : shipment.status === "shipped"
-                            ? "출고완료"
-                            : shipment.status === "delivered"
-                            ? "배송완료"
-                            : shipment.status === "cancelled"
-                            ? "취소됨"
-                            : shipment.status}
-                        </Badge>
+                        <ShipmentStatusBadge status={shipment.status} className="ml-2" />
                       </div>
                       <div className="text-sm text-muted-foreground">
                         {shipment.planned_date && `예정: ${formatDate(shipment.planned_date)}`}
@@ -853,11 +633,11 @@ export default function B2BOrderDetail({ loaderData }: Route.ComponentProps) {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="pending">대기</SelectItem>
-                            <SelectItem value="preparing">준비중</SelectItem>
-                            <SelectItem value="shipped">출고완료</SelectItem>
-                            <SelectItem value="delivered">배송완료</SelectItem>
-                            <SelectItem value="cancelled">취소</SelectItem>
+                            {SHIPMENT_STATUS_OPTIONS.map((status) => (
+                              <SelectItem key={status.value} value={status.value}>
+                                {status.label}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
 

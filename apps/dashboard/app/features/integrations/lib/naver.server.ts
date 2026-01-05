@@ -964,6 +964,282 @@ export async function getClaims(params: GetClaimsParams = {}): Promise<{
 }
 
 // ============================================================================
+// Invoice API (송장 전송 / 발송처리)
+// ============================================================================
+
+export interface InvoiceSendResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+/**
+ * 네이버 발송처리 API
+ * POST /v1/pay-order/seller/product-orders/{productOrderId}/dispatch
+ *
+ * 참고: https://apicenter.commerce.naver.com/docs/commerce-api/current/dispatch-product-order
+ */
+export async function sendInvoiceToNaver(
+  productOrderId: string,
+  deliveryCompanyCode: string,
+  trackingNo: string
+): Promise<InvoiceSendResult> {
+  const proxyUrl = getProxyUrl();
+  const proxyApiKey = getProxyApiKey();
+  const token = await getValidToken();
+
+  if (!token) {
+    return { success: false, error: "유효한 네이버 토큰이 없습니다. 연동을 다시 해주세요." };
+  }
+
+  // dispatchDate: 발송일시 (현재 시간, KST)
+  const now = new Date();
+  const kstOffset = 9 * 60 * 60 * 1000;
+  const kstDate = new Date(now.getTime() + kstOffset);
+  const dispatchDate = kstDate.toISOString().replace("Z", "+09:00");
+
+  const requestBody = {
+    dispatchDate,
+    deliveryMethod: "DELIVERY",
+    deliveryCompanyCode,
+    trackingNumber: trackingNo,
+  };
+
+  console.log(`📤 네이버 발송처리: productOrderId=${productOrderId}, 택배사=${deliveryCompanyCode}, 송장=${trackingNo}`);
+
+  try {
+    let response: Response;
+
+    // 프록시 서버가 설정되어 있으면 프록시를 통해 호출
+    if (proxyUrl) {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Authorization": `${token.token_type} ${token.access_token}`,
+      };
+
+      if (proxyApiKey) {
+        headers["X-Proxy-Api-Key"] = proxyApiKey;
+      }
+
+      const proxyBody = {
+        method: "POST",
+        path: `/external/v1/pay-order/seller/product-orders/${productOrderId}/dispatch`,
+        headers: {
+          "Authorization": `${token.token_type} ${token.access_token}`,
+        },
+        body: requestBody,
+      };
+
+      console.log(`📤 프록시 발송처리 요청: POST ${proxyUrl}/api/proxy`);
+
+      response = await fetch(`${proxyUrl}/api/proxy`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(proxyBody),
+      });
+    } else {
+      // 직접 호출
+      const apiUrl = `${NAVER_API_BASE}/external/v1/pay-order/seller/product-orders/${productOrderId}/dispatch`;
+
+      console.log(`📤 직접 발송처리 호출: POST ${apiUrl}`);
+
+      response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `${token.token_type} ${token.access_token}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
+    }
+
+    const responseText = await response.text();
+    console.log(`📥 네이버 발송처리 응답 (${response.status}):`, responseText.slice(0, 500));
+
+    let responseData;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch {
+      // 성공 시 빈 응답이 올 수 있음
+      if (response.ok) {
+        console.log("✅ 네이버 발송처리 성공:", productOrderId, trackingNo);
+        return { success: true, message: "발송처리가 성공적으로 완료되었습니다" };
+      }
+      console.error("❌ 네이버 발송처리 응답 파싱 실패:", responseText);
+      return { success: false, error: "API 응답 파싱 실패" };
+    }
+
+    if (!response.ok) {
+      console.error("❌ 네이버 발송처리 실패:", response.status, responseData);
+      return {
+        success: false,
+        error: responseData.message || responseData.error?.message || `발송처리 실패 (${response.status})`
+      };
+    }
+
+    console.log("✅ 네이버 발송처리 성공:", productOrderId, trackingNo);
+    return { success: true, message: "발송처리가 성공적으로 완료되었습니다" };
+  } catch (error) {
+    console.error("❌ 네이버 발송처리 중 오류:", error);
+    return { success: false, error: "발송처리 중 오류가 발생했습니다" };
+  }
+}
+
+/**
+ * 네이버 일괄 발송처리 API
+ * POST /v1/pay-order/seller/product-orders/dispatch
+ *
+ * 여러 상품주문을 한 번에 발송처리
+ */
+export async function sendInvoicesToNaverBulk(
+  items: {
+    productOrderId: string;
+    deliveryCompanyCode: string;
+    trackingNumber: string;
+  }[]
+): Promise<{
+  success: boolean;
+  successCount: number;
+  failCount: number;
+  errors: { productOrderId: string; error: string }[];
+}> {
+  const proxyUrl = getProxyUrl();
+  const proxyApiKey = getProxyApiKey();
+  const token = await getValidToken();
+
+  if (!token) {
+    return {
+      success: false,
+      successCount: 0,
+      failCount: items.length,
+      errors: items.map((item) => ({
+        productOrderId: item.productOrderId,
+        error: "유효한 네이버 토큰이 없습니다",
+      })),
+    };
+  }
+
+  // dispatchDate: 발송일시 (현재 시간, KST)
+  const now = new Date();
+  const kstOffset = 9 * 60 * 60 * 1000;
+  const kstDate = new Date(now.getTime() + kstOffset);
+  const dispatchDate = kstDate.toISOString().replace("Z", "+09:00");
+
+  const requestBody = {
+    dispatchProductOrders: items.map((item) => ({
+      productOrderId: item.productOrderId,
+      dispatchDate,
+      deliveryMethod: "DELIVERY",
+      deliveryCompanyCode: item.deliveryCompanyCode,
+      trackingNumber: item.trackingNumber,
+    })),
+  };
+
+  console.log(`📤 네이버 일괄 발송처리: ${items.length}건`);
+
+  try {
+    let response: Response;
+
+    if (proxyUrl) {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Authorization": `${token.token_type} ${token.access_token}`,
+      };
+
+      if (proxyApiKey) {
+        headers["X-Proxy-Api-Key"] = proxyApiKey;
+      }
+
+      const proxyBody = {
+        method: "POST",
+        path: `/external/v1/pay-order/seller/product-orders/dispatch`,
+        headers: {
+          "Authorization": `${token.token_type} ${token.access_token}`,
+        },
+        body: requestBody,
+      };
+
+      response = await fetch(`${proxyUrl}/api/proxy`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(proxyBody),
+      });
+    } else {
+      const apiUrl = `${NAVER_API_BASE}/external/v1/pay-order/seller/product-orders/dispatch`;
+
+      response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `${token.token_type} ${token.access_token}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
+    }
+
+    const responseText = await response.text();
+    console.log(`📥 네이버 일괄 발송처리 응답 (${response.status}):`, responseText.slice(0, 1000));
+
+    let responseData: any;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch {
+      if (response.ok) {
+        return { success: true, successCount: items.length, failCount: 0, errors: [] };
+      }
+      return {
+        success: false,
+        successCount: 0,
+        failCount: items.length,
+        errors: items.map((item) => ({
+          productOrderId: item.productOrderId,
+          error: "API 응답 파싱 실패",
+        })),
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        successCount: 0,
+        failCount: items.length,
+        errors: items.map((item) => ({
+          productOrderId: item.productOrderId,
+          error: responseData.message || `발송처리 실패 (${response.status})`,
+        })),
+      };
+    }
+
+    // 부분 성공 처리
+    const successIds = responseData.data?.successProductOrderIds || [];
+    const failedItems = responseData.data?.failProductOrderInfos || [];
+
+    const errors = failedItems.map((f: any) => ({
+      productOrderId: f.productOrderId,
+      error: f.message || "발송처리 실패",
+    }));
+
+    return {
+      success: failedItems.length === 0,
+      successCount: successIds.length,
+      failCount: failedItems.length,
+      errors,
+    };
+  } catch (error) {
+    console.error("❌ 네이버 일괄 발송처리 중 오류:", error);
+    return {
+      success: false,
+      successCount: 0,
+      failCount: items.length,
+      errors: items.map((item) => ({
+        productOrderId: item.productOrderId,
+        error: "발송처리 중 오류 발생",
+      })),
+    };
+  }
+}
+
+// ============================================================================
 // Token Disconnect
 // ============================================================================
 

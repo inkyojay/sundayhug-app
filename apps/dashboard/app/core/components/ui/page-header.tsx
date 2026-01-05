@@ -4,7 +4,7 @@
  * 페이지 헤더를 위한 공통 컴포넌트
  */
 import { cn } from "~/core/lib/utils";
-import { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 interface PageHeaderProps {
   title: string;

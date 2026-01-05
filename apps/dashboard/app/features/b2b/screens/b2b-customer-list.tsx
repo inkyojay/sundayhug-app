@@ -12,20 +12,12 @@ import {
   PencilIcon,
   DollarSignIcon,
   Trash2Icon,
-  GlobeIcon,
-  MapPinIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useFetcher, useRevalidator } from "react-router";
 
-import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "~/core/components/ui/card";
+import { Card, CardContent } from "~/core/components/ui/card";
 import { Input } from "~/core/components/ui/input";
 import {
   Select,
@@ -59,14 +51,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "~/core/components/ui/alert-dialog";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "~/core/components/ui/tabs";
 
 import makeServerClient from "~/core/lib/supa-client.server";
+
+import {
+  getCustomers,
+  getCustomerStats,
+  deleteCustomer,
+  toggleCustomerStatus,
+  parseCustomerQueryParams,
+} from "../lib/b2b.server";
+import { CustomerTypeBadge, CustomerStats, ActiveBadge } from "../components";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: "B2B 업체 관리 | Sundayhug Admin" }];
@@ -76,59 +71,18 @@ export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
 
   const url = new URL(request.url);
-  const search = url.searchParams.get("search") || "";
-  const businessType = url.searchParams.get("type") || "all";
-  const status = url.searchParams.get("status") || "active";
+  const params = parseCustomerQueryParams(url);
 
-  // 업체 목록 조회
-  let query = supabase
-    .from("b2b_customers")
-    .select("*", { count: "exact" })
-    .eq("is_deleted", false)
-    .order("created_at", { ascending: false });
-
-  // 검색
-  if (search) {
-    query = query.or(
-      `company_name.ilike.%${search}%,customer_code.ilike.%${search}%,contact_name.ilike.%${search}%`
-    );
-  }
-
-  // 업체 유형 필터
-  if (businessType !== "all") {
-    query = query.eq("business_type", businessType);
-  }
-
-  // 상태 필터
-  if (status === "active") {
-    query = query.eq("is_active", true);
-  } else if (status === "inactive") {
-    query = query.eq("is_active", false);
-  }
-
-  const { data: customers, count, error } = await query;
-
-  // 통계
-  const { data: allCustomers } = await supabase
-    .from("b2b_customers")
-    .select("business_type, is_active")
-    .eq("is_deleted", false);
-
-  const stats = {
-    total: allCustomers?.length || 0,
-    domestic: allCustomers?.filter((c) => c.business_type === "domestic").length || 0,
-    overseas: allCustomers?.filter((c) => c.business_type === "overseas").length || 0,
-    active: allCustomers?.filter((c) => c.is_active).length || 0,
-  };
+  const { customers, count } = await getCustomers(supabase, params);
+  const stats = await getCustomerStats(supabase);
 
   return {
-    customers: customers || [],
-    count: count || 0,
+    customers,
+    count,
     stats,
-    search,
-    businessType,
-    status,
-    error: error?.message,
+    search: params.search,
+    businessType: params.businessType,
+    status: params.status,
   };
 }
 
@@ -139,51 +93,24 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "delete") {
     const id = formData.get("id") as string;
-
-    const { error } = await supabase
-      .from("b2b_customers")
-      .update({
-        is_deleted: true,
-        deleted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, message: "업체가 삭제되었습니다." };
+    return deleteCustomer(supabase, id);
   }
 
   if (intent === "toggle_status") {
     const id = formData.get("id") as string;
     const is_active = formData.get("is_active") === "true";
-
-    const { error } = await supabase
-      .from("b2b_customers")
-      .update({
-        is_active: !is_active,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, message: is_active ? "비활성화되었습니다." : "활성화되었습니다." };
+    return toggleCustomerStatus(supabase, id, is_active);
   }
 
   return { success: false, error: "Unknown intent" };
 }
 
 export default function B2BCustomerList({ loaderData }: Route.ComponentProps) {
-  const { customers, count, stats, search, businessType, status, error } = loaderData;
+  const { customers, count, stats, search, businessType, status } = loaderData;
 
   const [searchInput, setSearchInput] = useState(search);
   const [message, setMessage] = useState<string | null>(null);
-  const [deleteCustomer, setDeleteCustomer] = useState<any | null>(null);
+  const [deleteCustomerId, setDeleteCustomerId] = useState<any | null>(null);
 
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
@@ -223,12 +150,12 @@ export default function B2BCustomerList({ loaderData }: Route.ComponentProps) {
   };
 
   const handleDelete = () => {
-    if (!deleteCustomer) return;
+    if (!deleteCustomerId) return;
     fetcher.submit(
-      { intent: "delete", id: deleteCustomer.id },
+      { intent: "delete", id: deleteCustomerId.id },
       { method: "POST" }
     );
-    setDeleteCustomer(null);
+    setDeleteCustomerId(null);
   };
 
   const handleToggleStatus = (customer: any) => {
@@ -254,12 +181,12 @@ export default function B2BCustomerList({ loaderData }: Route.ComponentProps) {
       )}
 
       {/* 삭제 확인 다이얼로그 */}
-      <AlertDialog open={!!deleteCustomer} onOpenChange={() => setDeleteCustomer(null)}>
+      <AlertDialog open={!!deleteCustomerId} onOpenChange={() => setDeleteCustomerId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>업체 삭제</AlertDialogTitle>
             <AlertDialogDescription>
-              "{deleteCustomer?.company_name}" 업체를 삭제하시겠습니까?
+              "{deleteCustomerId?.company_name}" 업체를 삭제하시겠습니까?
               <br />
               삭제된 업체는 복구할 수 없습니다.
             </AlertDialogDescription>
@@ -293,32 +220,7 @@ export default function B2BCustomerList({ loaderData }: Route.ComponentProps) {
       </div>
 
       {/* 통계 카드 */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{stats.total}</div>
-            <div className="text-sm text-gray-500">전체 업체</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-blue-600">{stats.domestic}</div>
-            <div className="text-sm text-gray-500">국내 업체</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-green-600">{stats.overseas}</div>
-            <div className="text-sm text-gray-500">해외 업체</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-purple-600">{stats.active}</div>
-            <div className="text-sm text-gray-500">활성 업체</div>
-          </CardContent>
-        </Card>
-      </div>
+      <CustomerStats stats={stats} />
 
       {/* 검색 & 필터 */}
       <Card>
@@ -401,13 +303,7 @@ export default function B2BCustomerList({ loaderData }: Route.ComponentProps) {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={customer.business_type === "domestic" ? "default" : "secondary"}>
-                        {customer.business_type === "domestic" ? (
-                          <><MapPinIcon className="h-3 w-3 mr-1" />국내</>
-                        ) : (
-                          <><GlobeIcon className="h-3 w-3 mr-1" />해외</>
-                        )}
-                      </Badge>
+                      <CustomerTypeBadge type={customer.business_type} />
                     </TableCell>
                     <TableCell>{customer.contact_name || "-"}</TableCell>
                     <TableCell>
@@ -418,9 +314,7 @@ export default function B2BCustomerList({ loaderData }: Route.ComponentProps) {
                     </TableCell>
                     <TableCell>{customer.payment_terms || "-"}</TableCell>
                     <TableCell>
-                      <Badge variant={customer.is_active ? "default" : "secondary"}>
-                        {customer.is_active ? "활성" : "비활성"}
-                      </Badge>
+                      <ActiveBadge isActive={customer.is_active} />
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -448,7 +342,7 @@ export default function B2BCustomerList({ loaderData }: Route.ComponentProps) {
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-red-600"
-                            onClick={() => setDeleteCustomer(customer)}
+                            onClick={() => setDeleteCustomerId(customer)}
                           >
                             <Trash2Icon className="h-4 w-4 mr-2" />
                             삭제

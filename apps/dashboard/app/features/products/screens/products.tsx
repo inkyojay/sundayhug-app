@@ -1,21 +1,12 @@
 /**
  * 제품 관리 - 제품 목록 (고급 기능)
- * 
- * 기능:
- * - 인라인 편집 (색상/사이즈는 셀렉트)
- * - 체크박스 일괄 변경
- * - 정렬 (Sorting)
- * - 그룹핑
- * - 변경 확인 알람
- * - 변경 로그 기록
- * - CSV 다운로드/업로드 (Upsert)
  */
 import type { Route } from "./+types/products";
 
-import { 
-  BoxIcon, 
-  SearchIcon, 
-  RefreshCwIcon, 
+import {
+  BoxIcon,
+  SearchIcon,
+  RefreshCwIcon,
   FilterIcon,
   ChevronDownIcon,
   ChevronUpIcon,
@@ -78,284 +69,63 @@ import { Textarea } from "~/core/components/ui/textarea";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
-// 색상명 → 실제 색상 코드 매핑
-const colorMap: Record<string, string> = {
-  // 기본 색상
-  "화이트": "#FFFFFF", "흰색": "#FFFFFF", "white": "#FFFFFF", "아이보리": "#FFFFF0",
-  "블랙": "#1a1a1a", "검정": "#1a1a1a", "black": "#1a1a1a", "차콜": "#36454F",
-  "그레이": "#808080", "회색": "#808080", "gray": "#808080", "grey": "#808080",
-  "라이트그레이": "#D3D3D3", "다크그레이": "#404040",
-  // 브라운 계열
-  "브라운": "#8B4513", "갈색": "#8B4513", "brown": "#8B4513",
-  "어스브라운": "#6B4423", "다크브라운": "#3D2914", "라이트브라운": "#A0522D",
-  "베이지": "#F5F5DC", "beige": "#F5F5DC", "탄": "#D2B48C", "카멜": "#C19A6B",
-  "크림": "#FFFDD0", "데일리크림": "#FFFDD0", "cream": "#FFFDD0",
-  "카키": "#8B8B00", "khaki": "#F0E68C", "올리브": "#808000",
-  // 블루 계열  
-  "네이비": "#000080", "navy": "#000080", "블루": "#0000FF", "blue": "#0000FF",
-  "스카이블루": "#87CEEB", "라이트블루": "#ADD8E6", "다크블루": "#00008B",
-  "인디고": "#4B0082", "민트": "#98FF98", "청록": "#008B8B", "틸": "#008080",
-  // 핑크/레드 계열
-  "핑크": "#FFC0CB", "pink": "#FFC0CB", "로즈": "#FF007F", "코랄": "#FF7F50",
-  "레드": "#FF0000", "빨강": "#FF0000", "red": "#FF0000", "와인": "#722F37",
-  "버건디": "#800020", "마룬": "#800000", "살몬": "#FA8072",
-  // 그린 계열
-  "그린": "#008000", "녹색": "#008000", "green": "#008000",
-  "라이트그린": "#90EE90", "다크그린": "#006400", "포레스트": "#228B22",
-  // 옐로우/오렌지 계열
-  "옐로우": "#FFFF00", "노랑": "#FFFF00", "yellow": "#FFFF00",
-  "오렌지": "#FFA500", "주황": "#FFA500", "orange": "#FFA500",
-  "머스타드": "#FFDB58", "골드": "#FFD700", "레몬": "#FFF44F",
-  // 퍼플 계열
-  "퍼플": "#800080", "보라": "#800080", "purple": "#800080",
-  "라벤더": "#E6E6FA", "바이올렛": "#EE82EE", "플럼": "#DDA0DD",
-};
+// lib imports
+import { downloadCSV, parseCSV } from "../lib/products.shared";
+import {
+  parseProductQueryParams,
+  getFilterOptions,
+  getProducts,
+  getChannelMappings,
+  getSalesData,
+  updateProduct,
+  bulkUpdateProducts,
+  createProduct,
+  uploadCSV,
+  syncProducts,
+  type ChannelMapping,
+  type SalesData,
+} from "../lib/products.server";
 
-// 색상명에서 색상 코드 추출
-function getColorCode(colorName: string): string | null {
-  if (!colorName) return null;
-  const lowerName = colorName.toLowerCase().replace(/\s/g, "");
-  
-  // 정확한 매칭
-  for (const [key, value] of Object.entries(colorMap)) {
-    if (lowerName.includes(key.toLowerCase().replace(/\s/g, ""))) {
-      return value;
-    }
-  }
-  return null;
-}
-
-// 배경색에 따른 텍스트 색상 결정
-function getContrastColor(hexColor: string): string {
-  const r = parseInt(hexColor.slice(1, 3), 16);
-  const g = parseInt(hexColor.slice(3, 5), 16);
-  const b = parseInt(hexColor.slice(5, 7), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.5 ? "#000000" : "#FFFFFF";
-}
-
-// 색상 뱃지 컴포넌트
-function ColorBadge({ colorName }: { colorName: string }) {
-  const bgColor = getColorCode(colorName);
-  
-  if (bgColor) {
-    const textColor = getContrastColor(bgColor);
-    const borderColor = bgColor === "#FFFFFF" || bgColor === "#FFFFF0" || bgColor === "#FFFDD0" 
-      ? "border border-gray-300" 
-      : "";
-    return (
-      <span 
-        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${borderColor}`}
-        style={{ backgroundColor: bgColor, color: textColor }}
-      >
-        {colorName}
-      </span>
-    );
-  }
-  
-  return (
-    <Badge variant="outline" className="text-xs">{colorName}</Badge>
-  );
-}
+// components imports
+import { ColorBadge } from "../components";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: `제품 관리 | Sundayhug Admin` }];
 };
 
-// 채널 매핑 타입
-interface ChannelMapping {
-  cafe24: {
-    variant_code: string;
-    stock_quantity: number;
-    additional_price: number;
-    product_name: string;
-  } | null;
-  naver: {
-    option_combination_id: number;
-    stock_quantity: number;
-    price: number;
-    product_name: string;
-  } | null;
-}
-
-// 판매 집계 타입
-interface SalesData {
-  cafe24: { orderCount: number; totalSales: number };
-  naver: { orderCount: number; totalSales: number };
-}
-
 export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
-  
   const url = new URL(request.url);
-  const search = url.searchParams.get("search") || "";
-  const parentSku = url.searchParams.get("parentSku") || "";
-  const color = url.searchParams.get("color") || "";
-  const size = url.searchParams.get("size") || "";
-  const sortBy = url.searchParams.get("sortBy") || "updated_at";
-  const sortOrder = url.searchParams.get("sortOrder") || "desc";
+
+  // 쿼리 파라미터 파싱
+  const params = parseProductQueryParams(url);
   const groupBy = url.searchParams.get("groupBy") || "";
-  const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = parseInt(url.searchParams.get("limit") || "50");
-  const offset = (page - 1) * limit;
 
-  // 필터 옵션 데이터 가져오기
-  const [parentSkusResult, colorsResult, sizesResult] = await Promise.all([
-    supabase
-      .from("parent_products")
-      .select("parent_sku, product_name")
-      .order("product_name", { ascending: true }),
-    supabase
-      .from("products")
-      .select("color_kr")
-      .not("color_kr", "is", null)
-      .not("color_kr", "eq", ""),
-    supabase
-      .from("products")
-      .select("sku_6_size")
-      .not("sku_6_size", "is", null)
-      .not("sku_6_size", "eq", ""),
+  // 필터 옵션, 제품 목록 조회
+  const [filterOptions, productsResult] = await Promise.all([
+    getFilterOptions(supabase),
+    getProducts(supabase, params),
   ]);
 
-  const parentSkuOptions = parentSkusResult.data || [];
-  const colorOptions = [...new Set(colorsResult.data?.map((c: any) => c.color_kr))].sort();
-  const sizeOptions = [...new Set(sizesResult.data?.map((s: any) => s.sku_6_size))].sort();
-
-  // 제품 수 쿼리
-  let countQuery = supabase
-    .from("products")
-    .select("*", { count: "exact", head: true });
-  
-  // 제품 목록 쿼리
-  let query = supabase
-    .from("products")
-    .select("*")
-    .order(sortBy, { ascending: sortOrder === "asc" });
-
-  // 필터 적용
-  if (search) {
-    countQuery = countQuery.or(`sku.ilike.%${search}%,product_name.ilike.%${search}%`);
-    query = query.or(`sku.ilike.%${search}%,product_name.ilike.%${search}%`);
-  }
-  if (parentSku) {
-    countQuery = countQuery.eq("parent_sku", parentSku);
-    query = query.eq("parent_sku", parentSku);
-  }
-  if (color) {
-    countQuery = countQuery.eq("color_kr", color);
-    query = query.eq("color_kr", color);
-  }
-  if (size) {
-    countQuery = countQuery.eq("sku_6_size", size);
-    query = query.eq("sku_6_size", size);
-  }
-  
-  const { count: totalCount } = await countQuery;
-
-  query = query.range(offset, offset + limit - 1);
-  const { data: products } = await query;
-
-  // 채널 매핑 조회
-  const skuList = (products || []).map((p: any) => p.sku).filter(Boolean);
-
-  const [cafe24VariantsResult, naverOptionsResult] = await Promise.all([
-    skuList.length > 0 
-      ? supabase
-          .from("cafe24_product_variants")
-          .select("sku, variant_code, stock_quantity, additional_price, product_no")
-          .in("sku", skuList)
-      : Promise.resolve({ data: [] }),
-    skuList.length > 0 
-      ? supabase
-          .from("naver_product_options")
-          .select("seller_management_code, option_combination_id, stock_quantity, price, origin_product_no")
-          .in("seller_management_code", skuList)
-      : Promise.resolve({ data: [] }),
+  // 채널 매핑 및 판매 데이터 조회
+  const skuList = productsResult.products.map((p: any) => p.sku).filter(Boolean);
+  const [channelMappings, salesDataMap] = await Promise.all([
+    getChannelMappings(supabase, skuList),
+    getSalesData(supabase, skuList),
   ]);
-
-  const cafe24ProductNos = [...new Set((cafe24VariantsResult.data || []).map((v: any) => v.product_no))];
-  const { data: cafe24Products } = cafe24ProductNos.length > 0
-    ? await supabase.from("cafe24_products").select("product_no, product_name").in("product_no", cafe24ProductNos)
-    : { data: [] };
-
-  const naverProductNos = [...new Set((naverOptionsResult.data || []).map((o: any) => o.origin_product_no))];
-  const { data: naverProducts } = naverProductNos.length > 0
-    ? await supabase.from("naver_products").select("origin_product_no, product_name").in("origin_product_no", naverProductNos)
-    : { data: [] };
-
-  const channelMappings: Record<string, ChannelMapping> = {};
-  
-  for (const variant of cafe24VariantsResult.data || []) {
-    const productName = (cafe24Products || []).find((p: any) => p.product_no === variant.product_no)?.product_name || "";
-    if (!channelMappings[variant.sku]) {
-      channelMappings[variant.sku] = { cafe24: null, naver: null };
-    }
-    channelMappings[variant.sku].cafe24 = {
-      variant_code: variant.variant_code,
-      stock_quantity: variant.stock_quantity,
-      additional_price: variant.additional_price,
-      product_name: productName,
-    };
-  }
-
-  for (const option of naverOptionsResult.data || []) {
-    const productName = (naverProducts || []).find((p: any) => p.origin_product_no === option.origin_product_no)?.product_name || "";
-    if (!channelMappings[option.seller_management_code]) {
-      channelMappings[option.seller_management_code] = { cafe24: null, naver: null };
-    }
-    channelMappings[option.seller_management_code].naver = {
-      option_combination_id: option.option_combination_id,
-      stock_quantity: option.stock_quantity,
-      price: option.price,
-      product_name: productName,
-    };
-  }
-
-  // 주문 집계
-  const salesDataMap: Record<string, SalesData> = {};
-  
-  if (skuList.length > 0) {
-    const { data: orderStats } = await supabase
-      .from("orders")
-      .select("sku, shop_cd, pay_amt")
-      .in("sku", skuList);
-
-    for (const order of orderStats || []) {
-      if (!order.sku) continue;
-      
-      if (!salesDataMap[order.sku]) {
-        salesDataMap[order.sku] = {
-          cafe24: { orderCount: 0, totalSales: 0 },
-          naver: { orderCount: 0, totalSales: 0 },
-        };
-      }
-      
-      if (order.shop_cd === "cafe24") {
-        salesDataMap[order.sku].cafe24.orderCount++;
-        salesDataMap[order.sku].cafe24.totalSales += order.pay_amt || 0;
-      } else if (order.shop_cd === "naver") {
-        salesDataMap[order.sku].naver.orderCount++;
-        salesDataMap[order.sku].naver.totalSales += order.pay_amt || 0;
-      }
-    }
-  }
 
   return {
-    products: products || [],
-    totalCount: totalCount || 0,
-    currentPage: page,
-    totalPages: Math.ceil((totalCount || 0) / limit),
-    currentLimit: limit,
-    search,
-    filters: { parentSku, color, size },
-    sortBy,
-    sortOrder,
+    products: productsResult.products,
+    totalCount: productsResult.totalCount,
+    currentPage: params.page,
+    totalPages: productsResult.totalPages,
+    currentLimit: params.limit,
+    search: params.search,
+    filters: { parentSku: params.parentSku, color: params.color, size: params.size },
+    sortBy: params.sortBy,
+    sortOrder: params.sortOrder,
     groupBy,
-    filterOptions: {
-      parentSkus: parentSkuOptions,
-      colors: colorOptions,
-      sizes: sizeOptions,
-    },
+    filterOptions,
     channelMappings,
     salesDataMap,
   };
@@ -374,41 +144,8 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "update") {
     const id = formData.get("id") as string;
     const changes = JSON.parse(formData.get("changes") as string);
-
-    // 기존 데이터 조회 (로그용)
-    const { data: oldData } = await supabase
-      .from("products")
-      .select("*")
-      .eq("id", id)
-      .single();
-
-    const { error } = await supabase
-      .from("products")
-      .update({
-        ...changes,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    // 변경 로그 기록
-    for (const [field, newValue] of Object.entries(changes)) {
-      if (oldData && oldData[field] !== newValue) {
-        await supabase.from("product_change_logs").insert({
-          table_name: "products",
-          record_id: id,
-          field_name: field,
-          old_value: oldData[field]?.toString() || null,
-          new_value: newValue?.toString() || null,
-          changed_by: user?.id,
-          change_type: "update",
-        });
-      }
-    }
-
+    const result = await updateProduct(supabase, id, changes, user?.id);
+    if (!result.success) return result;
     return { success: true, message: "제품이 업데이트되었습니다." };
   }
 
@@ -416,242 +153,51 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "bulk_update") {
     const ids = JSON.parse(formData.get("ids") as string) as string[];
     const changes = JSON.parse(formData.get("changes") as string);
-
-    // 기존 데이터 조회
-    const { data: oldDataList } = await supabase
-      .from("products")
-      .select("*")
-      .in("id", ids);
-
-    const { error } = await supabase
-      .from("products")
-      .update({
-        ...changes,
-        updated_at: new Date().toISOString(),
-      })
-      .in("id", ids);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    // 변경 로그 기록
-    for (const oldData of oldDataList || []) {
-      for (const [field, newValue] of Object.entries(changes)) {
-        if (oldData[field] !== newValue) {
-          await supabase.from("product_change_logs").insert({
-            table_name: "products",
-            record_id: oldData.id,
-            field_name: field,
-            old_value: oldData[field]?.toString() || null,
-            new_value: newValue?.toString() || null,
-            changed_by: user?.id,
-            change_type: "bulk_update",
-          });
-        }
-      }
-    }
-
+    const result = await bulkUpdateProducts(supabase, ids, changes, user?.id);
+    if (!result.success) return result;
     return { success: true, message: `${ids.length}개 제품이 업데이트되었습니다.` };
   }
 
   // 새 제품 추가
   if (intent === "create") {
-    const product_name = formData.get("product_name") as string;
-    const sku = formData.get("sku") as string;
-    const parent_sku = formData.get("parent_sku") as string;
-    const category = formData.get("category") as string;
-    const color_kr = formData.get("color_kr") as string;
-    const sku_6_size = formData.get("sku_6_size") as string;
-    const thumbnail_url = formData.get("thumbnail_url") as string;
-    const cost_price = formData.get("cost_price") as string;
-
-    const { data: newProduct, error } = await supabase
-      .from("products")
-      .insert({
-        product_name: product_name || null,
-        sku,
-        parent_sku: parent_sku || null,
-        category: category || null,
-        color_kr: color_kr || null,
-        sku_6_size: sku_6_size || null,
-        thumbnail_url: thumbnail_url || null,
-        cost_price: cost_price ? parseFloat(cost_price) : null,
-        is_active: true,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    // 생성 로그
-    await supabase.from("product_change_logs").insert({
-      table_name: "products",
-      record_id: newProduct.id,
-      field_name: "sku",
-      old_value: null,
-      new_value: sku,
-      changed_by: user?.id,
-      change_type: "create",
-    });
-
+    const result = await createProduct(
+      supabase,
+      {
+        sku: formData.get("sku") as string,
+        product_name: (formData.get("product_name") as string) || undefined,
+        parent_sku: (formData.get("parent_sku") as string) || undefined,
+        category: (formData.get("category") as string) || undefined,
+        color_kr: (formData.get("color_kr") as string) || undefined,
+        sku_6_size: (formData.get("sku_6_size") as string) || undefined,
+        thumbnail_url: (formData.get("thumbnail_url") as string) || undefined,
+        cost_price: formData.get("cost_price")
+          ? parseFloat(formData.get("cost_price") as string)
+          : undefined,
+      },
+      user?.id
+    );
+    if (!result.success) return result;
     return { success: true, message: "새 제품이 추가되었습니다." };
   }
 
   // CSV 업로드 (Upsert)
   if (intent === "csv_upload") {
     const csvData = JSON.parse(formData.get("csvData") as string) as any[];
-    
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (const row of csvData) {
-      if (!row.sku) continue;
-
-      const productData = {
-        sku: row.sku,
-        product_name: row.product_name || null,
-        parent_sku: row.parent_sku || null,
-        category: row.category || null,
-        color_kr: row.color_kr || null,
-        sku_6_size: row.sku_6_size || null,
-        thumbnail_url: row.thumbnail_url || null,
-        cost_price: row.cost_price ? parseFloat(row.cost_price) : null,
-        is_active: row.is_active === "true" || row.is_active === true,
-        updated_at: new Date().toISOString(),
-      };
-
-      const { error } = await supabase
-        .from("products")
-        .upsert(productData, { onConflict: "sku" });
-
-      if (error) {
-        errorCount++;
-      } else {
-        successCount++;
-      }
-    }
-
-    // 업로드 로그
-    await supabase.from("product_change_logs").insert({
-      table_name: "products",
-      record_id: "00000000-0000-0000-0000-000000000000",
-      field_name: "csv_upload",
-      old_value: null,
-      new_value: `${successCount} rows uploaded`,
-      changed_by: user?.id,
-      change_type: "bulk_update",
-    });
-
-    return { 
-      success: true, 
-      message: `CSV 업로드 완료: ${successCount}개 성공, ${errorCount}개 실패` 
+    const result = await uploadCSV(supabase, csvData, user?.id);
+    return {
+      success: true,
+      message: `CSV 업로드 완료: ${result.successCount}개 성공, ${result.errorCount}개 실패`,
     };
   }
 
   // 제품 동기화
   if (intent === "sync") {
-    const supabaseUrl = process.env.SUPABASE_URL!;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
-
-    try {
-      const response = await fetch(
-        `${supabaseUrl}/functions/v1/sync-inventory-simple`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${supabaseKey}`,
-          },
-          body: JSON.stringify({ trigger: "manual" }),
-        }
-      );
-
-      const result = await response.json();
-      
-      if (response.ok && result.success) {
-        return { success: true, message: "제품 동기화가 완료되었습니다!", data: result.data };
-      } else {
-        return { success: false, error: result.error || "동기화 중 오류가 발생했습니다." };
-      }
-    } catch (error: any) {
-      return { success: false, error: error.message || "동기화 중 오류가 발생했습니다." };
-    }
+    const result = await syncProducts();
+    if (!result.success) return { success: false, error: result.error };
+    return { success: true, message: result.message, data: result };
   }
 
   return { success: false, error: "Unknown intent" };
-}
-
-// CSV 다운로드 함수
-function downloadCSV(products: any[], filename: string) {
-  const headers = [
-    "sku",
-    "product_name", 
-    "parent_sku",
-    "category",
-    "color_kr",
-    "sku_6_size",
-    "thumbnail_url",
-    "cost_price",
-    "is_active",
-  ];
-  
-  const csvContent = [
-    headers.join(","),
-    ...products.map(p => 
-      headers.map(h => {
-        const value = p[h];
-        if (value === null || value === undefined) return "";
-        const str = String(value);
-        return str.includes(",") || str.includes('"') || str.includes("\n")
-          ? `"${str.replace(/"/g, '""')}"`
-          : str;
-      }).join(",")
-    )
-  ].join("\n");
-
-  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = filename;
-  link.click();
-}
-
-// CSV 파싱 함수
-function parseCSV(text: string): any[] {
-  const lines = text.split("\n").filter(line => line.trim());
-  if (lines.length < 2) return [];
-
-  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
-  const rows: any[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const values: string[] = [];
-    let current = "";
-    let inQuotes = false;
-
-    for (const char of lines[i]) {
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === "," && !inQuotes) {
-        values.push(current.trim());
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-    values.push(current.trim());
-
-    const row: any = {};
-    headers.forEach((h, idx) => {
-      row[h] = values[idx]?.replace(/^"|"$/g, "") || "";
-    });
-    rows.push(row);
-  }
-
-  return rows;
 }
 
 export default function Products({ loaderData }: Route.ComponentProps) {

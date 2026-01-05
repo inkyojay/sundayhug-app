@@ -607,6 +607,108 @@ export async function getStoreInfo(): Promise<{
 // Token Disconnect
 // ============================================================================
 
+// ============================================================================
+// Invoice API (송장 전송)
+// ============================================================================
+
+export interface InvoiceSendResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+/**
+ * Cafe24 송장 전송
+ * PUT /api/v2/admin/orders/{order_id}/items/{order_item_code}
+ *
+ * 참고: https://developers.cafe24.com/docs/api/admin/#update-an-order-item
+ */
+export async function sendInvoiceToCafe24(
+  mallId: string,
+  accessToken: string,
+  orderId: string,
+  orderItemCode: string,
+  shippingCompanyCode: string,
+  trackingNo: string
+): Promise<InvoiceSendResult> {
+  const apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/orders/${orderId}/items/${orderItemCode}`;
+
+  try {
+    console.log(`📤 Cafe24 송장 전송: 주문=${orderId}, 아이템=${orderItemCode}, 택배사=${shippingCompanyCode}, 송장=${trackingNo}`);
+
+    const response = await fetch(apiUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${accessToken}`,
+        "X-Cafe24-Api-Version": "2024-09-01",
+      },
+      body: JSON.stringify({
+        shop_no: 1,
+        request: {
+          shipping_company_code: shippingCompanyCode,
+          tracking_no: trackingNo,
+        },
+      }),
+    });
+
+    const responseText = await response.text();
+    console.log(`📥 Cafe24 송장 전송 응답 (${response.status}):`, responseText.slice(0, 500));
+
+    let responseData;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch {
+      console.error("❌ Cafe24 송장 전송 응답 파싱 실패:", responseText);
+      return { success: false, error: "API 응답 파싱 실패" };
+    }
+
+    if (!response.ok) {
+      console.error("❌ Cafe24 송장 전송 실패:", response.status, responseData);
+      return {
+        success: false,
+        error: responseData.error?.message || `송장 전송 실패 (${response.status})`
+      };
+    }
+
+    console.log("✅ Cafe24 송장 전송 성공:", orderId, trackingNo);
+    return { success: true, message: "송장이 성공적으로 전송되었습니다" };
+  } catch (error) {
+    console.error("❌ Cafe24 송장 전송 중 오류:", error);
+    return { success: false, error: "송장 전송 중 오류가 발생했습니다" };
+  }
+}
+
+/**
+ * Cafe24 송장 전송 (토큰 자동 관리 버전)
+ * 토큰 갱신 및 mallId 조회를 자동으로 처리
+ */
+export async function sendInvoiceToCafe24WithAuth(
+  orderId: string,
+  orderItemCode: string,
+  shippingCompanyCode: string,
+  trackingNo: string,
+  mallId?: string
+): Promise<InvoiceSendResult> {
+  const token = await getValidToken(mallId);
+  if (!token) {
+    return { success: false, error: "유효한 Cafe24 토큰이 없습니다. 연동을 다시 해주세요." };
+  }
+
+  return sendInvoiceToCafe24(
+    token.mall_id,
+    token.access_token,
+    orderId,
+    orderItemCode,
+    shippingCompanyCode,
+    trackingNo
+  );
+}
+
+// ============================================================================
+// Token Disconnect
+// ============================================================================
+
 /**
  * Cafe24 연동 해제
  */

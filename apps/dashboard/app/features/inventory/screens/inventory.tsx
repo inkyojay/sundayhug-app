@@ -18,15 +18,11 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   LayersIcon,
-  StoreIcon,
-  ShoppingBagIcon,
-  ArrowUpDownIcon,
-  ArrowUpIcon,
-  ArrowDownIcon,
   WarehouseIcon,
-  ExternalLinkIcon,
   SendIcon,
   FileUpIcon,
+  StoreIcon,
+  ShoppingBagIcon,
 } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useFetcher, useRevalidator } from "react-router";
@@ -71,373 +67,100 @@ import {
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
+// lib imports
+import {
+  type InventoryItem,
+  type InventoryGroup,
+  type SortKey,
+  type SortOrder,
+  type ChannelMapping,
+  type Warehouse,
+  exportInventoryToCSV,
+} from "../lib/inventory.shared";
+import {
+  parseInventoryQueryParams,
+  getFilterOptions,
+  getInventoryStats,
+  getInventory,
+  enrichInventoryWithChannelData,
+  updateThreshold,
+  bulkUpdateThreshold,
+  updateWarehouseStock,
+  updatePriorityWarehouse,
+  transferStock,
+  csvImport,
+  type CsvImportItem,
+} from "../lib/inventory.server";
+
+// components imports
+import {
+  ColorChip,
+  StockProgressBar,
+  ChannelMappingDetail,
+  SortableHeader,
+} from "../components";
+
 export const meta: Route.MetaFunction = () => {
   return [{ title: `재고 관리 | Sundayhug Admin` }];
 };
 
-// 색상 맵핑
-const COLOR_MAP: Record<string, string> = {
-  "크림": "#FFFDD0",
-  "아이보리": "#FFFFF0",
-  "화이트": "#FFFFFF",
-  "블랙": "#1a1a1a",
-  "그레이": "#808080",
-  "차콜": "#36454F",
-  "네이비": "#000080",
-  "블루": "#0066CC",
-  "스카이블루": "#87CEEB",
-  "민트": "#98FF98",
-  "그린": "#228B22",
-  "카키": "#6B8E23",
-  "올리브": "#808000",
-  "베이지": "#F5F5DC",
-  "브라운": "#8B4513",
-  "카멜": "#C19A6B",
-  "핑크": "#FFC0CB",
-  "레드": "#DC143C",
-  "버건디": "#800020",
-  "와인": "#722F37",
-  "퍼플": "#800080",
-  "라벤더": "#E6E6FA",
-  "오렌지": "#FF8C00",
-  "옐로우": "#FFD700",
-  "실버": "#C0C0C0",
-  "골드": "#FFD700",
-  "딥씨": "#006994",
-  "모카": "#967969",
-  "버터밀크": "#FFFFC2",
-  "밤부": "#E3DBC9",
-  "더스티핑크": "#D4A5A5",
-  "밀크화이트": "#FDFFF5",
-  "내추럴": "#D4B896",
-  "데일리크림": "#FFF8DC",
-  "베이비핑크": "#F4C2C2",
-  "올리브그린": "#556B2F",
-  "제이드그린": "#00A86B",
-  "페어핑크": "#FFB6C1",
-  "페어베이지": "#F5DEB3",
-  "벌룬블루": "#6495ED",
-  "벌룬베이지": "#DEB887",
-  "오트베이지": "#C3B091",
-};
-
-// 색상칩 컴포넌트
-function ColorChip({ colorName, showLabel = true }: { colorName: string; showLabel?: boolean }) {
-  const findColor = (name: string): string => {
-    if (COLOR_MAP[name]) return COLOR_MAP[name];
-    const lowerName = name.toLowerCase();
-    for (const [key, value] of Object.entries(COLOR_MAP)) {
-      if (lowerName.includes(key.toLowerCase()) || key.toLowerCase().includes(lowerName)) {
-        return value;
-      }
-    }
-    return "#E5E7EB";
-  };
-
-  const bgColor = findColor(colorName);
-  const isDark = ["블랙", "네이비", "차콜", "버건디", "와인", "딥씨"].some(c => colorName.includes(c));
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div className="flex items-center gap-1.5 whitespace-nowrap">
-          <div
-            className="w-4 h-4 rounded-full border flex-shrink-0"
-            style={{
-              backgroundColor: bgColor,
-              borderColor: isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.15)",
-            }}
-          />
-          {showLabel && <span className="text-xs truncate max-w-[80px]">{colorName}</span>}
-        </div>
-      </TooltipTrigger>
-      <TooltipContent>{colorName}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-// 채널 맵핑 정보 타입
-interface ChannelMapping {
-  cafe24: Array<{
-    product_no: number;
-    product_name: string;
-    variant_code: string;
-    options: any;
-    stock_quantity: number;
-    display: string;
-    selling: string;
-  }>;
-  naver: Array<{
-    origin_product_no: number;
-    channel_product_no: number | null;
-    product_name: string;
-    option_name1: string | null;
-    option_value1: string | null;
-    option_name2: string | null;
-    option_value2: string | null;
-    stock_quantity: number;
-    use_yn: string;
-    option_combination_id: number;
-  }>;
-}
-
-// 창고 타입
-interface Warehouse {
-  id: string;
-  warehouse_code: string;
-  warehouse_name: string;
-  warehouse_type: string;
-  is_default?: boolean;
-}
-
-// 창고별 재고 타입
-interface WarehouseStock {
-  warehouse_id: string;
-  sku: string;
-  quantity: number;
-}
-
-// 재고 아이템 타입
-interface InventoryItem {
-  id: string;
-  sku: string;
-  current_stock: number;
-  previous_stock: number | null;
-  stock_change: number | null;
-  alert_threshold: number;
-  synced_at: string | null;
-  products: {
-    id?: string;
-    product_name: string;
-    parent_sku: string;
-    color_kr: string | null;
-    sku_6_size: string | null;
-    priority_warehouse_id?: string | null;
-  } | null;
-  cafe24_stock: number | null;
-  cafe24_synced: string | null;
-  naver_stock: number | null;
-  naver_synced: string | null;
-  channel_mapping?: ChannelMapping;
-  warehouse_stocks?: Record<string, number>; // warehouse_id -> quantity
-}
-
-// 그룹 타입
-interface InventoryGroup {
-  key: string;
-  label: string;
-  items: InventoryItem[];
-  totalStock: number;
-  lowStockCount: number;
-  zeroStockCount: number;
-}
-
-// 정렬 타입
-type SortKey = "sku" | "product_name" | "color" | "size" | "current_stock" | "cafe24_stock" | "naver_stock" | "alert_threshold";
-type SortOrder = "asc" | "desc";
-
 export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
-  
   const url = new URL(request.url);
-  const search = url.searchParams.get("search") || "";
-  const stockFilter = url.searchParams.get("stockFilter") || "all";
-  const parentSku = url.searchParams.get("parentSku") || "";
-  const color = url.searchParams.get("color") || "";
-  const size = url.searchParams.get("size") || "";
-  const warehouseFilter = url.searchParams.get("warehouse") || "all";
-  const groupBy = url.searchParams.get("groupBy") || "none";
-  const page = parseInt(url.searchParams.get("page") || "1");
-  const limitParam = url.searchParams.get("limit") || "100";
-  const limit = parseInt(limitParam);
-  const offset = (page - 1) * limit;
 
-  // 필터 옵션 및 창고 목록
-  const [parentSkusResult, colorsResult, sizesResult, warehousesResult] = await Promise.all([
-    supabase.from("parent_products").select("parent_sku, product_name").order("product_name", { ascending: true }),
-    supabase.from("products").select("color_kr").not("color_kr", "is", null).not("color_kr", "eq", ""),
-    supabase.from("products").select("sku_6_size").not("sku_6_size", "is", null).not("sku_6_size", "eq", ""),
-    supabase.from("warehouses").select("id, warehouse_code, warehouse_name, warehouse_type, is_default").eq("is_active", true).or("is_deleted.is.null,is_deleted.eq.false").order("is_default", { ascending: false }),
+  // 쿼리 파라미터 파싱
+  const params = parseInventoryQueryParams(url);
+
+  // 필터 옵션, 통계, 재고 목록 조회
+  const [filterOptions, stats, inventoryResult] = await Promise.all([
+    getFilterOptions(supabase),
+    getInventoryStats(supabase),
+    getInventory(supabase, params),
   ]);
 
-  const parentSkuOptions = parentSkusResult.data || [];
-  const colorOptions = [...new Set(colorsResult.data?.map((c: any) => c.color_kr))].sort();
-  const sizeOptions = [...new Set(sizesResult.data?.map((s: any) => s.sku_6_size))].sort();
-  const warehouses = warehousesResult.data || [];
-
-  // 통계
-  const { data: latestInventory } = await supabase
-    .from("inventory")
-    .select("sku, current_stock, alert_threshold")
-    .order("synced_at", { ascending: false });
-
-  const uniqueInventory = new Map();
-  latestInventory?.forEach((item: any) => {
-    if (!uniqueInventory.has(item.sku)) uniqueInventory.set(item.sku, item);
-  });
-  const uniqueItems = Array.from(uniqueInventory.values());
-
-  const stats = {
-    total: uniqueItems.length,
-    totalStock: uniqueItems.reduce((sum, item) => sum + (item.current_stock || 0), 0),
-    lowStock: uniqueItems.filter(item => item.current_stock <= item.alert_threshold && item.current_stock > 0).length,
-    zeroStock: uniqueItems.filter(item => item.current_stock === 0).length,
-    normalStock: uniqueItems.filter(item => item.current_stock > item.alert_threshold).length,
-  };
-
-  // 재고 목록 조회
-  let query = supabase
-    .from("inventory")
-    .select(`
-      id, sku, current_stock, previous_stock, stock_change, alert_threshold, synced_at,
-      products!inner (id, product_name, parent_sku, color_kr, sku_6_size, priority_warehouse_id)
-    `)
-    .order("synced_at", { ascending: false });
-
-  if (stockFilter === "low") query = query.gt("current_stock", 0).lte("current_stock", 10);
-  else if (stockFilter === "zero") query = query.eq("current_stock", 0);
-  else if (stockFilter === "normal") query = query.gt("current_stock", 10);
-
-  if (search) query = query.ilike("sku", `%${search}%`);
-  if (parentSku) query = query.eq("products.parent_sku", parentSku);
-  if (color) query = query.eq("products.color_kr", color);
-  if (size) query = query.eq("products.sku_6_size", size);
-
-  // 전체 개수
-  let countQuery = supabase.from("inventory").select("*, products!inner(*)", { count: "exact", head: true });
-  if (stockFilter === "low") countQuery = countQuery.gt("current_stock", 0).lte("current_stock", 10);
-  else if (stockFilter === "zero") countQuery = countQuery.eq("current_stock", 0);
-  else if (stockFilter === "normal") countQuery = countQuery.gt("current_stock", 10);
-  if (search) countQuery = countQuery.ilike("sku", `%${search}%`);
-  if (parentSku) countQuery = countQuery.eq("products.parent_sku", parentSku);
-  if (color) countQuery = countQuery.eq("products.color_kr", color);
-  if (size) countQuery = countQuery.eq("products.sku_6_size", size);
-  
-  const { count: totalCount } = await countQuery;
-
-  // 그룹별 보기일 경우 전체 조회
-  const finalQuery = groupBy !== "none" ? query : query.range(offset, offset + limit - 1);
-  const { data: inventory } = await finalQuery;
-
-  const skus = inventory?.map((i: any) => i.sku) || [];
-  const [cafe24Result, naverResult, cafe24ProductsResult, naverProductsResult, inventoryLocationsResult] = await Promise.all([
-    supabase.from("cafe24_product_variants").select("sku, product_no, variant_code, options, stock_quantity, display, selling, synced_at").in("sku", skus),
-    supabase.from("naver_product_options").select("seller_management_code, origin_product_no, option_combination_id, option_name1, option_value1, option_name2, option_value2, stock_quantity, use_yn, synced_at").in("seller_management_code", skus),
-    supabase.from("cafe24_products").select("product_no, product_name"),
-    supabase.from("naver_products").select("origin_product_no, channel_product_no, product_name"),
-    supabase.from("inventory_locations").select("warehouse_id, sku, quantity").in("sku", skus),
-  ]);
-
-  // SKU별 창고별 재고 맵 생성
-  const warehouseStocksBySku = new Map<string, Record<string, number>>();
-  (inventoryLocationsResult.data || []).forEach((loc: WarehouseStock) => {
-    if (!warehouseStocksBySku.has(loc.sku)) {
-      warehouseStocksBySku.set(loc.sku, {});
-    }
-    warehouseStocksBySku.get(loc.sku)![loc.warehouse_id] = loc.quantity;
-  });
-
-  const cafe24ProductMap = new Map((cafe24ProductsResult.data || []).map((p: any) => [p.product_no, p.product_name]));
-  const naverProductMap = new Map((naverProductsResult.data || []).map((p: any) => [p.origin_product_no, { product_name: p.product_name, channel_product_no: p.channel_product_no }]));
-
-  // Cafe24 중복 제거: 같은 product_no + 같은 options 조합에서 최신 것만 유지
-  const cafe24Unique = new Map<string, any>();
-  (cafe24Result.data || []).forEach((v: any) => {
-    const optionsKey = JSON.stringify(v.options || []);
-    const uniqueKey = `${v.sku}_${v.product_no}_${optionsKey}`;
-    const existing = cafe24Unique.get(uniqueKey);
-    if (!existing || new Date(v.synced_at || 0) > new Date(existing.synced_at || 0)) {
-      cafe24Unique.set(uniqueKey, { ...v, product_name: cafe24ProductMap.get(v.product_no) || "" });
-    }
-  });
-
-  // 네이버 중복 제거: 같은 origin_product_no + 같은 option 조합에서 최신 것만 유지
-  const naverUnique = new Map<string, any>();
-  (naverResult.data || []).forEach((o: any) => {
-    const optionsKey = `${o.option_name1}_${o.option_value1}_${o.option_name2}_${o.option_value2}`;
-    const uniqueKey = `${o.seller_management_code}_${o.origin_product_no}_${optionsKey}`;
-    const existing = naverUnique.get(uniqueKey);
-    const naverProduct = naverProductMap.get(o.origin_product_no);
-    if (!existing || new Date(o.synced_at || 0) > new Date(existing.synced_at || 0)) {
-      naverUnique.set(uniqueKey, { 
-        ...o, 
-        product_name: naverProduct?.product_name || "", 
-        channel_product_no: naverProduct?.channel_product_no || null,
-      });
-    }
-  });
-
-  // SKU별로 그룹핑
-  const cafe24BySku = new Map<string, any[]>();
-  const naverBySku = new Map<string, any[]>();
-  
-  cafe24Unique.forEach((v) => {
-    const list = cafe24BySku.get(v.sku) || [];
-    list.push(v);
-    cafe24BySku.set(v.sku, list);
-  });
-  
-  naverUnique.forEach((o) => {
-    const list = naverBySku.get(o.seller_management_code) || [];
-    list.push(o);
-    naverBySku.set(o.seller_management_code, list);
-  });
-
-  const enrichedInventory = (inventory || []).map((item: any) => {
-    const cafe24List = cafe24BySku.get(item.sku) || [];
-    const naverList = naverBySku.get(item.sku) || [];
-    const latestCafe24 = cafe24List.sort((a, b) => new Date(b.synced_at || 0).getTime() - new Date(a.synced_at || 0).getTime())[0];
-    const latestNaver = naverList.sort((a, b) => new Date(b.synced_at || 0).getTime() - new Date(a.synced_at || 0).getTime())[0];
-
-    return {
-      ...item,
-      cafe24_stock: cafe24List.length > 0 ? cafe24List.reduce((sum, v) => sum + (v.stock_quantity || 0), 0) : null,
-      cafe24_synced: latestCafe24?.synced_at || null,
-      naver_stock: naverList.length > 0 ? naverList.reduce((sum, o) => sum + (o.stock_quantity || 0), 0) : null,
-      naver_synced: latestNaver?.synced_at || null,
-      channel_mapping: { cafe24: cafe24List, naver: naverList },
-      warehouse_stocks: warehouseStocksBySku.get(item.sku) || {},
-    };
-  });
+  // 채널 데이터로 enrichment
+  const enrichedInventory = await enrichInventoryWithChannelData(
+    supabase,
+    inventoryResult.inventory
+  );
 
   return {
     inventory: enrichedInventory,
     stats,
-    totalCount: totalCount || 0,
-    currentPage: groupBy !== "none" ? 1 : page,
-    totalPages: groupBy !== "none" ? 1 : Math.ceil((totalCount || 0) / limit),
-    limit,
-    search,
-    groupBy,
-    filters: { stockFilter, parentSku, color, size, warehouse: warehouseFilter },
-    filterOptions: { parentSkus: parentSkuOptions, colors: colorOptions, sizes: sizeOptions, warehouses },
+    totalCount: inventoryResult.totalCount,
+    currentPage: inventoryResult.currentPage,
+    totalPages: inventoryResult.totalPages,
+    limit: params.limit,
+    search: params.search,
+    groupBy: params.groupBy,
+    filters: {
+      stockFilter: params.stockFilter,
+      parentSku: params.parentSku,
+      color: params.color,
+      size: params.size,
+      warehouse: params.warehouseFilter,
+    },
+    filterOptions,
   };
 }
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const actionType = formData.get("actionType") as string;
-  
+
   const { createAdminClient } = await import("~/core/lib/supa-admin.server");
   const adminClient = createAdminClient();
 
   if (actionType === "updateThreshold") {
     const inventoryId = formData.get("inventoryId") as string;
     const alertThreshold = parseInt(formData.get("alertThreshold") as string);
-    const { error } = await adminClient.from("inventory").update({ alert_threshold: alertThreshold }).eq("id", inventoryId);
-    if (error) return { success: false, error: error.message };
-    return { success: true, message: "안전재고가 업데이트되었습니다." };
+    return await updateThreshold(adminClient, inventoryId, alertThreshold);
   }
 
   if (actionType === "bulkUpdateThreshold") {
     const inventoryIds = JSON.parse(formData.get("inventoryIds") as string) as string[];
     const alertThreshold = parseInt(formData.get("alertThreshold") as string);
-    let successCount = 0;
-    for (const id of inventoryIds) {
-      const { error } = await adminClient.from("inventory").update({ alert_threshold: alertThreshold }).eq("id", id);
-      if (!error) successCount++;
-    }
-    return { success: true, message: `${successCount}개 항목의 안전재고가 ${alertThreshold}로 설정되었습니다.` };
+    return await bulkUpdateThreshold(adminClient, inventoryIds, alertThreshold);
   }
 
   // 채널 재고 푸시
@@ -613,50 +336,7 @@ export async function action({ request }: Route.ActionArgs) {
     const warehouseId = formData.get("warehouseId") as string;
     const quantity = parseInt(formData.get("quantity") as string);
     const warehouseName = formData.get("warehouseName") as string;
-
-    // 기존 재고 조회
-    const { data: existing } = await adminClient
-      .from("inventory_locations")
-      .select("quantity, product_id")
-      .eq("sku", sku)
-      .eq("warehouse_id", warehouseId)
-      .single();
-
-    const previousQty = existing?.quantity || 0;
-
-    // product_id 조회 (없으면)
-    let productId = existing?.product_id;
-    if (!productId) {
-      const { data: product } = await adminClient.from("products").select("id").eq("sku", sku).single();
-      productId = product?.id;
-    }
-
-    // upsert
-    const { error } = await adminClient
-      .from("inventory_locations")
-      .upsert({
-        warehouse_id: warehouseId,
-        sku,
-        product_id: productId,
-        quantity,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "warehouse_id,sku" });
-
-    if (error) return { success: false, error: error.message };
-
-    // 재고 이력 기록
-    if (productId) {
-      await adminClient.from("inventory_history").insert({
-        product_id: productId,
-        sku,
-        stock_before: previousQty,
-        stock_after: quantity,
-        stock_change: quantity - previousQty,
-        change_reason: `창고 재고 수동 조정 (${warehouseName}): ${previousQty} → ${quantity}`,
-      });
-    }
-
-    return { success: true, message: `${warehouseName} 재고가 ${quantity}개로 변경되었습니다.` };
+    return await updateWarehouseStock(adminClient, sku, warehouseId, quantity, warehouseName);
   }
 
   // 우선 출고 창고 변경
@@ -664,14 +344,7 @@ export async function action({ request }: Route.ActionArgs) {
     const sku = formData.get("sku") as string;
     const warehouseId = formData.get("warehouseId") as string;
     const warehouseName = formData.get("warehouseName") as string;
-
-    const { error } = await adminClient
-      .from("products")
-      .update({ priority_warehouse_id: warehouseId })
-      .eq("sku", sku);
-
-    if (error) return { success: false, error: error.message };
-    return { success: true, message: `우선 출고 창고가 ${warehouseName}(으)로 변경되었습니다.` };
+    return await updatePriorityWarehouse(adminClient, sku, warehouseId, warehouseName);
   }
 
   // 창고 간 재고 이동
@@ -682,347 +355,25 @@ export async function action({ request }: Route.ActionArgs) {
     const quantity = parseInt(formData.get("quantity") as string);
     const fromWarehouseName = formData.get("fromWarehouseName") as string;
     const toWarehouseName = formData.get("toWarehouseName") as string;
-
-    if (fromWarehouseId === toWarehouseId) {
-      return { success: false, error: "출발 창고와 도착 창고가 같을 수 없습니다." };
-    }
-
-    if (quantity <= 0) {
-      return { success: false, error: "이동 수량은 1개 이상이어야 합니다." };
-    }
-
-    // 출발 창고 재고 확인
-    const { data: fromStock } = await adminClient
-      .from("inventory_locations")
-      .select("quantity, product_id")
-      .eq("warehouse_id", fromWarehouseId)
-      .eq("sku", sku)
-      .single();
-
-    if (!fromStock || fromStock.quantity < quantity) {
-      return { success: false, error: `출발 창고 재고 부족: 현재 ${fromStock?.quantity || 0}개, 요청 ${quantity}개` };
-    }
-
-    const productId = fromStock.product_id;
-
-    // 출발 창고 재고 차감
-    await adminClient
-      .from("inventory_locations")
-      .update({ quantity: fromStock.quantity - quantity, updated_at: new Date().toISOString() })
-      .eq("warehouse_id", fromWarehouseId)
-      .eq("sku", sku);
-
-    // 도착 창고 재고 증가
-    const { data: toStock } = await adminClient
-      .from("inventory_locations")
-      .select("quantity")
-      .eq("warehouse_id", toWarehouseId)
-      .eq("sku", sku)
-      .single();
-
-    if (toStock) {
-      await adminClient
-        .from("inventory_locations")
-        .update({ quantity: toStock.quantity + quantity, updated_at: new Date().toISOString() })
-        .eq("warehouse_id", toWarehouseId)
-        .eq("sku", sku);
-    } else {
-      await adminClient
-        .from("inventory_locations")
-        .insert({
-          warehouse_id: toWarehouseId,
-          sku,
-          product_id: productId,
-          quantity,
-        });
-    }
-
-    // 이동 이력 기록
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const { count } = await adminClient
-      .from("stock_transfers")
-      .select("*", { count: "exact", head: true })
-      .ilike("transfer_number", `TRF-${today}%`);
-
-    const transferNumber = `TRF-${today}-${String((count || 0) + 1).padStart(4, "0")}`;
-
-    await adminClient.from("stock_transfers").insert({
-      transfer_number: transferNumber,
+    return await transferStock(
+      adminClient,
       sku,
-      product_id: productId,
-      from_warehouse_id: fromWarehouseId,
-      to_warehouse_id: toWarehouseId,
+      fromWarehouseId,
+      toWarehouseId,
       quantity,
-      status: "completed",
-      completed_at: new Date().toISOString(),
-    });
-
-    // 재고 이력 기록
-    if (productId) {
-      await adminClient.from("inventory_history").insert({
-        product_id: productId,
-        sku,
-        stock_before: fromStock.quantity,
-        stock_after: fromStock.quantity - quantity,
-        stock_change: -quantity,
-        change_reason: `창고 이동 출고: ${fromWarehouseName} → ${toWarehouseName} (${transferNumber})`,
-      });
-    }
-
-    return { success: true, message: `${quantity}개가 ${fromWarehouseName}에서 ${toWarehouseName}(으)로 이동되었습니다.` };
+      fromWarehouseName,
+      toWarehouseName
+    );
   }
 
   // CSV 일괄 재고 수정
   if (actionType === "csvImport") {
     const itemsStr = formData.get("items") as string;
-    const items = JSON.parse(itemsStr) as Array<{
-      sku: string;
-      warehouseId: string;
-      warehouseName: string;
-      oldQuantity: number;
-      newQuantity: number;
-    }>;
-
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const item of items) {
-      // product_id 조회
-      const { data: product } = await adminClient
-        .from("products")
-        .select("id")
-        .eq("sku", item.sku)
-        .single();
-
-      // 기존 재고 조회
-      const { data: existing } = await adminClient
-        .from("inventory_locations")
-        .select("quantity")
-        .eq("sku", item.sku)
-        .eq("warehouse_id", item.warehouseId)
-        .single();
-
-      const previousQty = existing?.quantity || 0;
-
-      // upsert
-      const { error } = await adminClient
-        .from("inventory_locations")
-        .upsert({
-          warehouse_id: item.warehouseId,
-          sku: item.sku,
-          product_id: product?.id || null,
-          quantity: item.newQuantity,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "warehouse_id,sku" });
-
-      if (error) {
-        failCount++;
-        continue;
-      }
-
-      successCount++;
-
-      // 재고 이력 기록
-      if (product?.id && previousQty !== item.newQuantity) {
-        await adminClient.from("inventory_history").insert({
-          product_id: product.id,
-          sku: item.sku,
-          warehouse_id: item.warehouseId,
-          change_type: "csv_import",
-          stock_before: previousQty,
-          stock_after: item.newQuantity,
-          stock_change: item.newQuantity - previousQty,
-          change_reason: `CSV 일괄 수정 (${item.warehouseName}): ${previousQty} → ${item.newQuantity}`,
-        });
-      }
-    }
-
-    return {
-      success: failCount === 0,
-      message: `${successCount}개 항목 수정 완료${failCount > 0 ? `, ${failCount}개 실패` : ""}`,
-    };
+    const items = JSON.parse(itemsStr) as CsvImportItem[];
+    return await csvImport(adminClient, items);
   }
 
   return { success: false, error: "지원하지 않는 액션입니다." };
-}
-
-// 재고 프로그레스 바
-function StockProgressBar({ current, threshold }: { current: number; threshold: number }) {
-  const maxStock = Math.max(threshold * 3, 50);
-  const percentage = Math.min((current / maxStock) * 100, 100);
-  const thresholdPercentage = (threshold / maxStock) * 100;
-  
-  let barColor = "bg-emerald-500";
-  if (current === 0) barColor = "bg-red-500";
-  else if (current <= threshold) barColor = "bg-amber-500";
-
-  return (
-    <div className="flex items-center gap-2 whitespace-nowrap">
-      <span className="font-medium w-10 text-right text-sm">{current}</span>
-      <div className="relative flex-1 h-2 bg-muted rounded-full overflow-hidden" style={{ minWidth: 60 }}>
-        <div className={`absolute left-0 top-0 h-full ${barColor} rounded-full`} style={{ width: `${percentage}%` }} />
-        <div className="absolute top-0 w-0.5 h-full bg-gray-400" style={{ left: `${thresholdPercentage}%` }} />
-      </div>
-      <span className="text-[10px] text-muted-foreground">안전:{threshold}</span>
-    </div>
-  );
-}
-
-// 채널 맵핑 상세
-function ChannelMappingDetail({ mapping }: { mapping: ChannelMapping }) {
-  if (!mapping.cafe24.length && !mapping.naver.length) {
-    return <div className="text-sm text-muted-foreground p-4">채널에 맵핑된 상품이 없습니다.</div>;
-  }
-
-  // 옵션 값 포맷팅 함수
-  const formatOptions = (options: any): string => {
-    if (!options) return "";
-    if (typeof options === "string") return options;
-    if (Array.isArray(options)) {
-      return options.map((opt: any) => {
-        if (typeof opt === "string") return opt;
-        if (opt && typeof opt === "object") {
-          return opt.value || opt.name || JSON.stringify(opt);
-        }
-        return "";
-      }).filter(Boolean).join(" / ");
-    }
-    if (typeof options === "object") {
-      return Object.values(options).filter(v => v && typeof v !== "object").join(" / ");
-    }
-    return "";
-  };
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 bg-muted/30">
-      {/* Cafe24 */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <div className="w-5 h-5 bg-blue-500 rounded flex items-center justify-center">
-            <StoreIcon className="w-3 h-3 text-white" />
-          </div>
-          Cafe24 ({mapping.cafe24.length}개)
-        </div>
-        {mapping.cafe24.length === 0 ? (
-          <div className="text-xs text-muted-foreground">맵핑 없음</div>
-        ) : (
-          <div className="space-y-1">
-            {mapping.cafe24.map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between p-2 bg-white rounded border text-xs">
-                <div className="flex-1 min-w-0 mr-2">
-                  <div className="flex items-center gap-1">
-                    <span className="font-medium truncate">{item.product_name || `상품 #${item.product_no}`}</span>
-                    <button
-                      className="p-0.5 hover:bg-muted rounded text-blue-500 flex-shrink-0"
-                      onClick={() => window.open(`https://sundayhug.kr/surl/p/${item.product_no}`, "_blank")}
-                      title="Cafe24에서 보기"
-                    >
-                      <ExternalLinkIcon className="w-3 h-3" />
-                    </button>
-                  </div>
-                  <div className="text-muted-foreground truncate">
-                    {formatOptions(item.options) || item.variant_code}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Badge variant={item.stock_quantity > 0 ? "secondary" : "destructive"} className="text-xs">{item.stock_quantity}</Badge>
-                  {item.selling === "T" && item.display === "T" ? (
-                    <span className="text-green-600 text-[10px]">판매중</span>
-                  ) : (
-                    <span className="text-gray-400 text-[10px]">미판매</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 네이버 */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <div className="w-5 h-5 bg-green-500 rounded flex items-center justify-center">
-            <ShoppingBagIcon className="w-3 h-3 text-white" />
-          </div>
-          네이버 스마트스토어 ({mapping.naver.length}개)
-        </div>
-        {mapping.naver.length === 0 ? (
-          <div className="text-xs text-muted-foreground">맵핑 없음</div>
-        ) : (
-          <div className="space-y-1">
-            {mapping.naver.map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between p-2 bg-white rounded border text-xs">
-                <div className="flex-1 min-w-0 mr-2">
-                  <div className="flex items-center gap-1">
-                    <span className="font-medium truncate">{item.product_name || `상품 #${item.origin_product_no}`}</span>
-                    <button
-                      className="p-0.5 hover:bg-muted rounded text-green-500 flex-shrink-0"
-                      onClick={() => {
-                        const productNo = item.channel_product_no || item.origin_product_no;
-                        window.open(`https://brand.naver.com/sundayhug/products/${productNo}`, "_blank");
-                      }}
-                      title="스마트스토어에서 보기"
-                    >
-                      <ExternalLinkIcon className="w-3 h-3" />
-                    </button>
-                  </div>
-                  <div className="text-muted-foreground truncate">
-                    {[
-                      item.option_name1 && item.option_value1 ? `${item.option_name1}: ${item.option_value1}` : null,
-                      item.option_name2 && item.option_value2 ? `${item.option_name2}: ${item.option_value2}` : null,
-                    ].filter(Boolean).join(" / ") || "단일옵션"}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Badge variant={item.stock_quantity > 0 ? "secondary" : "destructive"} className="text-xs">{item.stock_quantity}</Badge>
-                  {item.use_yn === "Y" ? (
-                    <span className="text-green-600 text-[10px]">사용</span>
-                  ) : (
-                    <span className="text-gray-400 text-[10px]">미사용</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// 정렬 헤더
-function SortableHeader({ 
-  children, 
-  sortKey, 
-  currentSort, 
-  currentOrder, 
-  onSort,
-  className = "",
-}: {
-  children: React.ReactNode;
-  sortKey: SortKey;
-  currentSort: SortKey | null;
-  currentOrder: SortOrder;
-  onSort: (key: SortKey) => void;
-  className?: string;
-}) {
-  const isSorted = currentSort === sortKey;
-  
-  return (
-    <th 
-      className={`px-3 py-3 text-left text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none ${className}`}
-      onClick={() => onSort(sortKey)}
-    >
-      <div className="flex items-center gap-1">
-        {children}
-        {isSorted ? (
-          currentOrder === "asc" ? <ArrowUpIcon className="w-3 h-3" /> : <ArrowDownIcon className="w-3 h-3" />
-        ) : (
-          <ArrowUpDownIcon className="w-3 h-3 opacity-30" />
-        )}
-      </div>
-    </th>
-  );
 }
 
 export default function Inventory({ loaderData }: Route.ComponentProps) {

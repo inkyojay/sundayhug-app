@@ -24,11 +24,19 @@ import {
   TruckIcon,
   ClipboardCheckIcon,
   CreditCardIcon,
-  PackageCheckIcon,
   ArrowRightIcon,
+  PackageCheckIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useFetcher, useNavigate, Link } from "react-router";
+
+// lib imports
+import {
+  getWarehouses,
+  getProducts,
+  generateReturnNumber,
+  searchOrders,
+} from "../lib/returns.server";
 
 import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
@@ -126,26 +134,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const makeServerClient = (await import("~/core/lib/supa-client.server")).default;
   const [supabase] = makeServerClient(request);
 
-  // 창고 목록
-  const { data: warehouses } = await supabase
-    .from("warehouses")
-    .select("id, warehouse_name, warehouse_code")
-    .eq("is_active", true)
-    .order("warehouse_name");
-
-  // 제품 목록
-  const { data: products } = await supabase
-    .from("products")
-    .select("id, sku, product_name, color_kr, sku_6_size")
-    .order("sku");
-
-  // 새 번호 생성
-  const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const { count } = await supabase
-    .from("returns_exchanges")
-    .select("*", { count: "exact", head: true })
-    .like("return_number", `RE-${today}%`);
-  const newReturnNumber = `RE-${today}-${String((count || 0) + 1).padStart(3, "0")}`;
+  // 병렬로 기본 데이터 조회
+  const [warehouses, products, newReturnNumber] = await Promise.all([
+    getWarehouses(supabase),
+    getProducts(supabase),
+    generateReturnNumber(supabase),
+  ]);
 
   // 수정 모드일 경우 기존 데이터 로드
   const id = params.id;
@@ -154,31 +148,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   let exchangeProducts: any[] = [];
 
   if (id && id !== "new") {
-    const { data } = await supabase
-      .from("returns_exchanges")
-      .select("*")
-      .eq("id", id)
-      .single();
-    existingData = data;
-
-    // 반품 품목 로드
-    const { data: items } = await supabase
-      .from("return_exchange_items")
-      .select("*")
-      .eq("return_id", id);
-    existingItems = items || [];
-
-    // 교환 대상 제품 로드
-    const { data: exchProducts } = await supabase
-      .from("return_exchange_products")
-      .select("*")
-      .eq("return_id", id);
-    exchangeProducts = exchProducts || [];
+    const [returnData, itemsData, exchProductsData] = await Promise.all([
+      supabase.from("returns_exchanges").select("*").eq("id", id).single(),
+      supabase.from("return_exchange_items").select("*").eq("return_id", id),
+      supabase.from("return_exchange_products").select("*").eq("return_id", id),
+    ]);
+    existingData = returnData.data;
+    existingItems = itemsData.data || [];
+    exchangeProducts = exchProductsData.data || [];
   }
 
   return {
-    warehouses: warehouses || [],
-    products: products || [],
+    warehouses,
+    products,
     newReturnNumber,
     existingData,
     existingItems,
@@ -241,51 +223,7 @@ export async function action({ request }: Route.ActionArgs) {
   // 주문 검색
   if (intent === "search_order") {
     const searchQuery = formData.get("search_query") as string;
-
-    if (!searchQuery) {
-      return { orders: [] };
-    }
-
-    const { data: ordersData } = await supabase
-      .from("orders")
-      .select(`
-        id, shop_ord_no, ord_time, to_name, to_tel, to_htel,
-        shop_cd, shop_sale_name, shop_opt_name, shop_sku_cd, sale_cnt
-      `)
-      .in("shop_cd", ["cafe24", "naver"])
-      .or(`shop_ord_no.ilike.%${searchQuery}%,to_name.ilike.%${searchQuery}%,to_tel.ilike.%${searchQuery}%,to_htel.ilike.%${searchQuery}%`)
-      .order("ord_time", { ascending: false })
-      .limit(50);
-
-    const ordersMap = new Map<string, any>();
-
-    for (const row of ordersData || []) {
-      const key = `${row.shop_cd}_${row.shop_ord_no}`;
-
-      if (!ordersMap.has(key)) {
-        ordersMap.set(key, {
-          channel: row.shop_cd || "direct",
-          order_number: row.shop_ord_no || "",
-          order_date: row.ord_time || "",
-          customer_name: row.to_name || "",
-          customer_phone: row.to_tel || row.to_htel || "",
-          items: [],
-        });
-      }
-
-      const order = ordersMap.get(key)!;
-      order.items.push({
-        sku: row.shop_sku_cd || "",
-        product_name: row.shop_sale_name || "",
-        option_name: row.shop_opt_name || "",
-        quantity: row.sale_cnt || 1,
-      });
-    }
-
-    const orders = Array.from(ordersMap.values())
-      .sort((a, b) => new Date(b.order_date).getTime() - new Date(a.order_date).getTime())
-      .slice(0, 20);
-
+    const orders = await searchOrders(supabase, searchQuery);
     return { orders };
   }
 

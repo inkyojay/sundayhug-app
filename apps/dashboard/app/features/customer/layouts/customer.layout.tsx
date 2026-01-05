@@ -1,27 +1,37 @@
 /**
  * 고객용 레이아웃 (새로운 디자인)
- * 
+ *
  * - 깔끔한 헤더 (로고 왼쪽, 네비 중앙, 사용자 오른쪽)
  * - 서비스 센터 운영시간 표시
  * - 크림색 배경 테마
  */
 import type { Route } from "./+types/customer.layout";
 
-import { Link, Outlet, useLocation, useNavigate, useLoaderData, data } from "react-router";
-import { 
-  HomeIcon, 
-  ShieldCheckIcon, 
-  MoonIcon, 
+import {
+  Link,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useLoaderData,
+  data,
+} from "react-router";
+import {
+  HomeIcon,
+  ShieldCheckIcon,
+  MoonIcon,
   UserIcon,
   LogOutIcon,
   Menu,
-  X
+  X,
 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "~/core/components/ui/button";
 import { cn } from "~/core/lib/utils";
 import makeServerClient from "~/core/lib/supa-client.server";
+
+import { getLayoutUserInfo } from "../lib/customer.server";
+import { isActivePath } from "../lib/customer.shared";
 
 const navItems = [
   { label: "홈", href: "/customer" },
@@ -37,26 +47,11 @@ const mobileNavItems = [
   { label: "마이페이지", href: "/customer/mypage", icon: UserIcon },
 ];
 
-
 // 서버에서 인증 상태 확인
 export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
-  const { data: { user } } = await supabase.auth.getUser();
-  
-  if (user) {
-    const name = user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split("@")[0];
-    return data({
-      isLoggedIn: true,
-      userName: name || "회원",
-      isVip: true, // TODO: 실제 VIP 여부 체크
-    });
-  }
-  
-  return data({
-    isLoggedIn: false,
-    userName: null,
-    isVip: false,
-  });
+  const userInfo = await getLayoutUserInfo(supabase);
+  return data(userInfo);
 }
 
 export default function CustomerLayout() {
@@ -68,13 +63,8 @@ export default function CustomerLayout() {
   const handleLogout = () => {
     navigate("/logout");
   };
-  
-  const isActive = (href: string) => {
-    if (href === "/customer") {
-      return location.pathname === "/customer";
-    }
-    return location.pathname.startsWith(href);
-  };
+
+  const isActive = (href: string) => isActivePath(location.pathname, href);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F5F5F0] dark:bg-[#121212] transition-colors duration-300">

@@ -82,16 +82,12 @@ const data = {
     // ===== 주문 관리 =====
     {
       title: "주문 관리",
-      url: "/dashboard/orders",
+      url: "/dashboard/orders/unified",
       icon: ShoppingCartIcon,
       items: [
         {
-          title: "주문 목록 (B2C)",
-          url: "/dashboard/orders",
-        },
-        {
-          title: "쿠팡 주문",
-          url: "/dashboard/integrations/coupang/orders",
+          title: "통합 주문 관리",
+          url: "/dashboard/orders/unified",
         },
         {
           title: "B2B 업체",
@@ -116,15 +112,15 @@ const data = {
         },
         {
           title: "제품 분류",
-          url: "/dashboard/parent-products",
+          url: "/dashboard/products/categories",
         },
         {
           title: "카페24 제품",
-          url: "/dashboard/products-cafe24",
+          url: "/dashboard/products/cafe24",
         },
         {
           title: "스마트스토어 제품",
-          url: "/dashboard/products-naver",
+          url: "/dashboard/products/naver",
         },
         {
           title: "쿠팡 제품",
@@ -149,7 +145,7 @@ const data = {
         },
         {
           title: "재고 이력",
-          url: "/dashboard/inventory-history",
+          url: "/dashboard/inventory/history",
         },
         {
           title: "창고 관리",

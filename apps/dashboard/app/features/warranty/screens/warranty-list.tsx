@@ -1,6 +1,6 @@
 /**
  * 보증서 관리 - 전체 목록 (관리자용)
- * 
+ *
  * 기능:
  * - 보증서 목록 조회/검색/필터
  * - 인라인 상태 변경
@@ -82,81 +82,57 @@ import {
 import makeServerClient from "~/core/lib/supa-client.server";
 import adminClient from "~/core/lib/supa-admin-client.server";
 
+import {
+  getWarrantyStats,
+  getWarrantyList,
+  deleteWarranties,
+  bulkUpdateWarrantyStatus,
+} from "../lib/warranty.server";
+import {
+  WARRANTY_STATUS_CONFIG,
+  buildWarrantyListUrl,
+  generateWarrantyCsvData,
+  formatDate,
+} from "../lib/warranty.shared";
+
 export const meta: Route.MetaFunction = () => {
   return [{ title: `보증서 관리 | Sundayhug Admin` }];
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
-  
+
   const url = new URL(request.url);
   const search = url.searchParams.get("search") || "";
   const statusFilter = url.searchParams.get("status") || "all";
   const page = parseInt(url.searchParams.get("page") || "1");
   const limitParam = url.searchParams.get("limit") || "50";
   const limit = parseInt(limitParam);
-  const offset = (page - 1) * limit;
   const sortBy = url.searchParams.get("sortBy") || "created_at";
-  const sortOrder = url.searchParams.get("sortOrder") || "desc";
+  const sortOrder = (url.searchParams.get("sortOrder") || "desc") as "asc" | "desc";
 
   // 통계 데이터
-  const { data: statsData } = await supabase
-    .from("warranty_stats")
-    .select("*")
-    .single();
+  const stats = await getWarrantyStats(supabase);
 
-  const stats = statsData || {
-    total_warranties: 0,
-    pending_count: 0,
-    approved_count: 0,
-    rejected_count: 0,
-    this_week: 0,
-  };
-
-  // 보증서 목록 쿼리
-  let query = supabase
-    .from("warranties")
-    .select(`
-      id,
-      warranty_number,
-      tracking_number,
-      customer_phone,
-      buyer_name,
-      product_name,
-      product_option,
-      warranty_start,
-      warranty_end,
-      status,
-      created_at,
-      rejection_reason,
-      customers (
-        name,
-        kakao_nickname
-      )
-    `, { count: "exact" })
-    .order(sortBy, { ascending: sortOrder === "asc" });
-
-  // 상태 필터
-  if (statusFilter !== "all") {
-    query = query.eq("status", statusFilter);
-  }
-
-  // 검색 (보증서번호, 송장번호, 연락처, 구매자명)
-  if (search) {
-    query = query.or(`warranty_number.ilike.%${search}%,tracking_number.ilike.%${search}%,customer_phone.ilike.%${search}%,buyer_name.ilike.%${search}%`);
-  }
-
-  // 페이지네이션
-  query = query.range(offset, offset + limit - 1);
-
-  const { data: warranties, count } = await query;
+  // 보증서 목록 조회
+  const { warranties, totalCount, currentPage, totalPages } = await getWarrantyList(
+    supabase,
+    {
+      search,
+      statusFilter,
+      page,
+      limit,
+      sortBy,
+      sortOrder,
+    }
+  );
 
   return {
-    warranties: warranties || [],
+    warranties,
     stats,
-    totalCount: count || 0,
-    currentPage: page,
-    totalPages: Math.ceil((count || 0) / limit),
+    totalCount,
+    currentPage,
+    totalPages,
     limit,
     search,
     statusFilter,
@@ -175,37 +151,7 @@ export async function action({ request }: Route.ActionArgs) {
     const idsJson = formData.get("ids") as string;
     const ids = JSON.parse(idsJson) as string[];
 
-    if (ids.length === 0) {
-      return { success: false, error: "삭제할 항목을 선택해주세요." };
-    }
-
-    try {
-      // 1. 먼저 관련 review_submissions 삭제 (외래키 제약조건)
-      const { error: reviewError } = await adminClient
-        .from("review_submissions")
-        .delete()
-        .in("warranty_id", ids);
-
-      if (reviewError) {
-        console.error("리뷰 삭제 오류:", reviewError);
-      }
-
-      // 2. 보증서 삭제
-      const { error } = await adminClient
-        .from("warranties")
-        .delete()
-        .in("id", ids);
-
-      if (error) {
-        console.error("삭제 오류:", error);
-        return { success: false, error: `삭제 중 오류가 발생했습니다: ${error.message}` };
-      }
-
-      return { success: true, message: `${ids.length}개 보증서가 삭제되었습니다.` };
-    } catch (error: any) {
-      console.error("삭제 예외:", error);
-      return { success: false, error: error.message || "삭제 중 오류가 발생했습니다." };
-    }
+    return deleteWarranties(adminClient, ids);
   }
 
   // 상태 변경 (단일)
@@ -214,27 +160,7 @@ export async function action({ request }: Route.ActionArgs) {
     const newStatus = formData.get("status") as string;
     const rejectionReason = formData.get("rejectionReason") as string;
 
-    const updateData: any = { status: newStatus };
-    if (newStatus === "rejected" && rejectionReason) {
-      updateData.rejection_reason = rejectionReason;
-    }
-    if (newStatus === "approved") {
-      updateData.warranty_start = new Date().toISOString();
-      // 5년 보증
-      const endDate = new Date();
-      endDate.setFullYear(endDate.getFullYear() + 5);
-      updateData.warranty_end = endDate.toISOString();
-    }
-
-    const { error } = await adminClient
-      .from("warranties")
-      .update(updateData)
-      .eq("id", id);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-    return { success: true, message: "상태가 변경되었습니다." };
+    return bulkUpdateWarrantyStatus(adminClient, [id], newStatus, rejectionReason);
   }
 
   // 일괄 상태 변경
@@ -244,30 +170,7 @@ export async function action({ request }: Route.ActionArgs) {
     const newStatus = formData.get("status") as string;
     const rejectionReason = formData.get("rejectionReason") as string;
 
-    if (ids.length === 0) {
-      return { success: false, error: "변경할 항목을 선택해주세요." };
-    }
-
-    const updateData: any = { status: newStatus };
-    if (newStatus === "rejected" && rejectionReason) {
-      updateData.rejection_reason = rejectionReason;
-    }
-    if (newStatus === "approved") {
-      updateData.warranty_start = new Date().toISOString();
-      const endDate = new Date();
-      endDate.setFullYear(endDate.getFullYear() + 5);
-      updateData.warranty_end = endDate.toISOString();
-    }
-
-    const { error } = await adminClient
-      .from("warranties")
-      .update(updateData)
-      .in("id", ids);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-    return { success: true, message: `${ids.length}개 보증서가 ${newStatus === "approved" ? "승인" : newStatus === "rejected" ? "거절" : "변경"}되었습니다.` };
+    return bulkUpdateWarrantyStatus(adminClient, ids, newStatus, rejectionReason);
   }
 
   return { success: false, error: "알 수 없는 액션입니다." };

@@ -7,6 +7,7 @@
 import type { Route } from "./+types/coupang-sync-orders";
 import { createClient } from "@supabase/supabase-js";
 import {
+  getCoupangCredentials,
   getCoupangCredentialsByVendorId,
   getAllCoupangOrders,
   formatDateForCoupang,
@@ -28,6 +29,8 @@ function mapCoupangOrderToDb(
     uniq: `COUPANG-${order.orderId}-${item.vendorItemId}`,
     ori_uniq: String(order.orderId),
     bundle_no: String(order.orderId),
+    sol_no: String(order.orderId), // 솔루션 주문번호 (필수)
+    ord_no: String(order.orderId), // 주문번호
 
     // 쇼핑몰 정보
     shop_cd: "coupang",
@@ -41,7 +44,7 @@ function mapCoupangOrderToDb(
     // 상품 정보
     shop_sale_name: item.productName,
     shop_sku_cd: String(item.vendorItemId),
-    shop_opt_name: "",
+    shop_opt_name: item.sellerProductItemName || "",
 
     // 수량 및 금액
     sale_cnt: item.salesQuantity,
@@ -67,16 +70,14 @@ export async function action({ request }: Route.ActionArgs) {
   );
 
   const formData = await request.formData();
-  const vendorId = formData.get("vendor_id") as string;
-  const dateFromStr = formData.get("date_from") as string; // yyyy-MM-dd
-  const dateToStr = formData.get("date_to") as string; // yyyy-MM-dd
+  const vendorIdParam = formData.get("vendor_id") as string;
+  const dateFromStr = formData.get("date_from") as string; // yyyyMMdd
+  const dateToStr = formData.get("date_to") as string; // yyyyMMdd
 
-  if (!vendorId) {
-    return { error: "판매자 ID가 필요합니다." };
-  }
-
-  // 인증 정보 조회
-  const credentials = await getCoupangCredentialsByVendorId(vendorId);
+  // 인증 정보 조회 ("auto"인 경우 활성화된 첫 번째 인증정보 사용)
+  const credentials = vendorIdParam === "auto"
+    ? await getCoupangCredentials()
+    : await getCoupangCredentialsByVendorId(vendorIdParam);
 
   if (!credentials) {
     return { error: "쿠팡 연동 정보가 없습니다. 먼저 연동을 설정해주세요." };
@@ -85,6 +86,8 @@ export async function action({ request }: Route.ActionArgs) {
   if (!credentials.is_active) {
     return { error: "쿠팡 연동이 비활성화되어 있습니다." };
   }
+
+  const vendorId = credentials.vendor_id;
 
   // 날짜 기본값 (오늘 기준 7일)
   const now = new Date();

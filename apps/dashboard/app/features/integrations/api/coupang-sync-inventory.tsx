@@ -106,12 +106,11 @@ export async function action({ request }: Route.ActionArgs) {
       console.warn("[Coupang] 로켓그로스 창고(WH-COUPANG-RG)가 없습니다. inventory_locations 동기화 건너뜀");
     }
 
-    // 2. SKU 매핑된 로켓그로스 옵션 조회
+    // 2. SKU 매핑된 옵션 조회 (로켓그로스 + 판매자배송 모두)
     const { data: optionsWithSku } = await adminClient
       .from("coupang_product_options")
       .select("vendor_item_id, external_vendor_sku, sku_id, fulfillment_type")
-      .not("sku_id", "is", null)
-      .eq("fulfillment_type", "ROCKET_GROWTH");
+      .not("sku_id", "is", null);
 
     // vendor_item_id를 키로 하는 재고 맵 생성
     const inventoryMap: Record<number, typeof inventoryList[0]> = {};
@@ -138,14 +137,13 @@ export async function action({ request }: Route.ActionArgs) {
 
         const prevQty = existing?.quantity || 0;
 
-        // inventory_locations upsert
+        // inventory_locations upsert (product_id 컬럼 없음)
         const { error: locError } = await adminClient
           .from("inventory_locations")
           .upsert(
             {
               warehouse_id: warehouse.id,
               sku: opt.external_vendor_sku,
-              product_id: opt.sku_id,
               quantity: newQty,
               updated_at: new Date().toISOString(),
             },
@@ -161,13 +159,12 @@ export async function action({ request }: Route.ActionArgs) {
           if (prevQty !== newQty) {
             await adminClient.from("inventory_history").insert({
               sku: opt.external_vendor_sku,
-              product_id: opt.sku_id,
               warehouse_id: warehouse.id,
               change_type: "sync",
               stock_before: prevQty,
               stock_after: newQty,
               stock_change: newQty - prevQty,
-              change_reason: "쿠팡 로켓그로스 재고 동기화",
+              change_reason: "쿠팡 재고 동기화",
             });
           }
         }

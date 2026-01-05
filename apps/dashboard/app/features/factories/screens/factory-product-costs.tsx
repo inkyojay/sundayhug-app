@@ -3,8 +3,8 @@
  */
 import type { Route } from "./+types/factory-product-costs";
 
-import { 
-  FactoryIcon, 
+import {
+  FactoryIcon,
   UploadIcon,
   DownloadIcon,
   SaveIcon,
@@ -13,18 +13,15 @@ import {
   TrashIcon,
   SearchIcon,
   ArrowLeftIcon,
-  DollarSignIcon,
 } from "lucide-react";
 import { useState, useRef } from "react";
-import { Link, useFetcher, useLoaderData } from "react-router";
+import { Link, useFetcher } from "react-router";
 
-import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
 import {
   Card,
   CardContent,
   CardHeader,
-  CardTitle,
 } from "~/core/components/ui/card";
 import { Input } from "~/core/components/ui/input";
 import {
@@ -55,6 +52,17 @@ import { Textarea } from "~/core/components/ui/textarea";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
+import {
+  getFactory,
+  getFactoryProductCosts,
+  getActiveProducts,
+  saveFactoryProductCost,
+  deleteFactoryProductCost,
+  uploadFactoryProductCostsCSV,
+} from "../lib/factories.server";
+import type { FactoryProductCost, FactoryProductCostFormData } from "../lib/factories.shared";
+import { EMPTY_COST_FORM, costToFormData, formatCurrency } from "../lib/factories.shared";
+
 export const meta: Route.MetaFunction = ({ data }) => {
   return [{ title: `제조원가 관리 - ${data?.factory?.factory_name} | Sundayhug Admin` }];
 };
@@ -63,31 +71,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
   const factoryId = params.factoryId;
 
-  // 공장 정보 조회
-  const { data: factory } = await supabase
-    .from("factories")
-    .select("*")
-    .eq("id", factoryId)
-    .single();
+  const [factory, products, costs] = await Promise.all([
+    getFactory(supabase, factoryId),
+    getActiveProducts(supabase),
+    getFactoryProductCosts(supabase, factoryId),
+  ]);
 
-  // 제품 목록 조회
-  const { data: products } = await supabase
-    .from("products")
-    .select("id, sku, product_name, color_kr, sku_6_size")
-    .eq("is_active", true)
-    .order("sku");
-
-  // 공장별 제조원가 조회
-  const { data: costs } = await supabase
-    .from("factory_product_costs")
-    .select(`
-      *,
-      product:products(id, product_name, color_kr, sku_6_size)
-    `)
-    .eq("factory_id", factoryId)
-    .order("sku");
-
-  return { factory, products: products || [], costs: costs || [] };
+  return { factory, products, costs };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -103,132 +93,50 @@ export async function action({ request, params }: Route.ActionArgs) {
     const productId = formData.get("product_id") as string || null;
     const notes = formData.get("notes") as string || null;
 
-    const { error } = await supabase
-      .from("factory_product_costs")
-      .upsert({
-        factory_id: factoryId,
-        product_id: productId,
-        sku,
-        cost_without_vat: costWithoutVat,
-        vat_amount: vatAmount,
-        notes,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: "factory_id,sku"
-      });
-
-    if (error) return { error: error.message };
-    return { success: true };
+    return saveFactoryProductCost(supabase, factoryId, {
+      sku,
+      productId,
+      costWithoutVat,
+      vatAmount,
+      notes,
+    });
   }
 
   if (intent === "delete") {
     const id = formData.get("id") as string;
-    const { error } = await supabase
-      .from("factory_product_costs")
-      .delete()
-      .eq("id", id);
-
-    if (error) return { error: error.message };
-    return { success: true };
+    return deleteFactoryProductCost(supabase, id);
   }
 
   if (intent === "upload_csv") {
     const csvData = formData.get("csv_data") as string;
-    const lines = csvData.split("\n").filter(line => line.trim());
-    const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
-    
-    const skuIndex = headers.findIndex(h => h.includes("sku"));
-    const costWithoutVatIndex = headers.findIndex(h => h.includes("부가세") && h.includes("제외") || h.includes("원가"));
-    const vatIndex = headers.findIndex(h => h.includes("부가세") && !h.includes("제외") && !h.includes("포함"));
-    const costWithVatIndex = headers.findIndex(h => h.includes("부가세") && h.includes("포함") || h.includes("총액"));
-
-    if (skuIndex === -1) {
-      return { error: "CSV에 SKU 컬럼이 없습니다." };
-    }
-
-    const costsToInsert = [];
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(",").map(v => v.trim());
-      const sku = values[skuIndex];
-      if (!sku) continue;
-
-      let costWithoutVat = 0;
-      let vatAmount = 0;
-
-      if (costWithoutVatIndex >= 0) {
-        costWithoutVat = parseFloat(values[costWithoutVatIndex]) || 0;
-      }
-      if (vatIndex >= 0) {
-        vatAmount = parseFloat(values[vatIndex]) || 0;
-      } else if (costWithVatIndex >= 0 && costWithoutVatIndex >= 0) {
-        const costWithVat = parseFloat(values[costWithVatIndex]) || 0;
-        vatAmount = costWithVat - costWithoutVat;
-      }
-
-      costsToInsert.push({
-        factory_id: factoryId,
-        sku,
-        cost_without_vat: costWithoutVat,
-        vat_amount: vatAmount,
-      });
-    }
-
-    if (costsToInsert.length > 0) {
-      const { error } = await supabase
-        .from("factory_product_costs")
-        .upsert(costsToInsert, {
-          onConflict: "factory_id,sku"
-        });
-
-      if (error) return { error: error.message };
-    }
-
-    return { success: true, message: `${costsToInsert.length}개 제품의 제조원가가 업로드되었습니다.` };
+    return uploadFactoryProductCostsCSV(supabase, factoryId, csvData);
   }
 
   return { error: "Unknown action" };
 }
 
-export default function FactoryProductCosts({ loaderData, actionData }: Route.ComponentProps) {
+export default function FactoryProductCosts({ loaderData }: Route.ComponentProps) {
   const { factory, products, costs } = loaderData;
   const fetcher = useFetcher();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
-  const [selectedCost, setSelectedCost] = useState<any>(null);
-  const [formData, setFormData] = useState({
-    sku: "",
-    product_id: "",
-    cost_without_vat: "",
-    vat_amount: "",
-    notes: "",
-  });
+  const [selectedCost, setSelectedCost] = useState<FactoryProductCost | null>(null);
+  const [formData, setFormData] = useState<FactoryProductCostFormData>(EMPTY_COST_FORM);
 
-  const filteredCosts = costs.filter((cost: any) =>
+  const filteredCosts = costs.filter((cost: FactoryProductCost) =>
     cost.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     cost.product?.product_name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const openEditSheet = (cost?: any) => {
+  const openEditSheet = (cost?: FactoryProductCost) => {
     if (cost) {
       setSelectedCost(cost);
-      setFormData({
-        sku: cost.sku,
-        product_id: cost.product_id || "",
-        cost_without_vat: String(cost.cost_without_vat || 0),
-        vat_amount: String(cost.vat_amount || 0),
-        notes: cost.notes || "",
-      });
+      setFormData(costToFormData(cost));
     } else {
       setSelectedCost(null);
-      setFormData({
-        sku: "",
-        product_id: "",
-        cost_without_vat: "",
-        vat_amount: "",
-        notes: "",
-      });
+      setFormData(EMPTY_COST_FORM);
     }
     setIsEditSheetOpen(true);
   };
@@ -241,7 +149,7 @@ export default function FactoryProductCosts({ loaderData, actionData }: Route.Co
     form.append("cost_without_vat", formData.cost_without_vat);
     form.append("vat_amount", formData.vat_amount);
     form.append("notes", formData.notes);
-    
+
     fetcher.submit(form, { method: "post" });
     setIsEditSheetOpen(false);
   };
@@ -272,7 +180,7 @@ export default function FactoryProductCosts({ loaderData, actionData }: Route.Co
 
   const downloadCSV = () => {
     const headers = ["SKU", "제품명", "부가세 제외", "부가세", "부가세 포함"];
-    const rows = costs.map((cost: any) => [
+    const rows = costs.map((cost: FactoryProductCost) => [
       cost.sku,
       cost.product?.product_name || "",
       cost.cost_without_vat || 0,
@@ -292,10 +200,6 @@ export default function FactoryProductCosts({ loaderData, actionData }: Route.Co
     a.download = `${factory?.factory_name}_제조원가_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("ko-KR").format(amount);
   };
 
   return (
@@ -372,7 +276,7 @@ export default function FactoryProductCosts({ loaderData, actionData }: Route.Co
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredCosts.map((cost: any) => (
+                filteredCosts.map((cost: FactoryProductCost) => (
                   <TableRow key={cost.id}>
                     <TableCell className="font-mono text-sm">
                       {cost.sku}
@@ -440,8 +344,8 @@ export default function FactoryProductCosts({ loaderData, actionData }: Route.Co
 
             <div className="space-y-2">
               <Label>제품 선택 (선택사항)</Label>
-              <Select 
-                value={formData.product_id} 
+              <Select
+                value={formData.product_id}
                 onValueChange={(v) => setFormData({ ...formData, product_id: v })}
               >
                 <SelectTrigger>
@@ -484,7 +388,7 @@ export default function FactoryProductCosts({ loaderData, actionData }: Route.Co
               <div className="text-sm text-muted-foreground">부가세 포함</div>
               <div className="text-lg font-bold">
                 {formatCurrency(
-                  (parseFloat(formData.cost_without_vat) || 0) + 
+                  (parseFloat(formData.cost_without_vat) || 0) +
                   (parseFloat(formData.vat_amount) || 0)
                 )}원
               </div>
@@ -514,4 +418,3 @@ export default function FactoryProductCosts({ loaderData, actionData }: Route.Co
     </div>
   );
 }
-

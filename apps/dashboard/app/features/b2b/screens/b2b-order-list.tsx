@@ -11,26 +11,15 @@ import {
   PencilIcon,
   BuildingIcon,
   CalendarIcon,
-  FileTextIcon,
   TruckIcon,
-  CheckCircleIcon,
-  ClockIcon,
-  XCircleIcon,
-  SendIcon,
-  PackageIcon,
-  ReceiptIcon,
   Trash2Icon,
   MoreHorizontalIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useFetcher, useNavigate, useRevalidator } from "react-router";
 
-import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
-import {
-  Card,
-  CardContent,
-} from "~/core/components/ui/card";
+import { Card, CardContent } from "~/core/components/ui/card";
 import { Input } from "~/core/components/ui/input";
 import {
   Select,
@@ -67,110 +56,48 @@ import {
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
+import {
+  getOrders,
+  getOrderStats,
+  getActiveCustomers,
+  updateOrderStatus,
+  softDeleteOrder,
+  parseOrderQueryParams,
+} from "../lib/b2b.server";
+import {
+  ORDER_STATUS_OPTIONS,
+  formatDate,
+  formatCurrency,
+  getOrderStatusInfo,
+  getOrderStatusBadgeVariant,
+  type B2BOrder,
+} from "../lib/b2b.shared";
+import { OrderStatusBadge, PaymentStatusBadge, StatusCards } from "../components";
+
 export const meta: Route.MetaFunction = () => {
   return [{ title: "B2B 주문 관리 | Sundayhug Admin" }];
-};
-
-// 주문 상태 정의
-const orderStatuses = [
-  { value: "quote_draft", label: "견적 작성중", color: "secondary", icon: FileTextIcon },
-  { value: "quote_sent", label: "견적 발송", color: "default", icon: SendIcon },
-  { value: "confirmed", label: "주문 확정", color: "default", icon: CheckCircleIcon },
-  { value: "invoice_created", label: "인보이스 발행", color: "outline", icon: ReceiptIcon },
-  { value: "shipping", label: "출고 준비", color: "outline", icon: PackageIcon },
-  { value: "shipped", label: "출고 완료", color: "default", icon: TruckIcon },
-  { value: "completed", label: "완료", color: "default", icon: CheckCircleIcon },
-  { value: "cancelled", label: "취소", color: "destructive", icon: XCircleIcon },
-];
-
-const getStatusInfo = (status: string) => {
-  return orderStatuses.find((s) => s.value === status) || orderStatuses[0];
-};
-
-const getStatusBadgeVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
-  const info = getStatusInfo(status);
-  return info.color as "default" | "secondary" | "destructive" | "outline";
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
 
   const url = new URL(request.url);
-  const search = url.searchParams.get("search") || "";
-  const statusFilter = url.searchParams.get("status") || "";
-  const customerFilter = url.searchParams.get("customer") || "";
-  const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = 20;
-  const offset = (page - 1) * limit;
+  const params = parseOrderQueryParams(url);
 
-  // 업체 목록 조회
-  const { data: customers } = await supabase
-    .from("b2b_customers")
-    .select("id, customer_code, company_name")
-    .eq("is_deleted", false)
-    .eq("is_active", true)
-    .order("company_name");
-
-  // 주문 목록 조회
-  let query = supabase
-    .from("b2b_orders")
-    .select(
-      `
-      *,
-      customer:b2b_customers(id, customer_code, company_name, business_type),
-      items:b2b_order_items(id, parent_sku, product_name, quantity, unit_price, line_total)
-    `,
-      { count: "exact" }
-    )
-    .eq("is_deleted", false)
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
-
-  if (search) {
-    query = query.or(
-      `order_number.ilike.%${search}%`
-    );
-  }
-
-  if (statusFilter && statusFilter !== "__all__") {
-    query = query.eq("status", statusFilter);
-  }
-
-  if (customerFilter && customerFilter !== "__all__") {
-    query = query.eq("customer_id", customerFilter);
-  }
-
-  const { data: orders, count, error } = await query;
-
-  if (error) {
-    console.error("Failed to load B2B orders:", error);
-  }
-
-  // 상태별 통계
-  const { data: allOrders } = await supabase
-    .from("b2b_orders")
-    .select("status")
-    .eq("is_deleted", false);
-
-  const stats = orderStatuses.reduce(
-    (acc, status) => {
-      acc[status.value] = allOrders?.filter((o) => o.status === status.value).length || 0;
-      return acc;
-    },
-    {} as Record<string, number>
-  );
+  const customers = await getActiveCustomers(supabase);
+  const { orders, totalCount, totalPages } = await getOrders(supabase, params);
+  const stats = await getOrderStats(supabase);
 
   return {
-    orders: orders || [],
-    customers: customers || [],
-    search,
-    statusFilter,
-    customerFilter,
-    page,
-    totalPages: Math.ceil((count || 0) / limit),
-    totalCount: count || 0,
+    orders,
+    customers,
+    search: params.search,
+    statusFilter: params.statusFilter,
+    customerFilter: params.customerFilter,
+    page: params.page,
+    totalPages,
+    totalCount,
     stats,
-    error: error?.message,
   };
 }
 
@@ -182,83 +109,15 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "update_status") {
     const id = formData.get("id") as string;
     const status = formData.get("status") as string;
-
-    const updateData: Record<string, any> = {
-      status,
-      updated_at: new Date().toISOString(),
-    };
-
-    // 상태별 추가 필드 업데이트
-    if (status === "confirmed") {
-      updateData.confirmed_at = new Date().toISOString();
-    } else if (status === "shipped") {
-      updateData.shipped_at = new Date().toISOString();
-    }
-
-    const { error } = await supabase
-      .from("b2b_orders")
-      .update(updateData)
-      .eq("id", id);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, message: "상태가 변경되었습니다." };
+    return updateOrderStatus(supabase, id, status);
   }
 
   if (intent === "delete") {
     const id = formData.get("id") as string;
-
-    const { error } = await supabase
-      .from("b2b_orders")
-      .update({
-        is_deleted: true,
-        deleted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, message: "주문이 삭제되었습니다." };
+    return softDeleteOrder(supabase, id);
   }
 
   return { success: false, error: "Unknown intent" };
-}
-
-interface B2BOrder {
-  id: string;
-  order_number: string;
-  customer_id: string;
-  status: string;
-  order_date: string;
-  confirmed_at: string | null;
-  shipped_at: string | null;
-  currency: string;
-  subtotal: number;
-  discount_amount: number;
-  shipping_cost: number;
-  tax_amount: number;
-  total_amount: number;
-  payment_status: string;
-  created_at: string;
-  customer: {
-    id: string;
-    customer_code: string;
-    company_name: string;
-    business_type: string;
-  } | null;
-  items: Array<{
-    id: string;
-    parent_sku: string;
-    product_name: string;
-    quantity: number;
-    unit_price: number;
-    line_total: number;
-  }>;
 }
 
 export default function B2BOrderList({ loaderData }: Route.ComponentProps) {
@@ -272,7 +131,6 @@ export default function B2BOrderList({ loaderData }: Route.ComponentProps) {
     totalPages,
     totalCount,
     stats,
-    error,
   } = loaderData;
 
   const navigate = useNavigate();
@@ -283,7 +141,7 @@ export default function B2BOrderList({ loaderData }: Route.ComponentProps) {
   const [selectedStatus, setSelectedStatus] = useState(statusFilter);
   const [selectedCustomer, setSelectedCustomer] = useState(customerFilter);
   const [message, setMessage] = useState<string | null>(null);
-  const [deleteOrder, setDeleteOrder] = useState<B2BOrder | null>(null);
+  const [deleteOrder, setDeleteOrder] = useState<any | null>(null);
 
   useEffect(() => {
     if (fetcher.data && fetcher.state === "idle") {
@@ -318,16 +176,15 @@ export default function B2BOrderList({ loaderData }: Route.ComponentProps) {
     setDeleteOrder(null);
   };
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "-";
-    return new Date(dateString).toLocaleDateString("ko-KR");
-  };
-
-  const formatCurrency = (amount: number, currency: string = "KRW") => {
-    return new Intl.NumberFormat("ko-KR", {
-      style: "currency",
-      currency: currency,
-    }).format(amount);
+  const handleStatusCardClick = (statusValue: string) => {
+    const newStatus = selectedStatus === statusValue ? "" : statusValue;
+    setSelectedStatus(newStatus);
+    const params = new URLSearchParams();
+    if (searchTerm) params.set("search", searchTerm);
+    if (newStatus) params.set("status", newStatus);
+    if (selectedCustomer && selectedCustomer !== "__all__")
+      params.set("customer", selectedCustomer);
+    navigate(`/dashboard/b2b/orders?${params.toString()}`);
   };
 
   return (
@@ -385,40 +242,11 @@ export default function B2BOrderList({ loaderData }: Route.ComponentProps) {
       </div>
 
       {/* 상태별 통계 카드 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-        {orderStatuses.map((status) => {
-          const StatusIcon = status.icon;
-          const isSelected = selectedStatus === status.value;
-          return (
-            <Card
-              key={status.value}
-              className={`cursor-pointer hover:bg-accent/50 transition-colors ${
-                isSelected ? "ring-2 ring-primary" : ""
-              }`}
-              onClick={() => {
-                const newStatus = isSelected ? "" : status.value;
-                setSelectedStatus(newStatus);
-                const params = new URLSearchParams();
-                if (searchTerm) params.set("search", searchTerm);
-                if (newStatus) params.set("status", newStatus);
-                if (selectedCustomer && selectedCustomer !== "__all__")
-                  params.set("customer", selectedCustomer);
-                navigate(`/dashboard/b2b/orders?${params.toString()}`);
-              }}
-            >
-              <CardContent className="p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground">{status.label}</p>
-                    <p className="text-xl font-bold">{stats[status.value] || 0}</p>
-                  </div>
-                  <StatusIcon className="w-5 h-5 text-muted-foreground/50" />
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      <StatusCards
+        stats={stats}
+        selectedStatus={selectedStatus}
+        onStatusClick={handleStatusCardClick}
+      />
 
       {/* 검색 & 필터 */}
       <Card>
@@ -443,7 +271,7 @@ export default function B2BOrderList({ loaderData }: Route.ComponentProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">상태 전체</SelectItem>
-                {orderStatuses.map((status) => (
+                {ORDER_STATUS_OPTIONS.map((status) => (
                   <SelectItem key={status.value} value={status.value}>
                     {status.label}
                   </SelectItem>
@@ -497,8 +325,8 @@ export default function B2BOrderList({ loaderData }: Route.ComponentProps) {
                   </TableCell>
                 </TableRow>
               ) : (
-                orders.map((order: B2BOrder) => {
-                  const statusInfo = getStatusInfo(order.status);
+                orders.map((order: any) => {
+                  const statusInfo = getOrderStatusInfo(order.status);
                   return (
                     <TableRow key={order.id}>
                       <TableCell>
@@ -535,21 +363,7 @@ export default function B2BOrderList({ loaderData }: Route.ComponentProps) {
                         {formatCurrency(order.total_amount, order.currency)}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={
-                            order.payment_status === "paid"
-                              ? "default"
-                              : order.payment_status === "partial"
-                              ? "outline"
-                              : "secondary"
-                          }
-                        >
-                          {order.payment_status === "paid"
-                            ? "결제완료"
-                            : order.payment_status === "partial"
-                            ? "부분결제"
-                            : "미결제"}
-                        </Badge>
+                        <PaymentStatusBadge status={order.payment_status} />
                       </TableCell>
                       <TableCell>
                         <Select
@@ -557,12 +371,10 @@ export default function B2BOrderList({ loaderData }: Route.ComponentProps) {
                           onValueChange={(v) => handleStatusChange(order.id, v)}
                         >
                           <SelectTrigger className="w-[120px] h-8">
-                            <Badge variant={getStatusBadgeVariant(order.status)}>
-                              {statusInfo.label}
-                            </Badge>
+                            <OrderStatusBadge status={order.status} />
                           </SelectTrigger>
                           <SelectContent>
-                            {orderStatuses.map((status) => (
+                            {ORDER_STATUS_OPTIONS.map((status) => (
                               <SelectItem key={status.value} value={status.value}>
                                 {status.label}
                               </SelectItem>

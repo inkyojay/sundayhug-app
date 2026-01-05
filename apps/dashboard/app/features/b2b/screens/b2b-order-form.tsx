@@ -13,7 +13,6 @@ import {
   SearchIcon,
   ArrowLeftIcon,
   BuildingIcon,
-  CalendarIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useFetcher, useNavigate, redirect } from "react-router";
@@ -56,44 +55,38 @@ import { Textarea } from "~/core/components/ui/textarea";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
+import {
+  getOrder,
+  getActiveCustomers,
+  getParentProducts,
+  getCustomerPrices,
+  generateOrderNumber,
+  saveOrder,
+  deleteOrder,
+  parseOrderFormData,
+} from "../lib/b2b.server";
+import {
+  ORDER_STATUS_OPTIONS,
+  formatCurrency,
+  type B2BOrderItem,
+} from "../lib/b2b.shared";
+import { CustomerTypeBadge } from "../components";
+
 export const meta: Route.MetaFunction = ({ data }) => {
   const title = data?.order ? `주문 ${data.order.order_number}` : "B2B 주문 작성";
   return [{ title: `${title} | Sundayhug Admin` }];
 };
 
-// 주문 상태 정의
-const orderStatuses = [
-  { value: "quote_draft", label: "견적 작성중" },
-  { value: "quote_sent", label: "견적 발송" },
-  { value: "confirmed", label: "주문 확정" },
-  { value: "invoice_created", label: "인보이스 발행" },
-  { value: "shipping", label: "출고 준비" },
-  { value: "shipped", label: "출고 완료" },
-  { value: "completed", label: "완료" },
-  { value: "cancelled", label: "취소" },
-];
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
   const orderId = params.id;
 
   // 업체 목록 조회
-  const { data: customers } = await supabase
-    .from("b2b_customers")
-    .select("id, customer_code, company_name, business_type, currency, payment_terms")
-    .eq("is_deleted", false)
-    .eq("is_active", true)
-    .order("company_name");
+  const customers = await getActiveCustomers(supabase);
 
   // Parent Products 목록 조회 (견적용)
-  const { data: parentProducts, error: parentProductsError } = await supabase
-    .from("parent_products")
-    .select("parent_sku, product_name, category, subcategory")
-    .order("product_name");
-
-  if (parentProductsError) {
-    console.error("Parent Products 조회 에러:", parentProductsError);
-  }
+  const parentProducts = await getParentProducts(supabase);
 
   // 기존 주문 조회 (수정 모드)
   let order = null;
@@ -101,59 +94,24 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   let customerPrices: Record<string, number> = {};
 
   if (orderId && orderId !== "new") {
-    const { data: orderData } = await supabase
-      .from("b2b_orders")
-      .select(`
-        *,
-        customer:b2b_customers(id, customer_code, company_name, business_type, currency, payment_terms)
-      `)
-      .eq("id", orderId)
-      .single();
+    const result = await getOrder(supabase, orderId);
+    order = result.order;
+    orderItems = result.items;
 
-    if (orderData) {
-      order = orderData;
-
-      const { data: itemsData } = await supabase
-        .from("b2b_order_items")
-        .select("*")
-        .eq("order_id", orderId)
-        .order("created_at");
-
-      orderItems = itemsData || [];
-
-      // 업체별 가격표 조회
-      if (orderData.customer_id) {
-        const { data: pricesData } = await supabase
-          .from("b2b_customer_prices")
-          .select("parent_sku, unit_price")
-          .eq("customer_id", orderData.customer_id);
-
-        if (pricesData) {
-          pricesData.forEach((p) => {
-            customerPrices[p.parent_sku] = p.unit_price;
-          });
-        }
-      }
+    // 업체별 가격표 조회
+    if (order?.customer_id) {
+      customerPrices = await getCustomerPrices(supabase, order.customer_id);
     }
   }
 
   // 새 주문번호 생성
-  let newOrderNumber = "";
-  if (!order) {
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const { count } = await supabase
-      .from("b2b_orders")
-      .select("*", { count: "exact", head: true })
-      .ilike("order_number", `B2B-${today}%`);
-
-    newOrderNumber = `B2B-${today}-${String((count || 0) + 1).padStart(4, "0")}`;
-  }
+  const newOrderNumber = !order ? await generateOrderNumber(supabase) : "";
 
   return {
     order,
     orderItems,
-    customers: customers || [],
-    parentProducts: parentProducts || [],
+    customers,
+    parentProducts,
     customerPrices,
     newOrderNumber,
     isNew: !order,
@@ -167,110 +125,20 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   if (intent === "get_customer_prices") {
     const customerId = formData.get("customer_id") as string;
-
-    const { data: pricesData } = await supabase
-      .from("b2b_customer_prices")
-      .select("parent_sku, unit_price")
-      .eq("customer_id", customerId);
-
-    const prices: Record<string, number> = {};
-    if (pricesData) {
-      pricesData.forEach((p) => {
-        prices[p.parent_sku] = p.unit_price;
-      });
-    }
-
+    const prices = await getCustomerPrices(supabase, customerId);
     return { success: true, prices };
   }
 
   if (intent === "save") {
     const orderId = params.id !== "new" ? params.id : null;
-    const orderData = {
-      order_number: formData.get("order_number") as string,
-      customer_id: formData.get("customer_id") as string,
-      status: (formData.get("status") as string) || "quote_draft",
-      order_date: formData.get("order_date") as string,
-      quote_valid_until: (formData.get("quote_valid_until") as string) || null,
-      currency: (formData.get("currency") as string) || "KRW",
-      subtotal: parseFloat(formData.get("subtotal") as string) || 0,
-      discount_amount: parseFloat(formData.get("discount_amount") as string) || 0,
-      shipping_cost: parseFloat(formData.get("shipping_cost") as string) || 0,
-      tax_amount: parseFloat(formData.get("tax_amount") as string) || 0,
-      total_amount: parseFloat(formData.get("total_amount") as string) || 0,
-      payment_terms: (formData.get("payment_terms") as string) || null,
-      shipping_address: (formData.get("shipping_address") as string) || null,
-      shipping_address_en: (formData.get("shipping_address_en") as string) || null,
-      internal_notes: (formData.get("internal_notes") as string) || null,
-      customer_notes: (formData.get("customer_notes") as string) || null,
-    };
-
-    const items = JSON.parse((formData.get("items") as string) || "[]");
-
-    if (orderId) {
-      // 수정
-      const { error } = await supabase
-        .from("b2b_orders")
-        .update({ ...orderData, updated_at: new Date().toISOString() })
-        .eq("id", orderId);
-
-      if (error) return { success: false, error: error.message };
-
-      // 기존 품목 삭제 후 재삽입
-      await supabase.from("b2b_order_items").delete().eq("order_id", orderId);
-
-      if (items.length > 0) {
-        const itemsToInsert = items.map((item: any) => ({
-          order_id: orderId,
-          parent_sku: item.parent_sku,
-          product_name: item.product_name,
-          product_name_en: item.product_name_en || null,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          discount_rate: item.discount_rate || 0,
-          line_total: item.line_total,
-          notes: item.notes || null,
-        }));
-
-        await supabase.from("b2b_order_items").insert(itemsToInsert);
-      }
-
-      return { success: true, message: "주문이 수정되었습니다." };
-    } else {
-      // 새로 생성
-      const { data: newOrder, error } = await supabase
-        .from("b2b_orders")
-        .insert(orderData)
-        .select()
-        .single();
-
-      if (error) return { success: false, error: error.message };
-
-      if (items.length > 0 && newOrder) {
-        const itemsToInsert = items.map((item: any) => ({
-          order_id: newOrder.id,
-          parent_sku: item.parent_sku,
-          product_name: item.product_name,
-          product_name_en: item.product_name_en || null,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          discount_rate: item.discount_rate || 0,
-          line_total: item.line_total,
-          notes: item.notes || null,
-        }));
-
-        await supabase.from("b2b_order_items").insert(itemsToInsert);
-      }
-
-      return redirect(`/dashboard/b2b/orders/${newOrder?.id}`);
-    }
+    const { orderData, items } = parseOrderFormData(formData);
+    return saveOrder(supabase, orderId || null, orderData, items);
   }
 
   if (intent === "delete") {
     const orderId = params.id;
     if (orderId && orderId !== "new") {
-      await supabase.from("b2b_order_items").delete().eq("order_id", orderId);
-      await supabase.from("b2b_orders").delete().eq("id", orderId);
-      return redirect("/dashboard/b2b/orders");
+      return deleteOrder(supabase, orderId);
     }
   }
 
@@ -505,13 +373,6 @@ export default function B2BOrderForm({ loaderData }: Route.ComponentProps) {
     }
   };
 
-  const formatCurrency = (amount: number, currency: string = "KRW") => {
-    if (currency === "USD") {
-      return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
-    }
-    return new Intl.NumberFormat("ko-KR", { style: "currency", currency: "KRW" }).format(amount);
-  };
-
   const selectedCustomer = customers.find((c: any) => c.id === formData.customer_id);
 
   return (
@@ -585,9 +446,7 @@ export default function B2BOrderForm({ loaderData }: Route.ComponentProps) {
                       <div className="flex items-center gap-2">
                         <BuildingIcon className="w-4 h-4" />
                         {customer.company_name}
-                        <Badge variant="outline" className="ml-2">
-                          {customer.business_type === "domestic" ? "국내" : "해외"}
-                        </Badge>
+                        <CustomerTypeBadge type={customer.business_type} className="ml-2" />
                       </div>
                     </SelectItem>
                   ))}
@@ -605,7 +464,7 @@ export default function B2BOrderForm({ loaderData }: Route.ComponentProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {orderStatuses.map((status) => (
+                  {ORDER_STATUS_OPTIONS.map((status) => (
                     <SelectItem key={status.value} value={status.value}>
                       {status.label}
                     </SelectItem>

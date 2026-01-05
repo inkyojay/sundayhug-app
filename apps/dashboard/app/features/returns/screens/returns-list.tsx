@@ -4,16 +4,12 @@
 import type { Route } from "./+types/returns-list";
 
 import {
-  RotateCcwIcon,
   PlusIcon,
   SearchIcon,
   PackageIcon,
   CalendarIcon,
   CheckCircleIcon,
   ClockIcon,
-  XCircleIcon,
-  WrenchIcon,
-  ArrowLeftRightIcon,
   WarehouseIcon,
   UserIcon,
   PhoneIcon,
@@ -22,6 +18,10 @@ import {
   EyeIcon,
   ReceiptIcon,
   LoaderIcon,
+  RotateCcwIcon,
+  WrenchIcon,
+  ArrowLeftRightIcon,
+  XCircleIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { useFetcher, useNavigate, Link } from "react-router";
@@ -63,130 +63,57 @@ import { Checkbox } from "~/core/components/ui/checkbox";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
+// lib imports
+import {
+  RETURN_TYPES,
+  RETURN_STATUSES,
+  CHANNELS,
+  getTypeInfo,
+  getStatusInfo,
+} from "../lib/returns.shared";
+import {
+  parseReturnQueryParams,
+  generateReturnNumber,
+  getWarehouses,
+  getProducts,
+  getReturnsList,
+  createReturn,
+  updateReturnStatus,
+  searchOrders,
+} from "../lib/returns.server";
+
+// components imports
+import { ReturnTypeBadge, ReturnStatusBadge, ChannelBadge } from "../components";
+
 export const meta: Route.MetaFunction = () => {
   return [{ title: `교환/반품/AS 관리 | Sundayhug Admin` }];
 };
 
-const returnTypes = [
-  { value: "exchange", label: "교환", icon: ArrowLeftRightIcon, color: "default" },
-  { value: "return", label: "반품", icon: RotateCcwIcon, color: "secondary" },
-  { value: "repair", label: "수리(AS)", icon: WrenchIcon, color: "outline" },
-];
-
-const returnStatuses = [
-  { value: "received", label: "접수", color: "secondary" },
-  { value: "pickup_scheduled", label: "수거예정", color: "outline" },
-  { value: "pickup_completed", label: "수거완료", color: "outline" },
-  { value: "inspecting", label: "검수중", color: "outline" },
-  { value: "processing", label: "처리중", color: "default" },
-  { value: "shipped", label: "발송완료", color: "default" },
-  { value: "refunded", label: "환불완료", color: "default" },
-  { value: "completed", label: "완료", color: "default" },
-  { value: "cancelled", label: "취소", color: "destructive" },
-];
-
-const channels = [
-  { value: "cafe24", label: "카페24" },
-  { value: "naver", label: "네이버" },
-  { value: "coupang", label: "쿠팡" },
-  { value: "11st", label: "11번가" },
-  { value: "gmarket", label: "G마켓" },
-  { value: "auction", label: "옥션" },
-  { value: "other", label: "기타" },
-];
-
-const getTypeInfo = (type: string) => {
-  return returnTypes.find(t => t.value === type) || returnTypes[0];
-};
-
-const getStatusInfo = (status: string) => {
-  return returnStatuses.find(s => s.value === status) || returnStatuses[0];
-};
-
 export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
-  
   const url = new URL(request.url);
-  const search = url.searchParams.get("search") || "";
-  const typeFilter = url.searchParams.get("type") || "";
-  const statusFilter = url.searchParams.get("status") || "";
-  const channelFilter = url.searchParams.get("channel") || "";
 
-  // 창고 목록 조회
-  const { data: warehouses } = await supabase
-    .from("warehouses")
-    .select("id, warehouse_name, warehouse_code")
-    .eq("is_active", true)
-    .order("warehouse_name");
+  // 쿼리 파라미터 파싱
+  const filters = parseReturnQueryParams(url);
 
-  // 교환/반품/AS 목록 조회
-  let query = supabase
-    .from("returns_exchanges")
-    .select(`
-      *,
-      restock_warehouse:warehouses(id, warehouse_name),
-      items:return_exchange_items(id, sku, product_name, option_name, quantity, condition, restock_quantity)
-    `)
-    .order("created_at", { ascending: false });
+  // 병렬로 데이터 조회
+  const [warehouses, products, newReturnNumber, returnsResult] = await Promise.all([
+    getWarehouses(supabase),
+    getProducts(supabase),
+    generateReturnNumber(supabase),
+    getReturnsList(supabase, filters),
+  ]);
 
-  if (search) {
-    query = query.or(`return_number.ilike.%${search}%,order_number.ilike.%${search}%,customer_name.ilike.%${search}%`);
-  }
-
-  if (typeFilter && typeFilter !== "__all__") {
-    query = query.eq("return_type", typeFilter);
-  }
-
-  if (statusFilter && statusFilter !== "__all__") {
-    query = query.eq("status", statusFilter);
-  }
-
-  if (channelFilter && channelFilter !== "__all__") {
-    query = query.eq("channel", channelFilter);
-  }
-
-  const { data: returns, error } = await query;
-
-  if (error) {
-    console.error("Failed to load returns:", error);
-  }
-
-  // 제품 목록 (품목 추가용)
-  const { data: products } = await supabase
-    .from("products")
-    .select("id, sku, product_name, color_kr, sku_6_size")
-    .eq("is_active", true)
-    .order("sku");
-
-  // 새 번호 생성
-  const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const { count } = await supabase
-    .from("returns_exchanges")
-    .select("*", { count: "exact", head: true })
-    .ilike("return_number", `RE-${today}%`);
-  
-  const newReturnNumber = `RE-${today}-${String((count || 0) + 1).padStart(4, "0")}`;
-
-  // 통계
-  const activeStatuses = ["received", "pickup_scheduled", "pickup_completed", "inspecting", "processing", "shipped", "refunded"];
-  const stats = {
-    received: returns?.filter(r => r.status === "received").length || 0,
-    processing: returns?.filter(r => activeStatuses.includes(r.status) && r.status !== "received").length || 0,
-    exchange: returns?.filter(r => r.return_type === "exchange" && activeStatuses.includes(r.status)).length || 0,
-    return: returns?.filter(r => r.return_type === "return" && activeStatuses.includes(r.status)).length || 0,
-    repair: returns?.filter(r => r.return_type === "repair" && activeStatuses.includes(r.status)).length || 0,
-  };
-
-  return { 
-    returns: returns || [], 
-    warehouses: warehouses || [],
-    products: products || [],
-    search, 
-    typeFilter,
-    statusFilter, 
-    channelFilter,
+  return {
+    returns: returnsResult.returns,
+    stats: returnsResult.stats,
+    warehouses,
+    products,
+    search: filters.search,
+    typeFilter: filters.typeFilter,
+    statusFilter: filters.statusFilter,
+    channelFilter: filters.channelFilter,
     newReturnNumber,
-    stats,
   };
 }
 
@@ -195,188 +122,39 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent");
 
+  // 신규 등록
   if (intent === "create") {
-    const returnData = {
+    const data = {
       return_number: formData.get("return_number") as string,
-      order_number: formData.get("order_number") as string || null,
-      channel: formData.get("channel") as string || null,
+      order_number: (formData.get("order_number") as string) || null,
+      channel: (formData.get("channel") as string) || null,
       return_type: formData.get("return_type") as string,
-      status: "received",
-      reason: formData.get("reason") as string || null,
-      customer_name: formData.get("customer_name") as string || null,
-      customer_phone: formData.get("customer_phone") as string || null,
-      customer_address: formData.get("customer_address") as string || null,
+      reason: (formData.get("reason") as string) || null,
+      customer_name: (formData.get("customer_name") as string) || null,
+      customer_phone: (formData.get("customer_phone") as string) || null,
+      customer_address: (formData.get("customer_address") as string) || null,
       return_date: formData.get("return_date") as string,
-      restock_warehouse_id: formData.get("restock_warehouse_id") as string || null,
-      notes: formData.get("notes") as string || null,
+      restock_warehouse_id: (formData.get("restock_warehouse_id") as string) || null,
+      notes: (formData.get("notes") as string) || null,
     };
-
-    const items = JSON.parse(formData.get("items") as string || "[]");
-
-    // 헤더 생성
-    const { data: newReturn, error } = await supabase
-      .from("returns_exchanges")
-      .insert(returnData)
-      .select()
-      .single();
-
-    if (error) return { error: error.message };
-
-    // 품목 생성
-    if (items.length > 0 && newReturn) {
-      const itemsToInsert = items.map((item: any) => ({
-        return_exchange_id: newReturn.id,
-        product_id: item.product_id || null,
-        sku: item.sku,
-        product_name: item.product_name,
-        option_name: item.option_name || null,
-        quantity: item.quantity,
-        return_reason: item.return_reason || null,
-        condition: item.condition || "good",
-      }));
-
-      await supabase.from("return_exchange_items").insert(itemsToInsert);
-    }
-
-    return { success: true, message: "등록되었습니다." };
+    const items = JSON.parse((formData.get("items") as string) || "[]");
+    return await createReturn(supabase, data, items);
   }
 
+  // 상태 업데이트
   if (intent === "update_status") {
-    const id = formData.get("id") as string;
-    const status = formData.get("status") as string;
-    const restocked = formData.get("restocked") === "true";
-    const restockWarehouseId = formData.get("restock_warehouse_id") as string || null;
-
-    const updateData: any = { 
-      status, 
-      updated_at: new Date().toISOString() 
-    };
-
-    if (status === "completed") {
-      updateData.completed_date = new Date().toISOString().slice(0, 10);
-    }
-
-    if (restocked && restockWarehouseId) {
-      updateData.restocked = true;
-      updateData.restock_warehouse_id = restockWarehouseId;
-
-      // 재입고 처리
-      const { data: returnData } = await supabase
-        .from("returns_exchanges")
-        .select("items:return_exchange_items(*)")
-        .eq("id", id)
-        .single();
-
-      if (returnData?.items) {
-        for (const item of returnData.items) {
-          if (item.condition === "good") {
-            const { data: existing } = await supabase
-              .from("inventory_locations")
-              .select("id, quantity")
-              .eq("warehouse_id", restockWarehouseId)
-              .eq("sku", item.sku)
-              .single();
-
-            if (existing) {
-              await supabase
-                .from("inventory_locations")
-                .update({ 
-                  quantity: existing.quantity + item.quantity,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq("id", existing.id);
-            } else {
-              await supabase
-                .from("inventory_locations")
-                .insert({
-                  warehouse_id: restockWarehouseId,
-                  product_id: item.product_id || null,
-                  sku: item.sku,
-                  quantity: item.quantity,
-                });
-            }
-
-            // 재입고 수량 업데이트
-            await supabase
-              .from("return_exchange_items")
-              .update({ restock_quantity: item.quantity })
-              .eq("id", item.id);
-          }
-        }
-      }
-    }
-
-    const { error } = await supabase
-      .from("returns_exchanges")
-      .update(updateData)
-      .eq("id", id);
-    
-    if (error) return { error: error.message };
-    return { success: true };
+    return await updateReturnStatus(supabase, {
+      id: formData.get("id") as string,
+      status: formData.get("status") as string,
+      restocked: formData.get("restocked") === "true",
+      restockWarehouseId: (formData.get("restock_warehouse_id") as string) || null,
+    });
   }
 
-  // 주문 검색 - orders 테이블에서 검색
+  // 주문 검색
   if (intent === "search_order") {
     const searchQuery = formData.get("search_query") as string;
-
-    if (!searchQuery) {
-      return { orders: [] };
-    }
-
-    // orders 테이블에서 검색 (Cafe24, 네이버 통합)
-    const { data: ordersData } = await supabase
-      .from("orders")
-      .select(`
-        id, shop_ord_no, ord_time, to_name, to_tel, to_htel,
-        shop_cd, shop_sale_name, shop_opt_name, shop_sku_cd, sale_cnt
-      `)
-      .in("shop_cd", ["cafe24", "naver"])
-      .or(`shop_ord_no.ilike.%${searchQuery}%,to_name.ilike.%${searchQuery}%,to_tel.ilike.%${searchQuery}%,to_htel.ilike.%${searchQuery}%`)
-      .order("ord_time", { ascending: false })
-      .limit(50);
-
-    // 주문번호별로 그룹핑
-    const ordersMap = new Map<string, {
-      channel: string;
-      order_number: string;
-      order_date: string;
-      customer_name: string;
-      customer_phone: string;
-      items: Array<{
-        sku: string;
-        product_name: string;
-        option_name: string;
-        quantity: number;
-      }>;
-    }>();
-
-    for (const row of ordersData || []) {
-      const key = `${row.shop_cd}_${row.shop_ord_no}`;
-
-      if (!ordersMap.has(key)) {
-        ordersMap.set(key, {
-          channel: row.shop_cd || "direct",
-          order_number: row.shop_ord_no || "",
-          order_date: row.ord_time || "",
-          customer_name: row.to_name || "",
-          customer_phone: row.to_tel || row.to_htel || "",
-          items: [],
-        });
-      }
-
-      const order = ordersMap.get(key)!;
-      order.items.push({
-        sku: row.shop_sku_cd || "",
-        product_name: row.shop_sale_name || "",
-        option_name: row.shop_opt_name || "",
-        quantity: row.sale_cnt || 1,
-      });
-    }
-
-    const orders = Array.from(ordersMap.values())
-      .sort((a, b) => new Date(b.order_date).getTime() - new Date(a.order_date).getTime())
-      .slice(0, 20);
-
+    const orders = await searchOrders(supabase, searchQuery);
     return { orders };
   }
 
@@ -668,7 +446,7 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">유형 전체</SelectItem>
-                {returnTypes.map((type) => (
+                {RETURN_TYPES.map((type) => (
                   <SelectItem key={type.value} value={type.value}>
                     {type.label}
                   </SelectItem>
@@ -681,7 +459,7 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">상태 전체</SelectItem>
-                {returnStatuses.map((status) => (
+                {RETURN_STATUSES.map((status) => (
                   <SelectItem key={status.value} value={status.value}>
                     {status.label}
                   </SelectItem>
@@ -694,7 +472,7 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">채널 전체</SelectItem>
-                {channels.map((channel) => (
+                {CHANNELS.map((channel) => (
                   <SelectItem key={channel.value} value={channel.value}>
                     {channel.label}
                   </SelectItem>
@@ -748,7 +526,7 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
                         <div className="text-sm">
                           {returnItem.channel && (
                             <span className="text-muted-foreground">
-                              {channels.find(c => c.value === returnItem.channel)?.label}
+                              {CHANNELS.find(c => c.value === returnItem.channel)?.label}
                             </span>
                           )}
                         </div>
@@ -884,7 +662,7 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
                           <TableRow key={idx} className="hover:bg-muted/50">
                             <TableCell>
                               <Badge variant={order.channel === "cafe24" ? "default" : "secondary"}>
-                                {channels.find(c => c.value === order.channel)?.label || order.channel}
+                                {CHANNELS.find(c => c.value === order.channel)?.label || order.channel}
                               </Badge>
                             </TableCell>
                             <TableCell className="font-mono text-sm">{order.order_number}</TableCell>
@@ -940,7 +718,7 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
 
             {/* 유형 선택 */}
             <div className="flex gap-4">
-              {returnTypes.map((type) => {
+              {RETURN_TYPES.map((type) => {
                 const TypeIcon = type.icon;
                 return (
                   <Button
@@ -968,7 +746,7 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
                     <SelectValue placeholder="채널 선택" />
                   </SelectTrigger>
                   <SelectContent>
-                    {channels.map((channel) => (
+                    {CHANNELS.map((channel) => (
                       <SelectItem key={channel.value} value={channel.value}>
                         {channel.label}
                       </SelectItem>
@@ -1154,7 +932,7 @@ export default function ReturnsList({ loaderData, actionData }: Route.ComponentP
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {returnStatuses.map((status) => (
+                  {RETURN_STATUSES.map((status) => (
                     <SelectItem key={status.value} value={status.value}>
                       {status.label}
                     </SelectItem>
