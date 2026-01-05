@@ -407,6 +407,7 @@ export default function CoupangProductsPage({
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10"></TableHead>
+                <TableHead className="w-16">이미지</TableHead>
                 <TableHead className="w-28">상품ID</TableHead>
                 <TableHead>상품명</TableHead>
                 <TableHead className="w-20">상태</TableHead>
@@ -417,7 +418,7 @@ export default function CoupangProductsPage({
             <TableBody>
               {products.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     <p className="text-muted-foreground">
                       동기화된 상품이 없습니다.
                     </p>
@@ -451,6 +452,19 @@ export default function CoupangProductsPage({
                               <ChevronDownIcon className="h-4 w-4" />
                             )}
                           </Button>
+                        </TableCell>
+                        <TableCell className="w-16">
+                          {product.thumbnail_url ? (
+                            <img
+                              src={product.thumbnail_url}
+                              alt={product.seller_product_name || "상품 이미지"}
+                              className="w-12 h-12 object-cover rounded border"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 bg-muted rounded border flex items-center justify-center">
+                              <PackageIcon className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="font-mono text-sm">
                           {product.seller_product_id}
@@ -490,7 +504,7 @@ export default function CoupangProductsPage({
                       {/* 옵션 행 (확장 시) */}
                       {isExpanded && options.length > 0 && (
                         <TableRow>
-                          <TableCell colSpan={6} className="p-0 bg-muted/30">
+                          <TableCell colSpan={7} className="p-0 bg-muted/30">
                             <div className="px-4 py-3">
                               <Table>
                                 <TableHeader>

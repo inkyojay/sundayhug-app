@@ -122,12 +122,16 @@ export async function action({ request }: Route.ActionArgs) {
             const detail = detailResult.data;
 
             if (detail) {
+              // 대표 이미지 URL 추출 (첫 번째 아이템의 첫 번째 이미지)
+              const thumbnailUrl = detail.items?.[0]?.images?.[0]?.cdnPath || null;
+
               // 상품 추가 정보 업데이트
               await adminClient
                 .from("coupang_products")
                 .update({
                   display_product_name: detail.displayProductName,
                   manufacture: detail.manufacture || null,
+                  thumbnail_url: thumbnailUrl,
                 })
                 .eq("id", upsertedProduct.id);
 
