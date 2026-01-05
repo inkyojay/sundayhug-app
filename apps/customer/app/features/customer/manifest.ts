@@ -15,10 +15,15 @@ export const manifest = {
   // 소유 라우트
   routes: [
     "/customer",
+    "/customer/home",
     "/customer/event/*",
-    "/customer/mypage",
-    "/customer/mypage/points",
-    "/customer/mypage/reviews",
+    "/customer/mypage/*",
+    "/customer/sleep/*",
+    "/customer/terms",
+    "/customer/privacy",
+    // TODO: 블로그 라우트는 점진적으로 blog feature로 이동 예정
+    "/customer/blog",
+    "/customer/blog/:postId",
   ],
 
   // 소유 테이블

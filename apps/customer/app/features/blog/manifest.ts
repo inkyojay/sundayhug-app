@@ -14,10 +14,16 @@ export const manifest = {
 
   // 소유 라우트
   routes: [
-    "/api/blog/*",
-    "/customer/blog/*",
+    "/blog/*", // API 라우트
+    // TODO: 아래 라우트의 화면은 현재 customer feature에 있음
+    // 점진적으로 blog feature로 이동 예정
+    // "/customer/blog",
+    // "/customer/blog/:postId",
   ],
 
   // 소유 테이블
-  tables: [],
+  tables: [
+    "blog_posts",
+    "blog_categories",
+  ],
 } as const;
