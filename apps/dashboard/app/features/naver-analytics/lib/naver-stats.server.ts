@@ -8,10 +8,14 @@
  * - 실시간 분석 (1개)
  * - 판매 분석 (7개)
  *
+ * 주의: 통계 API는 별도의 애플리케이션 credentials를 사용합니다.
+ * - NAVER_STATS_CLIENT_ID
+ * - NAVER_STATS_CLIENT_SECRET
+ *
  * 참고: https://apicenter.commerce.naver.com/docs/commerce-api/current/고객-데이터
  */
 
-import { getValidToken } from "~/features/integrations/lib/naver.server";
+import * as crypto from "crypto";
 
 // ============================================================================
 // Constants
@@ -25,6 +29,142 @@ function getProxyUrl(): string | null {
 
 function getProxyApiKey(): string | null {
   return process.env.NAVER_PROXY_API_KEY || null;
+}
+
+function getStatsClientId(): string | null {
+  return process.env.NAVER_STATS_CLIENT_ID || null;
+}
+
+function getStatsClientSecret(): string | null {
+  return process.env.NAVER_STATS_CLIENT_SECRET || null;
+}
+
+// ============================================================================
+// 통계 API 전용 토큰 관리 (별도 애플리케이션)
+// ============================================================================
+
+interface StatsToken {
+  accessToken: string;
+  tokenType: string;
+  expiresAt: Date;
+}
+
+// 메모리 캐시 (서버 재시작 시 초기화됨)
+let cachedStatsToken: StatsToken | null = null;
+
+/**
+ * 통계 API용 토큰 발급
+ * 별도의 NAVER_STATS_CLIENT_ID, NAVER_STATS_CLIENT_SECRET 사용
+ */
+async function refreshStatsToken(): Promise<StatsToken | null> {
+  const clientId = getStatsClientId();
+  const clientSecret = getStatsClientSecret();
+  const proxyUrl = getProxyUrl();
+  const proxyApiKey = getProxyApiKey();
+
+  if (!clientId || !clientSecret) {
+    console.error("❌ [Stats] 통계 API credentials가 설정되지 않음 (NAVER_STATS_CLIENT_ID, NAVER_STATS_CLIENT_SECRET)");
+    return null;
+  }
+
+  try {
+    let tokenData: any;
+
+    if (proxyUrl) {
+      // 프록시 서버를 통해 토큰 발급
+      console.log("🔄 [Stats] 프록시 서버를 통해 통계 API 토큰 발급 시도...");
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+
+      if (proxyApiKey) {
+        headers["X-Proxy-Api-Key"] = proxyApiKey;
+      }
+
+      const response = await fetch(`${proxyUrl}/api/token`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          client_id: clientId,
+          client_secret: clientSecret,
+          account_id: "stats",  // 통계 API 전용 식별자
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error("❌ [Stats] 프록시 토큰 발급 실패:", response.status, errorData);
+        return null;
+      }
+
+      tokenData = await response.json();
+    } else {
+      // 직접 토큰 발급 (로컬 개발 또는 고정 IP 환경)
+      console.log("🔄 [Stats] 직접 통계 API 토큰 발급 시도...");
+
+      const tokenUrl = `${NAVER_API_BASE}/external/v1/oauth2/token`;
+      const timestamp = Date.now();
+
+      // HMAC-SHA256 서명 생성
+      const signatureBase = `${clientId}_${timestamp}`;
+      const signature = crypto
+        .createHmac("sha256", clientSecret)
+        .update(signatureBase)
+        .digest("base64");
+
+      const response = await fetch(tokenUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          client_id: clientId,
+          timestamp: String(timestamp),
+          client_secret_sign: signature,
+          grant_type: "client_credentials",
+          type: "SELLER",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error("❌ [Stats] 토큰 발급 실패:", response.status, errorData);
+        return null;
+      }
+
+      tokenData = await response.json();
+    }
+
+    console.log("✅ [Stats] 통계 API 토큰 발급 성공");
+
+    // 토큰 캐시 저장
+    const expiresIn = tokenData.expires_in || 3600;
+    cachedStatsToken = {
+      accessToken: tokenData.access_token,
+      tokenType: tokenData.token_type || "Bearer",
+      expiresAt: new Date(Date.now() + expiresIn * 1000 - 5 * 60 * 1000), // 5분 여유
+    };
+
+    return cachedStatsToken;
+  } catch (error) {
+    console.error("❌ [Stats] 토큰 발급 중 오류:", error);
+    return null;
+  }
+}
+
+/**
+ * 유효한 통계 API 토큰 가져오기 (자동 갱신)
+ */
+async function getValidStatsToken(): Promise<StatsToken | null> {
+  // 캐시된 토큰이 유효한지 확인
+  if (cachedStatsToken && cachedStatsToken.expiresAt > new Date()) {
+    return cachedStatsToken;
+  }
+
+  // 토큰이 없거나 만료됨
+  console.log("🔄 [Stats] 통계 API 토큰 없거나 만료됨, 새로 발급...");
+  return refreshStatsToken();
 }
 
 // ============================================================================
@@ -113,7 +253,7 @@ export interface ChannelInfo {
 
 /**
  * 네이버 통계 API 호출
- * 기존 naver.server.ts의 패턴을 따르되 통계 API에 특화
+ * 별도의 통계 API credentials 사용 (NAVER_STATS_CLIENT_ID, NAVER_STATS_CLIENT_SECRET)
  */
 async function naverStatsFetch<T>(
   endpoint: string,
@@ -127,9 +267,10 @@ async function naverStatsFetch<T>(
   const proxyUrl = getProxyUrl();
   const proxyApiKey = getProxyApiKey();
 
-  const token = await getValidToken();
+  // 통계 API 전용 토큰 사용
+  const token = await getValidStatsToken();
   if (!token) {
-    return { success: false, error: "유효한 네이버 토큰이 없습니다. 연동을 다시 해주세요." };
+    return { success: false, error: "유효한 통계 API 토큰이 없습니다. NAVER_STATS_CLIENT_ID, NAVER_STATS_CLIENT_SECRET를 확인해주세요." };
   }
 
   // 쿼리 파라미터 구성
@@ -148,7 +289,7 @@ async function naverStatsFetch<T>(
       // 프록시 서버를 통한 호출
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
-        "Authorization": `${token.token_type} ${token.access_token}`,
+        "Authorization": `${token.tokenType} ${token.accessToken}`,
       };
 
       if (proxyApiKey) {
@@ -159,7 +300,7 @@ async function naverStatsFetch<T>(
         method,
         path: fullEndpoint,
         headers: {
-          "Authorization": `${token.token_type} ${token.access_token}`,
+          "Authorization": `${token.tokenType} ${token.accessToken}`,
         },
         body,
       };
@@ -177,7 +318,7 @@ async function naverStatsFetch<T>(
         method,
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `${token.token_type} ${token.access_token}`,
+          "Authorization": `${token.tokenType} ${token.accessToken}`,
         },
         body: body ? JSON.stringify(body) : undefined,
       });
