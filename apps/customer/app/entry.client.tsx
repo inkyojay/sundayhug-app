@@ -23,9 +23,7 @@ import { getInitialNamespaces } from "remix-i18next/client";
 
 // Import i18n configuration and language resources
 import i18n from "./i18n";
-import en from "./locales/en";
-import es from "./locales/es";
-import ko from "./locales/ko";
+import { resources } from "./locales";
 
 /**
  * Hydration function for client-side initialization
@@ -69,17 +67,7 @@ async function hydrate() {
         caches: [], // Disable caching for language detection
       },
       // Configure language resources for all supported languages
-      resources: {
-        en: {
-          common: en, // English translations
-        },
-        es: {
-          common: es, // Spanish translations
-        },
-        ko: {
-          common: ko, // Korean translations
-        },
-      },
+      resources,
     });
 
   // Hydrate the React application with performance optimization

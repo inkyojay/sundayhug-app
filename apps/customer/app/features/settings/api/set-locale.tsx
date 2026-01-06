@@ -44,13 +44,20 @@ const localeSchema = z.enum(i18n.supportedLngs);
  * @returns Response with Set-Cookie header for the new locale
  */
 export async function action({ request }: LoaderFunctionArgs) {
-  // Extract locale from URL parameters
+  // Extract locale from form data or URL parameters
+  const formData = await request.formData();
+  const localeFromForm = formData.get("locale");
+
+  // Fallback to URL parameters for backward compatibility
   const url = new URL(request.url);
-  
+  const localeFromUrl = url.searchParams.get("locale");
+
+  const localeValue = localeFromForm || localeFromUrl;
+
   // Validate locale against supported languages
   // This will throw an error if the locale is not supported
-  const locale = localeSchema.parse(url.searchParams.get("locale"));
-  
+  const locale = localeSchema.parse(localeValue);
+
   // Return response with cookie header to set the new locale
   return data(null, {
     headers: {

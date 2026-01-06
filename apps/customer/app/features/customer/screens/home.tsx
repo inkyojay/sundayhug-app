@@ -22,6 +22,7 @@ import {
 import { Theme, useTheme } from "remix-themes";
 
 import { Button } from "~/core/components/ui/button";
+import { LanguageSelector } from "~/core/components/language-selector";
 import makeServerClient from "~/core/lib/supa-client.server";
 
 export function meta(): Route.MetaDescriptors {
@@ -74,15 +75,20 @@ export default function CustomerHomeScreen() {
       <div className="mx-auto max-w-6xl px-6 py-10 md:py-16">
         {/* Hero Section */}
         <div className="mb-10 md:mb-14">
-          {/* 상단 배지 + 테마 토글 */}
+          {/* 상단 배지 + 언어/테마 토글 */}
           <div className="flex items-center justify-between mb-6">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
               <Sparkles className="w-4 h-4 text-[#FF6B35]" />
               <span className="text-sm font-medium text-gray-600 dark:text-gray-300">{t("common:brand.customerService")}</span>
             </div>
-            
-            {/* Theme Toggle - 3단 세그먼트 */}
-            <div className="flex items-center gap-1 p-1 rounded-full bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700">
+
+            {/* 언어 선택 + Theme Toggle */}
+            <div className="flex items-center gap-2">
+              {/* Language Selector */}
+              <LanguageSelector variant="minimal" />
+
+              {/* Theme Toggle - 3단 세그먼트 */}
+              <div className="flex items-center gap-1 p-1 rounded-full bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700">
               {/* System */}
               <button
                 onClick={() => setTheme(null)}
@@ -121,9 +127,10 @@ export default function CustomerHomeScreen() {
               >
                 <Moon className="w-5 h-5" />
               </button>
+              </div>
             </div>
           </div>
-          
+
           <h1 className="text-4xl md:text-6xl font-light tracking-tight leading-tight">
             {isLoggedIn ? (
               <>
