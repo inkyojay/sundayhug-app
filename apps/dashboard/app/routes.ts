@@ -295,6 +295,11 @@ export default [
         route("/business-dashboard", "features/business-dashboard/screens/business-dashboard.tsx"),
       ]),
 
+      // ===== 설정 =====
+      ...prefix("/settings", [
+        route("/i18n", "features/settings/screens/i18n-settings.tsx"),
+      ]),
+
       // ===== 계정 설정 =====
       route("/account/edit", "features/users/screens/account.tsx"),
     ]),

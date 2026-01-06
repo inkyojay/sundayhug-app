@@ -286,6 +286,10 @@ const data = {
           title: "계정 설정",
           url: "/account/edit",
         },
+        {
+          title: "다국어/국가",
+          url: "/dashboard/settings/i18n",
+        },
       ],
     },
   ],
