@@ -82,6 +82,11 @@ export default [
       route("/sync-inventory", "features/integrations/api/coupang-sync-inventory.tsx"),
     ]),
 
+    // ----- 네이버 통계 API (탐색용) -----
+    ...prefix("/naver-analytics", [
+      route("/explore", "features/naver-analytics/api/explore-stats.tsx"),
+    ]),
+
     // ----- 재고 위치 API -----
     route("/inventory-locations", "features/inventory/api/inventory-locations.tsx"),
 

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { nodeProfilingIntegration } from "@sentry/profiling-node";
 import * as Sentry from "@sentry/react-router";
 
