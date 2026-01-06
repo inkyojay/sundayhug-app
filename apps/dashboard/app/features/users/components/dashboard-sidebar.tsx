@@ -10,6 +10,7 @@
  * - 콘텐츠 관리: 블로그/AI 상담 지식
  */
 import {
+  BarChart3Icon,
   BookOpenIcon,
   BoxIcon,
   LayoutDashboardIcon,
@@ -58,6 +59,10 @@ const data = {
         {
           title: "종합 현황",
           url: "/dashboard",
+        },
+        {
+          title: "비즈니스 분석",
+          url: "/dashboard/business-dashboard",
         },
       ],
     },
@@ -254,6 +259,19 @@ const data = {
         {
           title: "쿠팡 로켓그로스",
           url: "/dashboard/integrations/coupang",
+        },
+      ],
+    },
+
+    // ===== 네이버 스마트스토어 분석 =====
+    {
+      title: "네이버 분석",
+      url: "/dashboard/naver-analytics/customers",
+      icon: BarChart3Icon,
+      items: [
+        {
+          title: "고객 분석",
+          url: "/dashboard/naver-analytics/customers",
         },
       ],
     },

@@ -285,6 +285,14 @@ export default [
           // 쿠팡 주문은 통합 주문으로 리다이렉트
           route("/coupang/orders", "core/screens/redirect.tsx", { id: "redirect-coupang-orders" }),
         ]),
+
+        // ===== 네이버 스마트스토어 분석 =====
+        ...prefix("/naver-analytics", [
+          route("/customers", "features/naver-analytics/screens/customer-analytics.tsx"),
+        ]),
+
+        // ===== 비즈니스 대시보드 =====
+        route("/business-dashboard", "features/business-dashboard/screens/business-dashboard.tsx"),
       ]),
 
       // ===== 계정 설정 =====
