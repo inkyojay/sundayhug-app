@@ -55,6 +55,10 @@ let cachedStatsToken: StatsToken | null = null;
 /**
  * 통계 API용 토큰 발급
  * 별도의 NAVER_STATS_CLIENT_ID, NAVER_STATS_CLIENT_SECRET 사용
+ *
+ * 하이브리드 방식:
+ * - 토큰 발급: 프록시 사용 (서명 처리가 복잡하므로)
+ * - API 호출: 직접 호출 (IP 제한 없음)
  */
 async function refreshStatsToken(): Promise<StatsToken | null> {
   const clientId = getStatsClientId();
@@ -71,7 +75,7 @@ async function refreshStatsToken(): Promise<StatsToken | null> {
     let tokenData: any;
 
     if (proxyUrl) {
-      // 프록시 서버를 통해 토큰 발급
+      // 프록시 서버를 통해 토큰 발급 (서명 처리)
       console.log("🔄 [Stats] 프록시 서버를 통해 통계 API 토큰 발급 시도...");
 
       const headers: Record<string, string> = {
@@ -88,7 +92,7 @@ async function refreshStatsToken(): Promise<StatsToken | null> {
         body: JSON.stringify({
           client_id: clientId,
           client_secret: clientSecret,
-          account_id: "stats",  // 통계 API 전용 식별자
+          account_id: "stats",
         }),
       });
 
@@ -100,13 +104,12 @@ async function refreshStatsToken(): Promise<StatsToken | null> {
 
       tokenData = await response.json();
     } else {
-      // 직접 토큰 발급 (로컬 개발 또는 고정 IP 환경)
-      console.log("🔄 [Stats] 직접 통계 API 토큰 발급 시도...");
+      // 프록시 없이 직접 발급 시도
+      console.log("🔄 [Stats] 통계 API 토큰 직접 발급 시도...");
 
       const tokenUrl = `${NAVER_API_BASE}/external/v1/oauth2/token`;
       const timestamp = Date.now();
 
-      // HMAC-SHA256 서명 생성
       const signatureBase = `${clientId}_${timestamp}`;
       const signature = crypto
         .createHmac("sha256", clientSecret)
@@ -123,7 +126,8 @@ async function refreshStatsToken(): Promise<StatsToken | null> {
           timestamp: String(timestamp),
           client_secret_sign: signature,
           grant_type: "client_credentials",
-          type: "SELLER",
+          type: "SELF",
+          account_id: process.env.NAVER_ACCOUNT_ID || "default",
         }),
       });
 
@@ -254,6 +258,8 @@ export interface ChannelInfo {
 /**
  * 네이버 통계 API 호출
  * 별도의 통계 API credentials 사용 (NAVER_STATS_CLIENT_ID, NAVER_STATS_CLIENT_SECRET)
+ *
+ * 참고: API데이터솔루션(통계) 앱은 IP 제한이 없어 직접 호출
  */
 async function naverStatsFetch<T>(
   endpoint: string,
@@ -264,8 +270,6 @@ async function naverStatsFetch<T>(
   } = {}
 ): Promise<NaverStatsResponse<T>> {
   const { method = "GET", params, body } = options;
-  const proxyUrl = getProxyUrl();
-  const proxyApiKey = getProxyApiKey();
 
   // 통계 API 전용 토큰 사용
   const token = await getValidStatsToken();
@@ -283,46 +287,17 @@ async function naverStatsFetch<T>(
   console.log(`📊 [Stats] API 호출: ${method} ${fullEndpoint}`);
 
   try {
-    let response: Response;
+    // 통계 API는 IP 제한이 없으므로 직접 호출
+    const apiUrl = `${NAVER_API_BASE}${fullEndpoint}`;
 
-    if (proxyUrl) {
-      // 프록시 서버를 통한 호출
-      const headers: Record<string, string> = {
+    const response = await fetch(apiUrl, {
+      method,
+      headers: {
         "Content-Type": "application/json",
         "Authorization": `${token.tokenType} ${token.accessToken}`,
-      };
-
-      if (proxyApiKey) {
-        headers["X-Proxy-Api-Key"] = proxyApiKey;
-      }
-
-      const proxyBody = {
-        method,
-        path: fullEndpoint,
-        headers: {
-          "Authorization": `${token.tokenType} ${token.accessToken}`,
-        },
-        body,
-      };
-
-      response = await fetch(`${proxyUrl}/api/proxy`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(proxyBody),
-      });
-    } else {
-      // 직접 호출
-      const apiUrl = `${NAVER_API_BASE}${fullEndpoint}`;
-
-      response = await fetch(apiUrl, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `${token.tokenType} ${token.accessToken}`,
-        },
-        body: body ? JSON.stringify(body) : undefined,
-      });
-    }
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
 
     const responseText = await response.text();
     console.log(`📊 [Stats] 응답 (${response.status}): ${responseText.slice(0, 500)}`);
