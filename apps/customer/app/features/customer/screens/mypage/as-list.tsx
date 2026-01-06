@@ -10,6 +10,7 @@ import type { Route } from "./+types/as-list";
 
 import { useState, useRef } from "react";
 import { Link, redirect, useLoaderData, useFetcher, data } from "react-router";
+import { useTranslation } from "react-i18next";
 import { 
   ArrowLeft, 
   Wrench,
@@ -181,6 +182,7 @@ export default function MypageAsListScreen() {
   const { warranties, asRequests, user } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { t } = useTranslation(["customer", "common"]);
   
   const [productType, setProductType] = useState<"abc" | "other" | null>(null);
   const [selectedWarranty, setSelectedWarranty] = useState<string>("");
@@ -330,28 +332,28 @@ export default function MypageAsListScreen() {
       <div className="mx-auto max-w-2xl px-6 py-10">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <Link 
+          <Link
             to="/customer/mypage"
             className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors shadow-sm"
           >
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">A/S 신청</h1>
-            <p className="text-sm text-gray-500">수리 접수</p>
+            <h1 className="text-2xl font-bold text-gray-900">{t("customer:as.title")}</h1>
+            <p className="text-sm text-gray-500">{t("customer:as.subtitle")}</p>
           </div>
         </div>
 
         {/* 성공/에러 메시지 */}
         {fetcherData?.success && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-2xl">
-            <p className="text-green-700 font-medium">✅ {fetcherData.message}</p>
-            <p className="text-green-600 text-sm mt-1">담당자 확인 후 연락드리겠습니다.</p>
-            <button 
+            <p className="text-green-700 font-medium">{t("customer:as.success")}</p>
+            <p className="text-green-600 text-sm mt-1">{t("customer:as.successDescription")}</p>
+            <button
               onClick={resetForm}
               className="mt-3 text-sm text-green-700 underline"
             >
-              새 신청하기
+              {t("customer:as.newRequest")}
             </button>
           </div>
         )}
@@ -365,8 +367,8 @@ export default function MypageAsListScreen() {
         {/* 제품 선택 */}
         {!fetcherData?.success && (
           <div className="bg-white rounded-2xl p-6 mb-6 border border-gray-100">
-            <h2 className="font-semibold text-gray-900 mb-4">제품 선택</h2>
-            
+            <h2 className="font-semibold text-gray-900 mb-4">{t("customer:as.selectProduct")}</h2>
+
             <div className="grid grid-cols-2 gap-3">
               {/* ABC 아기침대 */}
               <button
@@ -376,8 +378,8 @@ export default function MypageAsListScreen() {
                   setFormData(prev => ({ ...prev, otherProductName: "" }));
                 }}
                 className={`p-4 rounded-xl border-2 transition-all text-left ${
-                  productType === "abc" 
-                    ? "border-[#FF6B35] bg-[#FF6B35]/5" 
+                  productType === "abc"
+                    ? "border-[#FF6B35] bg-[#FF6B35]/5"
                     : "border-gray-200 hover:border-gray-300"
                 }`}
               >
@@ -387,9 +389,9 @@ export default function MypageAsListScreen() {
                   <ShieldCheck className={`w-5 h-5 ${productType === "abc" ? "text-[#FF6B35]" : "text-gray-400"}`} />
                 </div>
                 <p className={`font-medium ${productType === "abc" ? "text-[#FF6B35]" : "text-gray-900"}`}>
-                  ABC 아기침대
+                  {t("customer:as.productType.abc")}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">보증서 등록 제품</p>
+                <p className="text-xs text-gray-500 mt-1">{t("customer:as.productType.abcDescription")}</p>
               </button>
 
               {/* 다른 제품 */}
@@ -400,8 +402,8 @@ export default function MypageAsListScreen() {
                   setSelectedWarranty("");
                 }}
                 className={`p-4 rounded-xl border-2 transition-all text-left ${
-                  productType === "other" 
-                    ? "border-[#FF6B35] bg-[#FF6B35]/5" 
+                  productType === "other"
+                    ? "border-[#FF6B35] bg-[#FF6B35]/5"
                     : "border-gray-200 hover:border-gray-300"
                 }`}
               >
@@ -411,9 +413,9 @@ export default function MypageAsListScreen() {
                   <Package className={`w-5 h-5 ${productType === "other" ? "text-[#FF6B35]" : "text-gray-400"}`} />
                 </div>
                 <p className={`font-medium ${productType === "other" ? "text-[#FF6B35]" : "text-gray-900"}`}>
-                  다른 제품
+                  {t("customer:as.productType.other")}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">기타 썬데이허그 제품</p>
+                <p className="text-xs text-gray-500 mt-1">{t("customer:as.productType.otherDescription")}</p>
               </button>
             </div>
           </div>
@@ -422,18 +424,18 @@ export default function MypageAsListScreen() {
         {/* ABC 아기침대 - 보증서 선택 */}
         {productType === "abc" && !fetcherData?.success && (
           <div className="bg-white rounded-2xl p-6 mb-6 border border-gray-100">
-            <h2 className="font-semibold text-gray-900 mb-4">보증서 선택</h2>
-            
+            <h2 className="font-semibold text-gray-900 mb-4">{t("customer:as.selectWarranty")}</h2>
+
             {warranties.length === 0 ? (
               <div className="text-center py-8">
                 <ShieldCheck className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 font-medium">승인된 보증서가 없습니다</p>
-                <p className="text-sm text-gray-400 mt-1">보증서 승인 후 A/S 신청이 가능합니다</p>
-                <Link 
+                <p className="text-gray-500 font-medium">{t("customer:as.noWarranty")}</p>
+                <p className="text-sm text-gray-400 mt-1">{t("customer:as.noWarrantyDescription")}</p>
+                <Link
                   to="/customer/warranty"
                   className="inline-flex items-center gap-2 mt-4 text-[#FF6B35] font-medium text-sm"
                 >
-                  보증서 등록하기 <ChevronRight className="w-4 h-4" />
+                  {t("customer:as.registerWarranty")} <ChevronRight className="w-4 h-4" />
                 </Link>
               </div>
             ) : (
@@ -480,11 +482,11 @@ export default function MypageAsListScreen() {
             {/* 다른 제품 - 제품명 입력 */}
             {productType === "other" && (
               <div className="bg-white rounded-2xl p-6 border border-gray-100">
-                <h2 className="font-semibold text-gray-900 mb-4">제품 정보</h2>
+                <h2 className="font-semibold text-gray-900 mb-4">{t("customer:as.productInfo")}</h2>
                 <div className="space-y-2">
-                  <Label className="text-gray-700">제품명 *</Label>
+                  <Label className="text-gray-700">{t("customer:as.productName")} *</Label>
                   <Input
-                    placeholder="예: 꿀잠 속싸개, 나비잠 자세 속싸개 등"
+                    placeholder={t("customer:as.productNamePlaceholder")}
                     value={formData.otherProductName}
                     onChange={(e) => setFormData(prev => ({ ...prev, otherProductName: e.target.value }))}
                     className="h-12 rounded-xl border-gray-200 bg-white text-gray-900 placeholder:text-gray-400"
@@ -496,9 +498,9 @@ export default function MypageAsListScreen() {
 
             {/* 증상 설명 */}
             <div className="bg-white rounded-2xl p-6 border border-gray-100">
-              <h2 className="font-semibold text-gray-900 mb-4">🔧 증상 설명</h2>
+              <h2 className="font-semibold text-gray-900 mb-4">{t("customer:as.issueDescription")}</h2>
               <Textarea
-                placeholder="어떤 문제가 있는지 자세히 적어주세요&#10;&#10;예) 프레임 연결 부분이 흔들려요, 바퀴가 잘 안 굴러가요 등"
+                placeholder={t("customer:as.issueDescriptionPlaceholder")}
                 value={formData.issueDescription}
                 onChange={(e) => setFormData(prev => ({ ...prev, issueDescription: e.target.value }))}
                 className="min-h-[140px] rounded-xl border-gray-200 bg-white text-gray-900 placeholder:text-gray-400"
@@ -508,8 +510,8 @@ export default function MypageAsListScreen() {
 
             {/* 사진 첨부 */}
             <div className="bg-white rounded-2xl p-6 border border-gray-100">
-              <h2 className="font-semibold text-gray-900 mb-2">📷 사진 첨부 (선택)</h2>
-              <p className="text-sm text-gray-500 mb-4">문제가 있는 부분을 찍어서 첨부해주시면 더 빠른 처리가 가능합니다.</p>
+              <h2 className="font-semibold text-gray-900 mb-2">{t("customer:as.photoAttachment")}</h2>
+              <p className="text-sm text-gray-500 mb-4">{t("customer:as.photoAttachmentDescription")}</p>
               
               <input
                 ref={fileInputRef}
@@ -552,18 +554,18 @@ export default function MypageAsListScreen() {
               </div>
 
               <p className="text-xs text-gray-400 mt-3">
-                JPG, PNG, WEBP 형식 / 최대 5MB / 최대 3장
+                {t("customer:as.photoFormat")}
               </p>
             </div>
 
             {/* 연락처 정보 */}
             <div className="bg-white rounded-2xl p-6 border border-gray-100">
-              <h2 className="font-semibold text-gray-900 mb-4">연락처 정보</h2>
+              <h2 className="font-semibold text-gray-900 mb-4">{t("customer:as.contactInfo")}</h2>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label className="text-gray-700">이름 *</Label>
+                  <Label className="text-gray-700">{t("customer:as.contactName")} *</Label>
                   <Input
-                    placeholder="이름"
+                    placeholder={t("common:form.placeholder.name")}
                     value={formData.contactName}
                     onChange={(e) => setFormData(prev => ({ ...prev, contactName: e.target.value }))}
                     className="h-12 rounded-xl border-gray-200 bg-white text-gray-900 placeholder:text-gray-400"
@@ -571,7 +573,7 @@ export default function MypageAsListScreen() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-gray-700">연락처 *</Label>
+                  <Label className="text-gray-700">{t("customer:as.contactPhone")} *</Label>
                   <Input
                     type="tel"
                     placeholder="010-1234-5678"
@@ -592,11 +594,11 @@ export default function MypageAsListScreen() {
               className="w-full h-14 rounded-xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white font-medium text-lg"
             >
               {isSubmitting || isUploading ? (
-                isUploading ? "사진 업로드 중..." : "신청 중..."
+                isUploading ? t("common:status.uploading") : t("common:status.processing")
               ) : (
                 <>
                   <Send className="w-5 h-5 mr-2" />
-                  A/S 신청하기
+                  {t("customer:as.submitButton")}
                 </>
               )}
             </Button>
@@ -612,7 +614,7 @@ export default function MypageAsListScreen() {
             >
               <div className="flex items-center gap-3">
                 <Wrench className="w-5 h-5 text-gray-400" />
-                <span className="font-medium text-gray-900">A/S 이력</span>
+                <span className="font-medium text-gray-900">{t("customer:as.history")}</span>
                 <Badge variant="outline" className="rounded-full">{asRequests.length}</Badge>
               </div>
               <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showHistory ? "rotate-180" : ""}`} />
@@ -629,13 +631,13 @@ export default function MypageAsListScreen() {
                       <div className="flex items-start justify-between mb-3">
                         <Badge className={`${status.color} px-3 py-1 rounded-full font-medium`}>
                           <StatusIcon className="w-3.5 h-3.5 mr-1" />
-                          {status.label}
+                          {t(`customer:as.status.${req.status}`)}
                         </Badge>
                       </div>
                       
                       <div className="mb-3">
                         <h3 className="font-semibold text-gray-900">
-                          {req.warranties?.product_name || "기타 제품"}
+                          {req.warranties?.product_name || t("customer:as.otherProduct")}
                         </h3>
                         {req.warranties?.product_option && (
                           <p className="text-sm text-gray-500">{req.warranties.product_option}</p>
@@ -662,13 +664,13 @@ export default function MypageAsListScreen() {
                       
                       <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                         <p className="text-xs text-gray-400">
-                          신청일: {new Date(req.created_at).toLocaleDateString("ko-KR")}
+                          {t("customer:as.requestDate")}: {new Date(req.created_at).toLocaleDateString("ko-KR")}
                         </p>
                       </div>
-                      
+
                       {req.resolution && (
                         <div className="mt-3 p-4 bg-green-50 rounded-xl">
-                          <p className="font-medium text-green-800 text-sm mb-1">처리 결과</p>
+                          <p className="font-medium text-green-800 text-sm mb-1">{t("customer:as.resolution")}</p>
                           <p className="text-green-700 text-sm">{req.resolution}</p>
                         </div>
                       )}
@@ -682,7 +684,7 @@ export default function MypageAsListScreen() {
 
         {/* 하단 안내 */}
         <div className="mt-8 text-center text-sm text-gray-400">
-          <a 
+          <a
             href="https://pf.kakao.com/_crxgDxj/chat"
             target="_blank"
             rel="noopener noreferrer"
@@ -691,7 +693,7 @@ export default function MypageAsListScreen() {
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 3c5.799 0 10.5 3.664 10.5 8.185 0 4.52-4.701 8.184-10.5 8.184a13.5 13.5 0 01-1.727-.11l-4.408 2.883c-.501.265-.678.236-.472-.413l.892-3.678c-2.88-1.46-4.785-3.99-4.785-6.866C1.5 6.665 6.201 3 12 3z" />
             </svg>
-            카카오톡으로 문의하기
+            {t("customer:as.kakaoInquiry")}
           </a>
         </div>
       </div>

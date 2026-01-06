@@ -8,6 +8,7 @@
  */
 import type { Route } from "./+types/post-edit";
 
+import { useTranslation } from "react-i18next";
 import { Link, useLoaderData, useNavigate, data, Form, useActionData, useFetcher } from "react-router";
 import { ArrowLeft, Save, Eye, ImagePlus, Loader2, Sparkles, Clock, RefreshCw } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
@@ -150,6 +151,7 @@ function calculateReadTime(text: string): number {
 
 
 export default function BlogPostEditScreen() {
+  const { t } = useTranslation(["blog", "common"]);
   const { post, categories, existingSlugs, isNew } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();

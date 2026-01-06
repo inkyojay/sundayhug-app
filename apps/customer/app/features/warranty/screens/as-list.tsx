@@ -12,6 +12,7 @@ import {
   AlertCircleIcon,
 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
@@ -115,22 +116,23 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  received: { label: "접수", variant: "outline" },
-  processing: { label: "처리중", variant: "secondary" },
-  completed: { label: "완료", variant: "default" },
-  cancelled: { label: "취소", variant: "destructive" },
-};
-
-const typeConfig: Record<string, string> = {
-  repair: "수리",
-  exchange: "교환",
-  refund: "환불",
-  inquiry: "문의",
-};
-
 export default function ASList({ loaderData }: Route.ComponentProps) {
+  const { t } = useTranslation(["warranty", "common"]);
   const { asRequests, stats, totalCount, currentPage, totalPages, statusFilter, typeFilter } = loaderData;
+
+  const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+    received: { label: t("warranty:admin.asManagement.status.received"), variant: "outline" },
+    processing: { label: t("warranty:admin.asManagement.status.processing"), variant: "secondary" },
+    completed: { label: t("warranty:admin.asManagement.status.completed"), variant: "default" },
+    cancelled: { label: t("warranty:admin.asManagement.status.cancelled"), variant: "destructive" },
+  };
+
+  const typeConfig: Record<string, string> = {
+    repair: t("warranty:admin.asManagement.types.repair"),
+    exchange: t("warranty:admin.asManagement.types.exchange"),
+    refund: t("warranty:admin.asManagement.types.refund"),
+    inquiry: t("warranty:admin.asManagement.types.inquiry"),
+  };
 
   const buildUrl = (overrides: Record<string, string | null> = {}) => {
     const params = new URLSearchParams();
@@ -157,12 +159,12 @@ export default function ASList({ loaderData }: Route.ComponentProps) {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <WrenchIcon className="h-6 w-6" />
-            A/S 관리
+            {t("warranty:admin.asManagement.title")}
           </h1>
-          <p className="text-muted-foreground">A/S 신청 현황</p>
+          <p className="text-muted-foreground">{t("warranty:admin.asManagement.subtitle")}</p>
         </div>
         <Button variant="outline" asChild>
-          <a href="/dashboard/warranty">← 보증서 목록</a>
+          <a href="/dashboard/warranty">{t("warranty:admin.asManagement.backToWarrantyList")}</a>
         </Button>
       </div>
 
@@ -170,7 +172,7 @@ export default function ASList({ loaderData }: Route.ComponentProps) {
       <div className="grid gap-4 md:grid-cols-4">
         <Card className="cursor-pointer hover:bg-muted/50" onClick={() => handleFilterChange("status", "all")}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">전체</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("warranty:admin.asManagement.stats.total")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.total}</div>
@@ -180,7 +182,7 @@ export default function ASList({ loaderData }: Route.ComponentProps) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               <AlertCircleIcon className="h-4 w-4 text-yellow-500" />
-              접수
+              {t("warranty:admin.asManagement.stats.received")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -191,7 +193,7 @@ export default function ASList({ loaderData }: Route.ComponentProps) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               <ClockIcon className="h-4 w-4 text-blue-500" />
-              처리중
+              {t("warranty:admin.asManagement.stats.processing")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -202,7 +204,7 @@ export default function ASList({ loaderData }: Route.ComponentProps) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               <CheckCircleIcon className="h-4 w-4 text-green-500" />
-              완료
+              {t("warranty:admin.asManagement.stats.completed")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -216,30 +218,30 @@ export default function ASList({ loaderData }: Route.ComponentProps) {
         <CardContent className="pt-6">
           <div className="flex flex-wrap gap-4 items-center">
             <FilterIcon className="h-4 w-4 text-muted-foreground" />
-            
+
             <Select value={statusFilter} onValueChange={(v) => handleFilterChange("status", v)}>
               <SelectTrigger className="w-[130px]">
-                <SelectValue placeholder="상태" />
+                <SelectValue placeholder={t("warranty:admin.asManagement.filter.status")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">전체</SelectItem>
-                <SelectItem value="received">접수</SelectItem>
-                <SelectItem value="processing">처리중</SelectItem>
-                <SelectItem value="completed">완료</SelectItem>
-                <SelectItem value="cancelled">취소</SelectItem>
+                <SelectItem value="all">{t("warranty:admin.asManagement.filter.all")}</SelectItem>
+                <SelectItem value="received">{t("warranty:admin.asManagement.status.received")}</SelectItem>
+                <SelectItem value="processing">{t("warranty:admin.asManagement.status.processing")}</SelectItem>
+                <SelectItem value="completed">{t("warranty:admin.asManagement.status.completed")}</SelectItem>
+                <SelectItem value="cancelled">{t("warranty:admin.asManagement.status.cancelled")}</SelectItem>
               </SelectContent>
             </Select>
 
             <Select value={typeFilter} onValueChange={(v) => handleFilterChange("type", v)}>
               <SelectTrigger className="w-[130px]">
-                <SelectValue placeholder="유형" />
+                <SelectValue placeholder={t("warranty:admin.asManagement.filter.type")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">전체</SelectItem>
-                <SelectItem value="repair">수리</SelectItem>
-                <SelectItem value="exchange">교환</SelectItem>
-                <SelectItem value="refund">환불</SelectItem>
-                <SelectItem value="inquiry">문의</SelectItem>
+                <SelectItem value="all">{t("warranty:admin.asManagement.filter.all")}</SelectItem>
+                <SelectItem value="repair">{t("warranty:admin.asManagement.types.repair")}</SelectItem>
+                <SelectItem value="exchange">{t("warranty:admin.asManagement.types.exchange")}</SelectItem>
+                <SelectItem value="refund">{t("warranty:admin.asManagement.types.refund")}</SelectItem>
+                <SelectItem value="inquiry">{t("warranty:admin.asManagement.types.inquiry")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -249,20 +251,20 @@ export default function ASList({ loaderData }: Route.ComponentProps) {
       {/* A/S 테이블 */}
       <Card>
         <CardHeader>
-          <CardTitle>A/S 신청 목록</CardTitle>
-          <CardDescription>총 {totalCount}건</CardDescription>
+          <CardTitle>{t("warranty:admin.asManagement.requestList")}</CardTitle>
+          <CardDescription>{t("warranty:admin.asManagement.totalItems", { count: totalCount })}</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>보증서번호</TableHead>
-                <TableHead>고객</TableHead>
-                <TableHead>제품</TableHead>
-                <TableHead>유형</TableHead>
-                <TableHead>내용</TableHead>
-                <TableHead>상태</TableHead>
-                <TableHead>신청일</TableHead>
+                <TableHead>{t("warranty:admin.asManagement.table.warrantyNumber")}</TableHead>
+                <TableHead>{t("warranty:admin.asManagement.table.customer")}</TableHead>
+                <TableHead>{t("warranty:admin.asManagement.table.product")}</TableHead>
+                <TableHead>{t("warranty:admin.asManagement.table.type")}</TableHead>
+                <TableHead>{t("warranty:admin.asManagement.table.content")}</TableHead>
+                <TableHead>{t("warranty:admin.asManagement.table.status")}</TableHead>
+                <TableHead>{t("warranty:admin.asManagement.table.requestDate")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -298,7 +300,7 @@ export default function ASList({ loaderData }: Route.ComponentProps) {
               {asRequests.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    A/S 신청 내역이 없습니다
+                    {t("warranty:admin.asManagement.noRequests")}
                   </TableCell>
                 </TableRow>
               )}
@@ -309,7 +311,7 @@ export default function ASList({ loaderData }: Route.ComponentProps) {
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
               <p className="text-sm text-muted-foreground">
-                페이지 {currentPage} / {totalPages}
+                {t("warranty:admin.asManagement.pagination.page", { current: currentPage, total: totalPages })}
               </p>
               <div className="flex gap-2">
                 <Button
@@ -318,7 +320,7 @@ export default function ASList({ loaderData }: Route.ComponentProps) {
                   disabled={currentPage <= 1}
                   onClick={() => window.location.href = buildUrl({ page: String(currentPage - 1) })}
                 >
-                  이전
+                  {t("warranty:admin.asManagement.pagination.previous")}
                 </Button>
                 <Button
                   variant="outline"
@@ -326,7 +328,7 @@ export default function ASList({ loaderData }: Route.ComponentProps) {
                   disabled={currentPage >= totalPages}
                   onClick={() => window.location.href = buildUrl({ page: String(currentPage + 1) })}
                 >
-                  다음
+                  {t("warranty:admin.asManagement.pagination.next")}
                 </Button>
               </div>
             </div>

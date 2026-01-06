@@ -2,6 +2,7 @@
  * Reject Dialog Component
  */
 import { XCircleIcon, Loader2Icon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "~/core/components/ui/button";
 import { Textarea } from "~/core/components/ui/textarea";
 import {
@@ -32,25 +33,26 @@ export function RejectDialog({
   onReject,
   isSubmitting,
 }: RejectDialogProps) {
+  const { t } = useTranslation(["warranty", "common"]);
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>보증서 거절</DialogTitle>
+          <DialogTitle>{t("warranty:admin.warrantyDetail.rejectDialog.title")}</DialogTitle>
           <DialogDescription>
-            {warrantyNumber} 보증서를 거절합니다.
-            고객에게 안내할 거절 사유를 입력해주세요.
+            {t("warranty:admin.warrantyDetail.rejectDialog.description", { warrantyNumber })}
           </DialogDescription>
         </DialogHeader>
         <Textarea
-          placeholder="거절 사유를 입력하세요. (예: 제품 사진이 불명확합니다. 제품 전체가 보이는 사진으로 다시 등록해주세요.)"
+          placeholder={t("warranty:admin.warrantyDetail.rejectDialog.placeholder")}
           value={rejectionReason}
           onChange={(e) => onReasonChange(e.target.value)}
           rows={4}
         />
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            취소
+            {t("common:buttons.cancel")}
           </Button>
           <Button
             variant="destructive"
@@ -62,7 +64,7 @@ export function RejectDialog({
             ) : (
               <XCircleIcon className="h-4 w-4 mr-2" />
             )}
-            거절
+            {t("warranty:admin.warrantyDetail.adminActions.reject")}
           </Button>
         </DialogFooter>
       </DialogContent>

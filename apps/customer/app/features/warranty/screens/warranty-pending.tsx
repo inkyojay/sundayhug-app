@@ -14,6 +14,7 @@ import {
   ExternalLinkIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useFetcher, useRevalidator } from "react-router";
 
 import { Badge } from "~/core/components/ui/badge";
@@ -174,10 +175,11 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function WarrantyPending({ loaderData }: Route.ComponentProps) {
+  const { t } = useTranslation(["warranty", "common"]);
   const { pendingList } = loaderData;
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
-  
+
   const [selectedWarranty, setSelectedWarranty] = useState<any>(null);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
@@ -230,14 +232,14 @@ export default function WarrantyPending({ loaderData }: Route.ComponentProps) {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <ClockIcon className="h-6 w-6 text-yellow-500" />
-            승인 대기
+            {t("warranty:admin.pendingApproval.title")}
           </h1>
           <p className="text-muted-foreground">
-            {pendingList.length}건의 보증서가 승인을 기다리고 있습니다
+            {t("warranty:admin.pendingApproval.subtitle", { count: pendingList.length })}
           </p>
         </div>
         <Button variant="outline" asChild>
-          <a href="/dashboard/warranty">← 전체 목록</a>
+          <a href="/dashboard/warranty">{t("warranty:admin.pendingApproval.backToList")}</a>
         </Button>
       </div>
 
@@ -246,8 +248,8 @@ export default function WarrantyPending({ loaderData }: Route.ComponentProps) {
         <Card>
           <CardContent className="py-16 text-center">
             <CheckIcon className="h-12 w-12 mx-auto text-green-500 mb-4" />
-            <p className="text-lg font-medium">모든 보증서가 처리되었습니다</p>
-            <p className="text-muted-foreground">승인 대기 중인 보증서가 없습니다</p>
+            <p className="text-lg font-medium">{t("warranty:admin.pendingApproval.allProcessed")}</p>
+            <p className="text-muted-foreground">{t("warranty:admin.pendingApproval.noPending")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -268,7 +270,7 @@ export default function WarrantyPending({ loaderData }: Route.ComponentProps) {
                       </CardDescription>
                     </div>
                     <Badge variant="outline" className="text-yellow-600 border-yellow-400">
-                      대기
+                      {t("warranty:admin.pendingApproval.waiting")}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -277,12 +279,12 @@ export default function WarrantyPending({ loaderData }: Route.ComponentProps) {
                 {/* 고객 정보 */}
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">구매자:</span>
+                    <span className="text-muted-foreground">{t("warranty:admin.pendingApproval.buyer")}:</span>
                     <span className="font-medium">{item.buyer_name || "-"}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">회원명:</span>
-                    <span>{item.member_name || item.customer_name || item.kakao_nickname || "미인증"}</span>
+                    <span className="text-muted-foreground">{t("warranty:admin.pendingApproval.memberName")}:</span>
+                    <span>{item.member_name || item.customer_name || item.kakao_nickname || t("warranty:admin.pendingApproval.unverified")}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <PhoneIcon className="h-3 w-3 text-muted-foreground" />
@@ -294,7 +296,7 @@ export default function WarrantyPending({ loaderData }: Route.ComponentProps) {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-sm">
                     <PackageIcon className="h-3 w-3 text-muted-foreground" />
-                    <span>{item.product_name || "제품 정보 없음"}</span>
+                    <span>{item.product_name || t("warranty:admin.pendingApproval.noProductInfo")}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <TruckIcon className="h-3 w-3 text-muted-foreground" />
@@ -305,15 +307,15 @@ export default function WarrantyPending({ loaderData }: Route.ComponentProps) {
                 {/* 인증 사진 */}
                 {item.product_photo_url ? (
                   <div className="border rounded-lg overflow-hidden bg-muted/30">
-                    <a 
-                      href={item.product_photo_url} 
-                      target="_blank" 
+                    <a
+                      href={item.product_photo_url}
+                      target="_blank"
                       rel="noopener noreferrer"
                       className="block"
                     >
-                      <img 
-                        src={item.product_photo_url} 
-                        alt="제품 인증 사진"
+                      <img
+                        src={item.product_photo_url}
+                        alt={t("warranty:admin.pendingApproval.productAuthPhoto")}
                         className="w-full h-40 object-cover hover:opacity-90 transition-opacity"
                       />
                     </a>
@@ -321,42 +323,42 @@ export default function WarrantyPending({ loaderData }: Route.ComponentProps) {
                 ) : (
                   <div className="border rounded-lg p-8 bg-muted/30 text-center">
                     <ImageIcon className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-xs text-muted-foreground">사진 없음</p>
+                    <p className="text-xs text-muted-foreground">{t("warranty:admin.pendingApproval.noPhoto")}</p>
                   </div>
                 )}
 
                 {/* 상세 보기 버튼 */}
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full"
                   asChild
                 >
                   <a href={`/dashboard/warranty/${item.id}`}>
                     <ExternalLinkIcon className="h-4 w-4 mr-2" />
-                    주문 정보 확인 후 승인
+                    {t("warranty:admin.pendingApproval.checkOrderAndApprove")}
                   </a>
                 </Button>
 
                 {/* 빠른 액션 버튼 */}
                 <div className="flex gap-2">
-                  <Button 
+                  <Button
                     size="sm"
-                    className="flex-1" 
+                    className="flex-1"
                     onClick={() => handleApprove(item)}
                     disabled={fetcher.state !== "idle"}
                   >
                     <CheckIcon className="h-4 w-4 mr-1" />
-                    바로 승인
+                    {t("warranty:admin.pendingApproval.quickApprove")}
                   </Button>
-                  <Button 
+                  <Button
                     size="sm"
-                    variant="destructive" 
+                    variant="destructive"
                     className="flex-1"
                     onClick={() => openRejectDialog(item)}
                     disabled={fetcher.state !== "idle"}
                   >
                     <XIcon className="h-4 w-4 mr-1" />
-                    거절
+                    {t("warranty:admin.warrantyDetail.adminActions.reject")}
                   </Button>
                 </div>
               </CardContent>
@@ -369,24 +371,23 @@ export default function WarrantyPending({ loaderData }: Route.ComponentProps) {
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>보증서 거절</DialogTitle>
+            <DialogTitle>{t("warranty:admin.warrantyDetail.rejectDialog.title")}</DialogTitle>
             <DialogDescription>
-              {selectedWarranty?.warranty_number} 보증서를 거절합니다.
-              고객에게 안내할 거절 사유를 입력해주세요.
+              {t("warranty:admin.warrantyDetail.rejectDialog.description", { warrantyNumber: selectedWarranty?.warranty_number })}
             </DialogDescription>
           </DialogHeader>
           <Textarea
-            placeholder="거절 사유를 입력하세요. (예: 제품 사진이 불명확합니다. 제품 전체가 보이는 사진으로 다시 등록해주세요.)"
+            placeholder={t("warranty:admin.warrantyDetail.rejectDialog.placeholder")}
             value={rejectionReason}
             onChange={(e) => setRejectionReason(e.target.value)}
             rows={4}
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRejectDialog(false)}>
-              취소
+              {t("common:buttons.cancel")}
             </Button>
             <Button variant="destructive" onClick={handleReject}>
-              거절
+              {t("warranty:admin.warrantyDetail.adminActions.reject")}
             </Button>
           </DialogFooter>
         </DialogContent>

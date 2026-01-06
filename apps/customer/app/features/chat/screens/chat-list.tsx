@@ -6,6 +6,7 @@
 import type { Route } from "./+types/chat-list";
 
 import { Link, useLoaderData, data, useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { 
   ArrowLeft, 
   Plus, 
@@ -71,14 +72,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   });
 }
 
-// 주제 한글명
-const topicNames: Record<string, string> = {
-  sleep: "수면",
-  feeding: "수유",
-  development: "발달",
-  health: "건강",
-  emotion: "정서",
-  general: "일반",
+// Topic keys for i18n
+const topicKeys: Record<string, string> = {
+  sleep: "topics.sleep",
+  feeding: "topics.feeding",
+  development: "topics.development",
+  health: "topics.health",
+  emotion: "topics.behavior",
+  general: "topics.other",
 };
 
 // 주제 색상
@@ -111,9 +112,10 @@ function formatAge(months: number): string {
 }
 
 export default function ChatListScreen() {
+  const { t } = useTranslation(["chat", "common"]);
   const { sessions, babyProfiles, isLoggedIn } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
-  
+
   // 아이 선택 모달
   const [showBabySelector, setShowBabySelector] = useState(false);
 
@@ -123,13 +125,13 @@ export default function ChatListScreen() {
         <div className="text-center">
           <Sparkles className="w-16 h-16 text-[#FF6B35] mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            AI 육아 상담
+            {t("chat:title")}
           </h1>
           <p className="text-gray-500 mb-6">
-            로그인하고 AI 상담사와 대화해보세요
+            {t("chat:subtitle")}
           </p>
           <Button asChild className="bg-[#FF6B35] hover:bg-[#FF6B35]/90">
-            <Link to="/customer/login">로그인하기</Link>
+            <Link to="/customer/login">{t("common:login")}</Link>
           </Button>
         </div>
       </div>
@@ -161,15 +163,15 @@ export default function ChatListScreen() {
       <div className="mx-auto max-w-2xl px-6 py-10">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <Link 
+          <Link
             to="/customer"
             className="w-10 h-10 rounded-full bg-white dark:bg-gray-800 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </Link>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">AI 육아 상담</h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">24시간 AI 상담사와 대화하세요</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t("chat:title")}</h1>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">{t("chat:subtitle")}</p>
           </div>
         </div>
 
@@ -177,12 +179,12 @@ export default function ChatListScreen() {
         {babyProfiles.length > 0 ? (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-medium text-gray-600 dark:text-gray-400">등록된 아이</h2>
-              <Link 
+              <h2 className="text-sm font-medium text-gray-600 dark:text-gray-400">{t("chat:selectBaby.title")}</h2>
+              <Link
                 to="/customer/chat/baby-profile"
                 className="text-xs text-[#FF6B35] hover:underline"
               >
-                + 아이 추가
+                + {t("chat:selectBaby.addNew")}
               </Link>
             </div>
             <div className="flex gap-3 overflow-x-auto pb-2">
@@ -216,9 +218,9 @@ export default function ChatListScreen() {
                   <Baby className="w-7 h-7 text-orange-400" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-bold text-gray-900 dark:text-white">아기 정보 등록하기</h3>
+                  <h3 className="font-bold text-gray-900 dark:text-white">{t("chat:babyProfile.title")}</h3>
                   <p className="text-gray-500 dark:text-gray-400 text-sm">
-                    맞춤형 상담을 위해 아기 정보를 등록해주세요
+                    {t("chat:babyProfile.subtitle")}
                   </p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-gray-400" />
@@ -235,9 +237,9 @@ export default function ChatListScreen() {
                 <Plus className="w-6 h-6 text-white" />
               </div>
               <div className="text-left">
-                <h3 className="font-bold text-white text-lg">새 상담 시작하기</h3>
+                <h3 className="font-bold text-white text-lg">{t("chat:sessions.newChat")}</h3>
                 <p className="text-gray-400 text-sm">
-                  수면, 수유, 발달 등 무엇이든 물어보세요
+                  {t("chat:subtitle")}
                 </p>
               </div>
             </div>
@@ -246,13 +248,13 @@ export default function ChatListScreen() {
 
         {/* Chat Sessions */}
         <div>
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">최근 상담</h2>
-          
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">{t("chat:sessions.title")}</h2>
+
           {sessions.length === 0 ? (
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 text-center border border-gray-100 dark:border-gray-700">
               <MessageCircle className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-              <p className="text-gray-500 dark:text-gray-400">아직 상담 내역이 없어요</p>
-              <p className="text-gray-400 dark:text-gray-500 text-sm">새 상담을 시작해보세요!</p>
+              <p className="text-gray-500 dark:text-gray-400">{t("chat:sessions.empty")}</p>
+              <p className="text-gray-400 dark:text-gray-500 text-sm">{t("chat:sessions.startFirst")}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -271,7 +273,7 @@ export default function ChatListScreen() {
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                           {session.topic && (
                             <span className={`text-xs px-2 py-0.5 rounded-full ${topicColors[session.topic] || topicColors.general}`}>
-                              {topicNames[session.topic] || "일반"}
+                              {t(`chat:${topicKeys[session.topic] || "topics.other"}`)}
                             </span>
                           )}
                           {session.baby_profiles && (
@@ -281,7 +283,7 @@ export default function ChatListScreen() {
                           )}
                         </div>
                         <h3 className="font-medium text-gray-900 dark:text-white truncate">
-                          {session.title || "새 상담"}
+                          {session.title || t("chat:room.newSession")}
                         </h3>
                         <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
                           <Clock className="w-3 h-3" />
@@ -305,10 +307,10 @@ export default function ChatListScreen() {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 animate-in slide-in-from-bottom duration-300">
             <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white">누구와 상담할까요?</h3>
-              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">상담할 아이를 선택해주세요</p>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t("chat:selectBaby.title")}</h3>
+              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{t("chat:selectBaby.subtitle")}</p>
             </div>
-            
+
             <div className="space-y-3 mb-6">
               {babyProfiles.map((baby) => {
                 const months = calculateMonths(baby.birth_date);
@@ -339,7 +341,7 @@ export default function ChatListScreen() {
               onClick={() => setShowBabySelector(false)}
               className="w-full py-3 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
             >
-              취소
+              {t("common:cancel")}
             </button>
           </div>
         </div>

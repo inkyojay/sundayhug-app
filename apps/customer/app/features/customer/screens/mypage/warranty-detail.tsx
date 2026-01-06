@@ -5,6 +5,7 @@ import type { Route } from "./+types/warranty-detail";
 
 import { Link, useNavigate } from "react-router";
 import { data, redirect } from "react-router";
+import { useTranslation } from "react-i18next";
 import { 
   ArrowLeft, 
   ShieldCheck,
@@ -103,18 +104,19 @@ export default function MypageWarrantyDetailScreen({ loaderData }: Route.Compone
   const navigate = useNavigate();
   const warranty = loaderData?.warranty;
   const asRequests = loaderData?.asRequests || [];
+  const { t } = useTranslation(["customer", "common"]);
 
   if (!warranty) {
     return (
       <div className="min-h-screen bg-[#F5F5F0] flex items-center justify-center">
         <div className="text-center">
           <ShieldCheck className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500">보증서를 찾을 수 없습니다</p>
-          <button 
+          <p className="text-gray-500">{t("customer:warrantyDetail.notFound")}</p>
+          <button
             onClick={() => navigate("/customer/mypage/warranties")}
             className="mt-4 text-[#FF6B35] font-medium"
           >
-            목록으로 돌아가기
+            {t("customer:warrantyDetail.backToList")}
           </button>
         </div>
       </div>
@@ -129,13 +131,13 @@ export default function MypageWarrantyDetailScreen({ loaderData }: Route.Compone
       <div className="mx-auto max-w-2xl px-6 py-10">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <button 
+          <button
             onClick={() => navigate("/customer/mypage/warranties")}
             className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors shadow-sm"
           >
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">보증서 상세</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t("customer:warrantyDetail.title")}</h1>
         </div>
 
         {/* 상태 카드 */}
@@ -146,7 +148,7 @@ export default function MypageWarrantyDetailScreen({ loaderData }: Route.Compone
             </div>
             <div className="flex-1">
               <Badge className={`${status.badgeColor} px-3 py-1 rounded-full font-medium mb-1`}>
-                {status.label}
+                {t(`customer:warrantyDetail.status.${warranty.status}`)}
               </Badge>
               <h2 className="text-xl font-bold text-gray-900">{warranty.product_name}</h2>
               {warranty.product_option && (
@@ -160,39 +162,39 @@ export default function MypageWarrantyDetailScreen({ loaderData }: Route.Compone
         <div className="bg-white rounded-2xl p-6 mb-4 border border-gray-100">
           <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <FileText className="w-5 h-5 text-gray-400" />
-            보증서 정보
+            {t("customer:warrantyDetail.info.title")}
           </h3>
           <div className="space-y-4">
             <div className="flex justify-between items-center py-2 border-b border-gray-50">
-              <span className="text-gray-500">보증서 번호</span>
+              <span className="text-gray-500">{t("customer:warrantyDetail.info.warrantyNumber")}</span>
               <span className="font-mono text-gray-900 font-medium">{warranty.warranty_number}</span>
             </div>
             <div className="flex justify-between items-center py-2 border-b border-gray-50">
-              <span className="text-gray-500">구매자</span>
+              <span className="text-gray-500">{t("customer:warrantyDetail.info.buyer")}</span>
               <span className="text-gray-900">{warranty.buyer_name || "-"}</span>
             </div>
             <div className="flex justify-between items-center py-2 border-b border-gray-50">
-              <span className="text-gray-500">구매일</span>
+              <span className="text-gray-500">{t("customer:warrantyDetail.info.purchaseDate")}</span>
               <span className="text-gray-900">{warranty.order_date || "-"}</span>
             </div>
             <div className="flex justify-between items-center py-2 border-b border-gray-50">
-              <span className="text-gray-500">구매처</span>
+              <span className="text-gray-500">{t("customer:warrantyDetail.info.purchaseChannel")}</span>
               <span className="text-gray-900">{warranty.sales_channel || "-"}</span>
             </div>
             {warranty.warranty_start && (
               <>
                 <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                  <span className="text-gray-500">보증 시작일</span>
+                  <span className="text-gray-500">{t("customer:warrantyDetail.info.warrantyStart")}</span>
                   <span className="text-gray-900">{warranty.warranty_start}</span>
                 </div>
                 <div className="flex justify-between items-center py-2">
-                  <span className="text-gray-500">보증 종료일</span>
+                  <span className="text-gray-500">{t("customer:warrantyDetail.info.warrantyEnd")}</span>
                   <span className="text-gray-900">{warranty.warranty_end}</span>
                 </div>
               </>
             )}
             <div className="flex justify-between items-center py-2">
-              <span className="text-gray-500">등록일</span>
+              <span className="text-gray-500">{t("customer:warrantyDetail.info.registeredDate")}</span>
               <span className="text-gray-900">
                 {warranty.created_at ? new Date(warranty.created_at).toLocaleDateString("ko-KR") : "-"}
               </span>
@@ -205,11 +207,11 @@ export default function MypageWarrantyDetailScreen({ loaderData }: Route.Compone
           <div className="bg-white rounded-2xl p-6 mb-4 border border-gray-100">
             <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <Package className="w-5 h-5 text-gray-400" />
-              제품 사진
+              {t("customer:warrantyDetail.productPhoto")}
             </h3>
-            <img 
-              src={warranty.product_photo_url} 
-              alt="제품 사진"
+            <img
+              src={warranty.product_photo_url}
+              alt={t("customer:warrantyDetail.productPhoto")}
               className="w-full rounded-xl object-cover max-h-64"
             />
           </div>
@@ -223,7 +225,7 @@ export default function MypageWarrantyDetailScreen({ loaderData }: Route.Compone
                 <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
                   <Wrench className="w-6 h-6 text-white" />
                 </div>
-                <p className="text-white font-semibold text-lg">A/S 신청하기</p>
+                <p className="text-white font-semibold text-lg">{t("customer:warrantyDetail.requestAS")}</p>
               </div>
               <ChevronRight className="w-5 h-5 text-white/80 group-hover:translate-x-1 transition-transform" />
             </div>
@@ -233,7 +235,7 @@ export default function MypageWarrantyDetailScreen({ loaderData }: Route.Compone
         {/* 거절 사유 */}
         {warranty.status === "rejected" && warranty.rejection_reason && (
           <div className="bg-red-50 rounded-2xl p-5 mb-4 border border-red-100">
-            <h3 className="font-semibold text-red-700 mb-2">거절 사유</h3>
+            <h3 className="font-semibold text-red-700 mb-2">{t("customer:warrantyDetail.rejectionReason")}</h3>
             <p className="text-red-600 text-sm">{warranty.rejection_reason}</p>
           </div>
         )}
@@ -241,10 +243,9 @@ export default function MypageWarrantyDetailScreen({ loaderData }: Route.Compone
         {/* 승인 대기 안내 */}
         {warranty.status === "pending" && (
           <div className="bg-yellow-50 rounded-2xl p-5 mb-4 border border-yellow-100">
-            <h3 className="font-semibold text-yellow-700 mb-2">📋 승인 대기 중</h3>
+            <h3 className="font-semibold text-yellow-700 mb-2">{t("customer:warrantyDetail.pendingTitle")}</h3>
             <p className="text-yellow-600 text-sm">
-              관리자 확인 후 카카오톡으로 결과를 안내드립니다.<br />
-              영업일 기준 1-2일 내 처리됩니다.
+              {t("customer:warrantyDetail.pendingDescription")}
             </p>
           </div>
         )}
@@ -254,7 +255,7 @@ export default function MypageWarrantyDetailScreen({ loaderData }: Route.Compone
           <div className="bg-white rounded-2xl p-6 border border-gray-100">
             <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <Wrench className="w-5 h-5 text-gray-400" />
-              A/S 이력
+              {t("customer:warrantyDetail.asHistory")}
             </h3>
             <div className="space-y-3">
               {asRequests.map((req: any) => (
@@ -275,7 +276,7 @@ export default function MypageWarrantyDetailScreen({ loaderData }: Route.Compone
 
         {/* 하단 안내 */}
         <div className="mt-8 text-center text-sm text-gray-400">
-          <a 
+          <a
             href="https://pf.kakao.com/_crxgDxj/chat"
             target="_blank"
             rel="noopener noreferrer"
@@ -284,7 +285,7 @@ export default function MypageWarrantyDetailScreen({ loaderData }: Route.Compone
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 3c5.799 0 10.5 3.664 10.5 8.185 0 4.52-4.701 8.184-10.5 8.184a13.5 13.5 0 01-1.727-.11l-4.408 2.883c-.501.265-.678.236-.472-.413l.892-3.678c-2.88-1.46-4.785-3.99-4.785-6.866C1.5 6.665 6.201 3 12 3z" />
             </svg>
-            문의사항이 있으신가요?
+            {t("customer:warrantyDetail.haveQuestions")}
           </a>
         </div>
       </div>

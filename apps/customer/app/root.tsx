@@ -106,10 +106,10 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 /**
  * i18n handle for the root route
- * Specifies that this route uses the 'common' translation namespace
+ * 모든 네임스페이스 사용
  */
 export const handle = {
-  i18n: "common",
+  i18n: ["common", "auth", "customer", "sleep-analysis", "warranty", "chat", "blog", "errors"],
 };
 
 /**
@@ -152,7 +152,7 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
 
   // Set the i18next language based on the locale from the loader
-  useChangeLanguage(data?.locale ?? "en");
+  useChangeLanguage(data?.locale ?? "ko");
 
   // Detect if the current route is a pre-rendered page (blog or legal)
   // These pages require special theme handling
@@ -161,7 +161,7 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <html
-      lang={data?.locale ?? "en"}
+      lang={data?.locale ?? "ko"}
       className={cn(theme ?? "", "h-full")}
       dir={i18n.dir()}
     >

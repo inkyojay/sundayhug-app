@@ -15,6 +15,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { useFetcher, useNavigate, redirect, data, useLoaderData } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
@@ -138,22 +139,23 @@ export async function action({ request }: Route.ActionArgs) {
   return { success: false, error: "알 수 없는 요청입니다." };
 }
 
-// 제품 목록 (향후 DB에서 가져올 수 있음)
-const products = [
-  { 
-    id: "abc-bed", 
-    name: "ABC 이동식 아기침대", 
-    description: "접이식 아기침대",
-    warrantyPeriod: "1년",
-  },
-];
-
 export default function WarrantyRegister() {
+  const { t } = useTranslation(["warranty", "common"]);
   const { user } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
+  // 제품 목록 (향후 DB에서 가져올 수 있음)
+  const products = [
+    {
+      id: "abc-bed",
+      name: "ABC 이동식 아기침대",
+      description: "접이식 아기침대",
+      warrantyPeriod: "1년",
+    },
+  ];
+
   const [step, setStep] = useState<"product" | "info" | "photo" | "complete">("product");
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -193,7 +195,7 @@ export default function WarrantyRegister() {
 
   const goToPhotoStep = () => {
     if (!formData.customerName || !formData.phone) {
-      setUploadError("이름과 연락처를 입력해주세요.");
+      setUploadError(t("warranty:public.register.errors.namePhoneRequired"));
       return;
     }
     setUploadError(null);
@@ -205,12 +207,12 @@ export default function WarrantyRegister() {
     if (!file) return;
 
     if (file.size > 5 * 1024 * 1024) {
-      setUploadError("파일 크기는 5MB 이하여야 합니다.");
+      setUploadError(t("warranty:public.register.errors.fileTooLarge"));
       return;
     }
 
     if (!["image/jpeg", "image/png", "image/webp", "image/heic"].includes(file.type)) {
-      setUploadError("JPG, PNG, WEBP, HEIC 형식만 지원합니다.");
+      setUploadError(t("warranty:public.register.errors.unsupportedFormat"));
       return;
     }
 
@@ -226,7 +228,7 @@ export default function WarrantyRegister() {
 
   const handlePhotoUpload = async () => {
     if (!photoFile) {
-      setUploadError("사진을 선택해주세요.");
+      setUploadError(t("warranty:public.register.errors.selectPhoto"));
       return;
     }
 
@@ -249,10 +251,10 @@ export default function WarrantyRegister() {
       });
 
       const result = await response.json();
-      
+
       if (!response.ok || result.error) {
         // API에서 반환한 구체적인 에러 메시지 표시
-        setUploadError(result.error || "사진 업로드에 실패했습니다. 다시 시도해주세요.");
+        setUploadError(result.error || t("warranty:public.register.errors.uploadFailed"));
         return;
       }
 
@@ -272,9 +274,9 @@ export default function WarrantyRegister() {
       console.error("Upload error:", error);
       // 네트워크 오류 등 fetch 자체 실패
       if (error instanceof TypeError && error.message.includes("network")) {
-        setUploadError("네트워크 연결을 확인해주세요.");
+        setUploadError(t("warranty:public.register.errors.networkError"));
       } else {
-        setUploadError("사진 업로드에 실패했습니다. 다시 시도해주세요.");
+        setUploadError(t("warranty:public.register.errors.uploadFailed"));
       }
     } finally {
       setIsUploading(false);
@@ -308,7 +310,7 @@ export default function WarrantyRegister() {
         >
           <ArrowLeft className="w-5 h-5" />
           <span className="text-sm font-medium">
-            {step === "product" ? "홈으로" : "이전"}
+            {step === "product" ? t("warranty:public.register.navigation.home") : t("warranty:public.register.navigation.previous")}
           </span>
         </button>
 
@@ -317,15 +319,15 @@ export default function WarrantyRegister() {
           <div className="w-16 h-16 bg-[#FF6B35]/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <ShieldCheck className="w-8 h-8 text-[#FF6B35]" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">보증서 등록</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t("warranty:public.register.title")}</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-2">
-            {selectedProduct ? getSelectedProductInfo()?.name : "등록할 제품을 선택해주세요"}
+            {selectedProduct ? getSelectedProductInfo()?.name : t("warranty:public.register.header")}
           </p>
         </div>
 
         {/* Progress */}
         <div className="flex items-center justify-center gap-2 mb-10">
-          {["제품선택", "정보입력", "사진등록", "완료"].map((label, idx) => {
+          {[t("warranty:public.register.steps.productSelect"), t("warranty:public.register.steps.infoInput"), t("warranty:public.register.steps.photoUpload"), t("warranty:public.register.steps.complete")].map((label, idx) => {
             const steps = ["product", "info", "photo", "complete"];
             const currentStepIdx = steps.indexOf(step);
             const isActive = idx === currentStepIdx;
@@ -354,38 +356,38 @@ export default function WarrantyRegister() {
         {/* Step 1: 제품 선택 */}
         {step === "product" && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-100 dark:border-gray-700">
-            <h2 className="font-semibold text-gray-900 dark:text-white text-lg mb-1">제품 선택</h2>
-            <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">보증서를 등록할 제품을 선택해주세요</p>
-            
+            <h2 className="font-semibold text-gray-900 dark:text-white text-lg mb-1">{t("warranty:public.register.productSelection.title")}</h2>
+            <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">{t("warranty:public.register.productSelection.description")}</p>
+
             <div className="space-y-3">
               {products.map((product) => (
                 <button
                   key={product.id}
                   onClick={() => setSelectedProduct(product.id)}
                   className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
-                    selectedProduct === product.id 
-                      ? "border-[#FF6B35] bg-[#FFF8F5] dark:bg-[#FF6B35]/10" 
+                    selectedProduct === product.id
+                      ? "border-[#FF6B35] bg-[#FFF8F5] dark:bg-[#FF6B35]/10"
                       : "border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-800"
                   }`}
                 >
                   <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                      selectedProduct === product.id 
-                        ? "bg-[#FF6B35] text-white" 
+                      selectedProduct === product.id
+                        ? "bg-[#FF6B35] text-white"
                         : "bg-gray-100 dark:bg-gray-700 text-gray-400"
                     }`}>
                       <Package className="w-6 h-6" />
                     </div>
                     <div className="flex-1">
                       <h3 className={`font-medium ${
-                        selectedProduct === product.id 
-                          ? "text-[#FF6B35]" 
+                        selectedProduct === product.id
+                          ? "text-[#FF6B35]"
                           : "text-gray-900 dark:text-white"
                       }`}>
                         {product.name}
                       </h3>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {product.description} · 보증기간 {product.warrantyPeriod}
+                        {product.description} · {t("warranty:public.register.productSelection.warrantyPeriod", { period: product.warrantyPeriod })}
                       </p>
                     </div>
                     {selectedProduct === product.id && (
@@ -396,21 +398,21 @@ export default function WarrantyRegister() {
               ))}
             </div>
 
-            <Button 
+            <Button
               className="w-full h-12 rounded-xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white font-medium mt-6"
               onClick={() => setStep("info")}
               disabled={!selectedProduct}
             >
-              다음: 정보 입력
+              {t("warranty:public.register.productSelection.next")}
               <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
 
             <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl text-sm text-blue-700 dark:text-blue-300 mt-6">
-              <p className="font-medium mb-2">ℹ️ 보증서 등록 안내</p>
+              <p className="font-medium mb-2">{t("warranty:public.register.productSelection.notice.title")}</p>
               <ul className="space-y-1 text-blue-600 dark:text-blue-400">
-                <li>• 썬데이허그 정품 구매자 대상</li>
-                <li>• 등록 후 관리자 확인을 거쳐 승인됩니다</li>
-                <li>• 승인 시 보증기간 동안 무상 A/S 가능</li>
+                <li>• {t("warranty:public.register.productSelection.notice.item1")}</li>
+                <li>• {t("warranty:public.register.productSelection.notice.item2")}</li>
+                <li>• {t("warranty:public.register.productSelection.notice.item3")}</li>
               </ul>
             </div>
           </div>
@@ -419,9 +421,9 @@ export default function WarrantyRegister() {
         {/* Step 2: 정보 입력 */}
         {step === "info" && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-100 dark:border-gray-700">
-            <h2 className="font-semibold text-gray-900 dark:text-white text-lg mb-1">구매자 정보</h2>
-            <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">제품 구매자 정보를 입력해주세요</p>
-            
+            <h2 className="font-semibold text-gray-900 dark:text-white text-lg mb-1">{t("warranty:public.register.buyerInfo.title")}</h2>
+            <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">{t("warranty:public.register.buyerInfo.description")}</p>
+
             {/* 선택한 제품 표시 */}
             <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-xl mb-6">
               <div className="flex items-center gap-3">
@@ -430,7 +432,7 @@ export default function WarrantyRegister() {
                 </div>
                 <div>
                   <p className="font-medium text-gray-900 dark:text-white">{getSelectedProductInfo()?.name}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">보증기간 {getSelectedProductInfo()?.warrantyPeriod}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{t("warranty:public.register.productSelection.warrantyPeriod", { period: getSelectedProductInfo()?.warrantyPeriod })}</p>
                 </div>
               </div>
             </div>
@@ -438,12 +440,12 @@ export default function WarrantyRegister() {
             <div className="space-y-5">
               <div className="space-y-2">
                 <Label htmlFor="customerName" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  이름 *
+                  {t("warranty:public.register.buyerInfo.name")} *
                 </Label>
                 <Input
                   id="customerName"
                   name="customerName"
-                  placeholder="구매자 이름"
+                  placeholder={t("warranty:public.register.buyerInfo.namePlaceholder")}
                   value={formData.customerName}
                   onChange={handleInputChange}
                   className="h-12 rounded-xl border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
@@ -452,26 +454,26 @@ export default function WarrantyRegister() {
 
               <div className="space-y-2">
                 <Label htmlFor="phone" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  연락처 *
+                  {t("warranty:public.register.buyerInfo.phone")} *
                 </Label>
                 <Input
                   id="phone"
                   name="phone"
                   type="tel"
-                  placeholder="010-1234-5678"
+                  placeholder={t("warranty:public.register.buyerInfo.phonePlaceholder")}
                   value={formData.phone}
                   onChange={handlePhoneChange}
                   maxLength={13}
                   className="h-12 rounded-xl border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35]"
                 />
                 <p className="text-xs text-gray-400">
-                  승인 결과를 카카오톡으로 안내드립니다
+                  {t("warranty:public.register.buyerInfo.phoneHint")}
                 </p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="purchaseDate" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  구매일 (선택)
+                  {t("warranty:public.register.buyerInfo.purchaseDate")}
                 </Label>
                 <Input
                   id="purchaseDate"
@@ -490,22 +492,22 @@ export default function WarrantyRegister() {
                 </div>
               )}
 
-              <Button 
+              <Button
                 className="w-full h-12 rounded-xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white font-medium"
                 onClick={goToPhotoStep}
                 disabled={!formData.customerName || !formData.phone}
               >
-                다음: 사진 등록
+                {t("warranty:public.register.buyerInfo.next")}
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
 
               <div className="p-4 bg-[#FFF8F5] dark:bg-[#FF6B35]/10 rounded-xl text-sm text-[#FF6B35]">
-                <p className="font-medium mb-2">📌 등록 안내</p>
+                <p className="font-medium mb-2">{t("warranty:public.register.buyerInfo.notice.title")}</p>
                 <ul className="space-y-1 text-gray-600 dark:text-gray-400">
-                  <li>• {getSelectedProductInfo()?.name} 구매자 대상</li>
-                  <li>• 보증기간: {getSelectedProductInfo()?.warrantyPeriod}</li>
-                  <li>• 등록 후 관리자 확인을 거쳐 승인됩니다</li>
-                  <li>• 승인 결과는 카카오톡으로 안내드립니다</li>
+                  <li>• {t("warranty:public.register.buyerInfo.notice.item1", { productName: getSelectedProductInfo()?.name })}</li>
+                  <li>• {t("warranty:public.register.buyerInfo.notice.item2", { period: getSelectedProductInfo()?.warrantyPeriod })}</li>
+                  <li>• {t("warranty:public.register.buyerInfo.notice.item3")}</li>
+                  <li>• {t("warranty:public.register.buyerInfo.notice.item4")}</li>
                 </ul>
               </div>
             </div>
@@ -515,8 +517,8 @@ export default function WarrantyRegister() {
         {/* Step 2: 사진 등록 */}
         {step === "photo" && (
           <div className="bg-white rounded-2xl p-6 border border-gray-100">
-            <h2 className="font-semibold text-gray-900 text-lg mb-1">제품 사진</h2>
-            <p className="text-gray-500 text-sm mb-6">실제 제품이 보이는 사진을 등록해주세요</p>
+            <h2 className="font-semibold text-gray-900 text-lg mb-1">{t("warranty:public.register.photoUpload.title")}</h2>
+            <p className="text-gray-500 text-sm mb-6">{t("warranty:public.register.photoUpload.description")}</p>
 
             {/* 입력 정보 요약 */}
             <div className="p-4 bg-gray-50 rounded-xl mb-6">
@@ -525,8 +527,8 @@ export default function WarrantyRegister() {
                 <span className="font-medium text-gray-900">ABC 이동식 아기침대</span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
-                <div>신청자: {formData.customerName}</div>
-                <div>연락처: {formData.phone}</div>
+                <div>{t("warranty:public.register.photoUpload.applicant")}: {formData.customerName}</div>
+                <div>{t("warranty:public.register.photoUpload.phone")}: {formData.phone}</div>
               </div>
             </div>
 
@@ -541,21 +543,21 @@ export default function WarrantyRegister() {
               />
 
               {!photoPreview ? (
-                <div 
+                <div
                   onClick={() => fileInputRef.current?.click()}
                   className="border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center cursor-pointer hover:border-[#FF6B35] hover:bg-[#FFF8F5] transition-colors"
                 >
                   <Camera className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-                  <p className="font-medium text-gray-700">사진 선택</p>
+                  <p className="font-medium text-gray-700">{t("warranty:public.register.photoUpload.selectPhoto")}</p>
                   <p className="text-sm text-gray-400 mt-1">
-                    JPG, PNG, WEBP, HEIC (최대 5MB)
+                    {t("warranty:public.register.photoUpload.fileFormats")}
                   </p>
                 </div>
               ) : (
                 <div className="relative">
-                  <img 
-                    src={photoPreview} 
-                    alt="제품 사진 미리보기" 
+                  <img
+                    src={photoPreview}
+                    alt={t("warranty:public.register.photoUpload.title")}
                     className="w-full rounded-2xl object-cover max-h-64"
                   />
                   <button
@@ -583,34 +585,34 @@ export default function WarrantyRegister() {
             </div>
 
             <div className="p-4 bg-blue-50 rounded-xl text-sm text-blue-700 mt-6 mb-6">
-              <p className="font-medium mb-2">📷 사진 촬영 팁</p>
+              <p className="font-medium mb-2">{t("warranty:public.register.photoUpload.tips.title")}</p>
               <ul className="space-y-1 text-blue-600">
-                <li>• 제품 전체가 보이도록 촬영</li>
-                <li>• 밝은 곳에서 선명하게 촬영</li>
-                <li>• 제품 라벨이 보이면 더 좋습니다</li>
+                <li>• {t("warranty:public.register.photoUpload.tips.tip1")}</li>
+                <li>• {t("warranty:public.register.photoUpload.tips.tip2")}</li>
+                <li>• {t("warranty:public.register.photoUpload.tips.tip3")}</li>
               </ul>
             </div>
 
             <div className="flex gap-3">
-              <Button 
-                variant="outline" 
-                className="flex-1 h-12 rounded-xl border-gray-300 bg-white text-gray-700 hover:bg-gray-50" 
+              <Button
+                variant="outline"
+                className="flex-1 h-12 rounded-xl border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
                 onClick={() => setStep("info")}
                 disabled={isUploading || fetcher.state !== "idle"}
               >
-                이전
+                {t("warranty:public.register.photoUpload.previous")}
               </Button>
-              <Button 
+              <Button
                 className="flex-1 h-12 rounded-xl bg-[#FF6B35] hover:bg-[#FF6B35]/90"
                 onClick={handlePhotoUpload}
                 disabled={!photoFile || isUploading || fetcher.state !== "idle"}
               >
                 {isUploading || fetcher.state !== "idle" ? (
-                  "등록 중..."
+                  t("warranty:public.register.photoUpload.uploading")
                 ) : (
                   <>
                     <Upload className="h-4 w-4 mr-2" />
-                    보증서 등록
+                    {t("warranty:public.register.photoUpload.submit")}
                   </>
                 )}
               </Button>
@@ -624,23 +626,23 @@ export default function WarrantyRegister() {
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle className="h-8 w-8 text-green-600" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">등록 완료!</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">{t("warranty:public.register.complete.title")}</h2>
             <p className="text-gray-500 mb-6">
-              보증서 등록 신청이 완료되었습니다.<br />
-              관리자 확인 후 <strong>카카오톡</strong>으로 결과를 안내드립니다.
+              {t("warranty:public.register.complete.description")}<br />
+              <span dangerouslySetInnerHTML={{ __html: t("warranty:public.register.complete.notificationInfo") }} />
             </p>
 
             <div className="p-4 bg-gray-50 rounded-xl mb-6">
-              <p className="text-sm text-gray-500">접수 번호</p>
+              <p className="text-sm text-gray-500">{t("warranty:public.register.complete.receiptNumber")}</p>
               <p className="text-lg font-mono font-bold text-gray-900">{fetcherData?.warrantyNumber}</p>
             </div>
 
             <div className="space-y-3 mb-6">
               <div className="p-3 bg-yellow-50 rounded-xl text-sm text-yellow-700">
-                ⏳ 영업일 기준 1-2일 내 처리됩니다
+                {t("warranty:public.register.complete.processingTime")}
               </div>
               <div className="p-3 bg-green-50 rounded-xl text-sm text-green-700">
-                ✅ 승인 완료 시 1년간 무상 A/S 가능
+                {t("warranty:public.register.complete.approvalBenefit")}
               </div>
             </div>
 
@@ -648,7 +650,7 @@ export default function WarrantyRegister() {
               className="h-12 rounded-xl px-8 bg-gray-900 text-white hover:bg-gray-800"
               onClick={() => navigate("/customer")}
             >
-              홈으로 돌아가기
+              {t("warranty:public.register.complete.backToHome")}
             </Button>
           </div>
         )}

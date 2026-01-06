@@ -1,6 +1,6 @@
 /**
  * 고객 서비스 홈 화면 (새로운 디자인)
- * 
+ *
  * - Bento Grid 스타일
  * - 크림색 배경
  * - 오렌지/다크 카드 조합
@@ -8,9 +8,10 @@
 import type { Route } from "./+types/home";
 
 import { Link, useLoaderData, data } from "react-router";
-import { 
-  ShieldCheck, 
-  Moon, 
+import { useTranslation } from "react-i18next";
+import {
+  ShieldCheck,
+  Moon,
   Sun,
   Monitor,
   MessageCircleQuestion,
@@ -34,10 +35,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   const [supabase] = makeServerClient(request);
   const { data: { user } } = await supabase.auth.getUser();
   
-  // Feature Flags - main-ready에서는 비활성화
+  // Feature Flags
   const features = {
-    chatEnabled: false, // 육아상담 비활성화
-    blogEnabled: false, // 블로그 비활성화
+    chatEnabled: true, // 육아상담
+    blogEnabled: true, // 블로그
   };
   
   if (user) {
@@ -62,6 +63,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function CustomerHomeScreen() {
   const { isLoggedIn, firstName, features } = useLoaderData<typeof loader>();
   const [theme, setTheme, metadata] = useTheme();
+  const { t } = useTranslation(["customer", "common"]);
 
   // 현재 테마 상태 확인
   const isSystemTheme = metadata.definedBy === "SYSTEM";
@@ -76,7 +78,7 @@ export default function CustomerHomeScreen() {
           <div className="flex items-center justify-between mb-6">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
               <Sparkles className="w-4 h-4 text-[#FF6B35]" />
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-300">썬데이허그 고객 서비스</span>
+              <span className="text-sm font-medium text-gray-600 dark:text-gray-300">{t("common:brand.customerService")}</span>
             </div>
             
             {/* Theme Toggle - 3단 세그먼트 */}
@@ -126,7 +128,7 @@ export default function CustomerHomeScreen() {
             {isLoggedIn ? (
               <>
                 <span className="font-bold text-gray-900 dark:text-white">Hello,</span>{" "}
-                <span className="text-gray-400">{firstName}님.</span>
+                <span className="text-gray-400">{t("customer:home.welcome.loggedIn", { name: firstName })}</span>
               </>
             ) : (
               <>
@@ -136,8 +138,7 @@ export default function CustomerHomeScreen() {
             )}
           </h1>
           <p className="mt-4 text-gray-500 dark:text-gray-400 text-lg md:text-xl max-w-lg">
-            제품 보증서 등록부터 AI 수면 환경 분석까지,<br className="hidden md:block" />
-            썬데이허그가 함께합니다.
+            {t("customer:home.subtitle")}
           </p>
         </div>
 
@@ -153,8 +154,8 @@ export default function CustomerHomeScreen() {
                   <Gift className="w-6 h-6 text-[#FF6B35]" />
                 </div>
                 <div className="text-left">
-                  <h4 className="font-bold text-gray-900 dark:text-white text-lg">구매 후기 이벤트 참여</h4>
-                  <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">맘카페 후기 작성하고 사은품 받으세요!</p>
+                  <h4 className="font-bold text-gray-900 dark:text-white text-lg">{t("customer:home.event.reviewTitle")}</h4>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{t("customer:home.event.reviewDescription")}</p>
                 </div>
               </div>
               <ChevronRight className="w-6 h-6 text-gray-400 dark:text-gray-500 group-hover:text-[#FF6B35] group-hover:translate-x-1 transition-all" />
@@ -182,7 +183,7 @@ export default function CustomerHomeScreen() {
                       My Page
                     </p>
                     <h3 className="text-white text-2xl font-bold">
-                      마이페이지
+                      {t("customer:mypage.title")}
                     </h3>
                   </div>
                 </div>
@@ -195,25 +196,24 @@ export default function CustomerHomeScreen() {
             <div className="flex flex-col md:flex-row items-center justify-between gap-6">
               <div>
                 <h3 className="text-white text-2xl font-bold mb-2">
-                  처음이신가요?
+                  {t("customer:home.firstVisit.title")}
                 </h3>
                 <p className="text-gray-400">
-                  회원가입 후 보증서 등록, 수면 분석 결과 저장 등<br className="hidden md:block" />
-                  더 많은 서비스를 이용하세요.
+                  {t("customer:home.firstVisit.description")}
                 </p>
               </div>
               <div className="flex gap-3 w-full md:w-auto">
-                <Button 
+                <Button
                   asChild
                   className="flex-1 md:flex-none bg-white text-gray-900 hover:bg-gray-100 px-6"
                 >
-                  <Link to="/customer/login">로그인</Link>
+                  <Link to="/customer/login">{t("common:buttons.login")}</Link>
                 </Button>
-                <Button 
+                <Button
                   asChild
                   className="flex-1 md:flex-none bg-white/10 text-white border border-white/30 hover:bg-white/20 px-6"
                 >
-                  <Link to="/customer/register">회원가입</Link>
+                  <Link to="/customer/register">{t("common:buttons.register")}</Link>
                 </Button>
               </div>
             </div>
@@ -223,7 +223,7 @@ export default function CustomerHomeScreen() {
         {/* Bento Grid - 2개 카드만 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
           {/* 정품 인증 - Large Orange Card */}
-          <Link 
+          <Link
             to="/customer/warranty"
             className="group"
           >
@@ -231,24 +231,23 @@ export default function CustomerHomeScreen() {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-white/80 text-sm font-medium tracking-wider uppercase">
-                    Product Registration
+                    {t("customer:home.services.warranty.label")}
                   </p>
                   <h2 className="text-white text-3xl md:text-4xl font-bold mt-2">
-                    정품 인증
+                    {t("customer:home.services.warranty.title")}
                   </h2>
                 </div>
                 <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
                   <ShieldCheck className="w-6 h-6 text-white" />
                 </div>
               </div>
-              
+
               <div>
                 <p className="text-white/90 text-base md:text-lg">
-                  구매하신 제품의 시리얼 넘버를 등록하고<br />
-                  프리미엄 보증 혜택을 받아보세요.
+                  {t("customer:home.services.warranty.description")}
                 </p>
                 <div className="mt-4 flex items-center text-white/80 group-hover:text-white transition-colors">
-                  <span className="text-sm font-medium">등록하기</span>
+                  <span className="text-sm font-medium">{t("customer:home.services.warranty.button")}</span>
                   <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>
@@ -256,7 +255,7 @@ export default function CustomerHomeScreen() {
           </Link>
 
           {/* 수면 분석 - Large Dark Card */}
-          <Link 
+          <Link
             to="/customer/sleep"
             className="group"
           >
@@ -264,24 +263,23 @@ export default function CustomerHomeScreen() {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-gray-400 text-sm font-medium tracking-wider uppercase">
-                    AI Sleep Tech
+                    {t("customer:home.services.sleepAnalysis.label")}
                   </p>
                   <h2 className="text-white text-3xl md:text-4xl font-bold mt-2">
-                    수면 분석
+                    {t("customer:home.services.sleepAnalysis.title")}
                   </h2>
                 </div>
                 <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center">
                   <Moon className="w-6 h-6 text-white" />
                 </div>
               </div>
-              
+
               <div>
                 <p className="text-gray-400 text-base md:text-lg">
-                  AI가 우리 아이 수면 환경을 분석하고<br />
-                  맞춤 솔루션을 제공해 드려요.
+                  {t("customer:home.services.sleepAnalysis.description")}
                 </p>
                 <div className="mt-4 flex items-center text-gray-500 group-hover:text-white transition-colors">
-                  <span className="text-sm font-medium">분석하기</span>
+                  <span className="text-sm font-medium">{t("customer:home.services.sleepAnalysis.button")}</span>
                   <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>
@@ -294,7 +292,7 @@ export default function CustomerHomeScreen() {
           <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* AI 육아 상담 */}
             {features.chatEnabled && (
-              <Link 
+              <Link
                 to="/customer/chat"
                 className="group"
               >
@@ -302,23 +300,23 @@ export default function CustomerHomeScreen() {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-orange-200 text-sm font-medium tracking-wider uppercase">
-                        AI Parenting
+                        {t("customer:home.services.chat.label")}
                       </p>
                       <h2 className="text-white text-2xl md:text-3xl font-bold mt-1">
-                        AI 육아 상담
+                        {t("customer:home.services.chat.title")}
                       </h2>
                     </div>
                     <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
                       <MessageCircleQuestion className="w-5 h-5 text-white" />
                     </div>
                   </div>
-                  
+
                   <div>
                     <p className="text-orange-100 text-sm md:text-base">
-                      수면, 수유, 발달 고민을 AI가 답변해 드려요
+                      {t("customer:home.services.chat.description")}
                     </p>
                     <div className="mt-3 flex items-center text-white/80 group-hover:text-white transition-colors">
-                      <span className="text-sm font-medium">상담하기</span>
+                      <span className="text-sm font-medium">{t("customer:home.services.chat.button")}</span>
                       <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                     </div>
                   </div>
@@ -328,7 +326,7 @@ export default function CustomerHomeScreen() {
 
             {/* 블로그 */}
             {features.blogEnabled && (
-              <Link 
+              <Link
                 to="/customer/blog"
                 className="group"
               >
@@ -336,23 +334,23 @@ export default function CustomerHomeScreen() {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-emerald-200 text-sm font-medium tracking-wider uppercase">
-                        Parenting Guide
+                        {t("customer:home.services.blog.label")}
                       </p>
                       <h2 className="text-white text-2xl md:text-3xl font-bold mt-1">
-                        육아 블로그
+                        {t("customer:home.services.blog.title")}
                       </h2>
                     </div>
                     <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
                       <Sparkles className="w-5 h-5 text-white" />
                     </div>
                   </div>
-                  
+
                   <div>
                     <p className="text-emerald-100 text-sm md:text-base">
-                      수면 가이드, 제품 활용법, 육아 꿀팁
+                      {t("customer:home.services.blog.description")}
                     </p>
                     <div className="mt-3 flex items-center text-white/80 group-hover:text-white transition-colors">
-                      <span className="text-sm font-medium">둘러보기</span>
+                      <span className="text-sm font-medium">{t("customer:home.services.blog.button")}</span>
                       <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                     </div>
                   </div>
@@ -364,7 +362,7 @@ export default function CustomerHomeScreen() {
 
         {/* Quick Links */}
         <div className="mt-8 grid grid-cols-2 gap-4">
-          <a 
+          <a
             href="https://www.sundayhug.kr/sleepport.html"
             target="_blank"
             rel="noopener noreferrer"
@@ -372,12 +370,12 @@ export default function CustomerHomeScreen() {
           >
             <MessageCircleQuestion className="w-6 h-6 text-gray-400 dark:text-gray-500 mb-3" />
             <h4 className="font-semibold text-gray-900 dark:text-white">
-              ABC 아기침대<br className="md:hidden" /> 사용 설명서
+              {t("customer:home.quickLinks.manual")}
             </h4>
             <ChevronRight className="w-4 h-4 text-gray-400 dark:text-gray-500 mt-2 group-hover:translate-x-1 transition-transform" />
           </a>
 
-          <a 
+          <a
             href="https://pf.kakao.com/_crxgDxj/chat"
             target="_blank"
             rel="noopener noreferrer"
@@ -386,8 +384,8 @@ export default function CustomerHomeScreen() {
             <svg className="w-6 h-6 text-[#FAE100] mb-3" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 3c5.799 0 10.5 3.664 10.5 8.185 0 4.52-4.701 8.184-10.5 8.184a13.5 13.5 0 01-1.727-.11l-4.408 2.883c-.501.265-.678.236-.472-.413l.892-3.678c-2.88-1.46-4.785-3.99-4.785-6.866C1.5 6.665 6.201 3 12 3z" />
             </svg>
-            <h4 className="font-semibold text-gray-900 dark:text-white">고객센터</h4>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">카카오톡 상담</p>
+            <h4 className="font-semibold text-gray-900 dark:text-white">{t("customer:home.quickLinks.customerService")}</h4>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t("customer:home.quickLinks.kakaoChat")}</p>
           </a>
         </div>
 

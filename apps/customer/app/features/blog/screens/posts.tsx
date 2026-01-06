@@ -16,6 +16,7 @@ import type { Route } from "./+types/posts";
 import { bundleMDX } from "mdx-bundler";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
 import { Badge } from "~/core/components/ui/badge";
@@ -118,15 +119,17 @@ export async function loader() {
 export default function Posts({
   loaderData: { frontmatters },
 }: Route.ComponentProps) {
+  const { t } = useTranslation(["blog", "common"]);
+
   return (
     <div className="flex flex-col gap-16">
       {/* Page header with title and subtitle */}
       <header className="flex flex-col items-center">
         <h1 className="text-center text-3xl font-semibold tracking-tight md:text-5xl">
-          Blog
+          {t("blog:title")}
         </h1>
         <p className="text-muted-foreground mt-2 text-center font-medium md:text-lg">
-          Follow our development journey!
+          {t("blog:subtitle")}
         </p>
       </header>
 
@@ -160,7 +163,7 @@ export default function Posts({
               </p>
               {/* Author and date information */}
               <span className="text-muted-foreground mt-2 block text-sm">
-                By {frontmatter.author} on{" "}
+                {t("blog:detail.author")}: {frontmatter.author} |{" "}
                 {new Date(frontmatter.date).toLocaleDateString("ko-KR")}
               </span>
             </div>

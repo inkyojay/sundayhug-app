@@ -2,6 +2,7 @@
  * 수면 분석 결과 기반 제품 추천 카드 컴포넌트
  */
 import { ExternalLink, ShoppingBag, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "~/core/lib/utils";
 
@@ -22,10 +23,11 @@ interface ProductCardProps {
   product: Product;
   reasons?: string[];
   compact?: boolean;
+  t: (key: string, options?: Record<string, unknown>) => string;
 }
 
 // 단일 제품 카드
-function ProductCard({ product, reasons, compact = false }: ProductCardProps) {
+function ProductCard({ product, reasons, compact = false, t }: ProductCardProps) {
   const discount = getDiscountPercent(product.price, product.original_price);
   
   return (
@@ -113,11 +115,11 @@ function ProductCard({ product, reasons, compact = false }: ProductCardProps) {
           <div className="mt-2 pt-2 border-t border-gray-100">
             <p className="text-xs text-gray-500">
               <Sparkles className="inline w-3 h-3 mr-1 text-[#FF6B35]" />
-              {reasons[0]} 관련 추천
+              {t("sleep-analysis:result.product.relatedRecommendation", { reason: reasons[0], defaultValue: `${reasons[0]} 관련 추천` })}
             </p>
           </div>
         )}
-        
+
         {/* 구매하기 버튼 */}
         <div className={cn(
           "flex items-center justify-center gap-1 mt-2 py-2 rounded-xl",
@@ -125,7 +127,7 @@ function ProductCard({ product, reasons, compact = false }: ProductCardProps) {
           "transition-colors duration-200 text-sm font-medium"
         )}>
           <ShoppingBag className="w-4 h-4" />
-          <span>구매하기</span>
+          <span>{t("sleep-analysis:result.product.buy", { defaultValue: "구매하기" })}</span>
           <ExternalLink className="w-3 h-3 ml-1 opacity-50" />
         </div>
       </div>
@@ -140,6 +142,8 @@ interface ProductRecommendationsProps {
 
 // 추천 제품 섹션
 export function ProductRecommendations({ recommendations, className }: ProductRecommendationsProps) {
+  const { t } = useTranslation(["sleep-analysis", "common"]);
+
   if (recommendations.length === 0) {
     return null;
   }
@@ -152,11 +156,11 @@ export function ProductRecommendations({ recommendations, className }: ProductRe
           <Sparkles className="w-5 h-5 text-white" />
         </div>
         <div>
-          <h3 className="font-bold text-gray-900">맞춤 제품 추천</h3>
-          <p className="text-sm text-gray-500">분석 결과에 따른 추천 제품이에요</p>
+          <h3 className="font-bold text-gray-900">{t("sleep-analysis:result.product.title", { defaultValue: "맞춤 제품 추천" })}</h3>
+          <p className="text-sm text-gray-500">{t("sleep-analysis:result.product.subtitle", { defaultValue: "분석 결과에 따른 추천 제품이에요" })}</p>
         </div>
       </div>
-      
+
       {/* 제품 그리드 */}
       <div className={cn(
         "grid gap-3",
@@ -170,10 +174,11 @@ export function ProductRecommendations({ recommendations, className }: ProductRe
             product={rec.product}
             reasons={rec.reasons}
             compact={recommendations.length >= 3}
+            t={t}
           />
         ))}
       </div>
-      
+
       {/* 전체 제품 보기 링크 */}
       <div className="mt-4 text-center">
         <a
@@ -182,7 +187,7 @@ export function ProductRecommendations({ recommendations, className }: ProductRe
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-sm text-[#FF6B35] hover:underline"
         >
-          썬데이허그 전체 제품 보기
+          {t("sleep-analysis:result.product.viewAll", { defaultValue: "썬데이허그 전체 제품 보기" })}
           <ExternalLink className="w-3.5 h-3.5" />
         </a>
       </div>

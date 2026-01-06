@@ -15,6 +15,7 @@ import type { Route } from "./+types/complete";
 
 import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Form, data, redirect, useSubmit } from "react-router";
 import { z } from "zod";
 
@@ -156,25 +157,26 @@ export default function OtpComplete({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
+  const { t } = useTranslation(["auth", "common"]);
   // Reference to the form element for submission
   const formRef = useRef<HTMLFormElement>(null);
-  
+
   // Hook to programmatically submit the form
   const submit = useSubmit();
-  
+
   // Handler to automatically submit the form when all OTP digits are entered
   const handleComplete = () => {
     submit(formRef.current);
   };
-  
+
   return (
     <div className="flex items-center justify-center">
       <Card className="w-full max-w-md">
         {/* Card header with title and description */}
         <CardHeader className="flex flex-col items-center">
-          <CardTitle className="text-2xl font-semibold">Confirm code</CardTitle>
+          <CardTitle className="text-2xl font-semibold">{t("auth:otp.title")}</CardTitle>
           <CardDescription className="text-center text-base">
-            Enter the code we sent you.
+            {t("auth:otp.placeholder")}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -218,7 +220,7 @@ export default function OtpComplete({
               </InputOTPGroup>
             </InputOTP>
             {/* Manual submit button as fallback */}
-            <FormButton label="Submit" className="w-full" />
+            <FormButton label={t("auth:otp.verify")} className="w-full" />
             {/* Error message display */}
             {actionData && "error" in actionData && actionData.error ? (
               <FormErrors errors={[actionData.error]} />

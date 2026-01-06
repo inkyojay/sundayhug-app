@@ -14,6 +14,7 @@ import type { Route } from "./+types/post";
 import { bundleMDX } from "mdx-bundler";
 import { getMDXComponent } from "mdx-bundler/client";
 import path from "node:path";
+import { useTranslation } from "react-i18next";
 import { data } from "react-router";
 
 import {
@@ -147,9 +148,10 @@ export async function loader({ params }: Route.LoaderArgs) {
 export default function Post({
   loaderData: { frontmatter, code },
 }: Route.ComponentProps) {
+  const { t } = useTranslation(["blog", "common"]);
   // Convert the compiled MDX code into a React component
   const MDXContent = getMDXComponent(code);
-  
+
   return (
     <div className="mx-auto w-full space-y-10">
       {/* Post header with category, title, author and date */}
@@ -161,7 +163,7 @@ export default function Post({
           </h1>
         </div>
         <span className="text-muted-foreground">
-          {frontmatter.author} on{" "}
+          {t("blog:detail.author")}: {frontmatter.author} | {t("blog:detail.publishDate")}:{" "}
           {new Date(frontmatter.date).toLocaleDateString("ko-KR")}
         </span>
       </header>

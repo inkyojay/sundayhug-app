@@ -7,6 +7,7 @@ import type { Route } from "./+types/analyze";
 
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { data, useFetcher, useRouteLoaderData } from "react-router";
 
 import makeServerClient from "~/core/lib/supa-client.server";
@@ -78,6 +79,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function AnalyzePage() {
+  const { t } = useTranslation(["sleep-analysis", "common"]);
   const loaderData = useRouteLoaderData<typeof loader>("routes/features/sleep-analysis/screens/analyze");
   const fetcher = useFetcher<typeof action>();
   const [formData, setFormData] = useState<UploadFormData | null>(null);
@@ -124,7 +126,7 @@ export default function AnalyzePage() {
       const responseData = await response.json();
       
       if (!responseData.success || !responseData.data?.storyCardUrl) {
-        throw new Error(responseData.error || "스토리 카드 생성에 실패했습니다.");
+        throw new Error(responseData.error || t("sleep-analysis:errors.analysisFailed"));
       }
       
       const storyCardUrl = responseData.data.storyCardUrl as string;
@@ -135,7 +137,7 @@ export default function AnalyzePage() {
       
     } catch (err) {
       console.error("Story card error:", err);
-      alert(err instanceof Error ? err.message : "카드 생성 중 오류가 발생했습니다.");
+      alert(err instanceof Error ? err.message : t("sleep-analysis:errors.analysisFailed"));
     } finally {
       setIsGeneratingCard(false);
     }
@@ -144,9 +146,9 @@ export default function AnalyzePage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <header className="mb-8 text-center">
-        <h1 className="text-4xl font-extrabold">AI 아기 수면 환경 분석기</h1>
+        <h1 className="text-4xl font-extrabold">{t("sleep-analysis:title")}</h1>
         <p className="text-muted-foreground mt-2">
-          Gemini AI를 사용하여 아기의 수면 공간 안전을 점검하세요.
+          {t("sleep-analysis:subtitle")}
         </p>
       </header>
 
@@ -156,7 +158,7 @@ export default function AnalyzePage() {
           <div className="flex flex-col items-center justify-center py-12">
             <Loader2 className="text-primary h-12 w-12 animate-spin" />
             <p className="text-muted-foreground mt-4 font-semibold">
-              AI가 이미지를 분석하고 있습니다. 잠시만 기다려주세요...
+              {t("sleep-analysis:upload.analyzing")}
             </p>
           </div>
         )}
@@ -164,7 +166,7 @@ export default function AnalyzePage() {
         {/* Error State */}
         {error && !isLoading && (
           <div className="bg-destructive/10 border-destructive text-destructive mx-auto max-w-2xl rounded-lg border px-4 py-3">
-            <strong className="font-bold">오류 발생: </strong>
+            <strong className="font-bold">{t("sleep-analysis:errors.analysisFailed")}: </strong>
             <span>{error}</span>
           </div>
         )}

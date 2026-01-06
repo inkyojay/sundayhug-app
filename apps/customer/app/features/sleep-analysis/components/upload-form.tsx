@@ -5,6 +5,7 @@
  */
 import { Baby, Camera, AlertCircle, Check, Plus, Phone, Instagram, ChevronRight, Sparkles } from "lucide-react";
 import { useCallback, useRef, useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
@@ -54,13 +55,14 @@ async function toBase64(file: File): Promise<string> {
   });
 }
 
-export function UploadForm({ 
-  onSubmit, 
-  isLoading = false, 
+export function UploadForm({
+  onSubmit,
+  isLoading = false,
   defaultPhoneNumber = "",
   babies = [],
   isLoggedIn = false,
 }: UploadFormProps) {
+  const { t } = useTranslation(["sleep-analysis", "common"]);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [imageMimeType, setImageMimeType] = useState<string | null>(null);
@@ -109,7 +111,7 @@ export function UploadForm({
 
   const handleImageUpload = useCallback(async (file: File) => {
     if (!file.type.startsWith("image/")) {
-      setError("이미지 파일만 업로드할 수 있습니다.");
+      setError(t("sleep-analysis:errors.invalidImage"));
       return;
     }
 
@@ -121,9 +123,9 @@ export function UploadForm({
       const base64 = await toBase64(file);
       setImageBase64(base64);
     } catch {
-      setError("이미지를 처리하는 중 오류가 발생했습니다.");
+      setError(t("sleep-analysis:errors.uploadFailed"));
     }
-  }, []);
+  }, [t]);
 
   const handleFileChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,32 +154,32 @@ export function UploadForm({
 
   const handleSubmit = () => {
     if (!imageBase64 || !imageMimeType || !imagePreview) {
-      setError("분석할 사진을 선택해주세요.");
+      setError(t("sleep-analysis:upload.validation.selectPhoto", { defaultValue: "분석할 사진을 선택해주세요." }));
       return;
     }
-    
+
     if (isAddingNewBaby) {
       if (!newBabyName) {
-        setError("아이 이름을 입력해주세요.");
+        setError(t("sleep-analysis:upload.validation.enterBabyName", { defaultValue: "아이 이름을 입력해주세요." }));
         return;
       }
       if (!newBabyBirthDate) {
-        setError("아이 생년월일을 입력해주세요.");
+        setError(t("sleep-analysis:upload.validation.enterBirthDate", { defaultValue: "아이 생년월일을 입력해주세요." }));
         return;
       }
     } else {
       if (!selectedBabyId) {
-        setError("분석할 아이를 선택해주세요.");
+        setError(t("sleep-analysis:upload.validation.selectBaby", { defaultValue: "분석할 아이를 선택해주세요." }));
         return;
       }
     }
-    
+
     if (!phoneNumber) {
-      setError("전화번호를 입력해주세요.");
+      setError(t("sleep-analysis:upload.validation.enterPhone", { defaultValue: "전화번호를 입력해주세요." }));
       return;
     }
     if (!privacyAgreed) {
-      setError("개인정보 수집 및 이용에 동의해주세요.");
+      setError(t("sleep-analysis:upload.validation.agreePrivacy", { defaultValue: "개인정보 수집 및 이용에 동의해주세요." }));
       return;
     }
 
@@ -208,13 +210,13 @@ export function UploadForm({
     const birth = new Date(birthDate);
     const now = new Date();
     const months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
-    
-    if (months < 1) return "신생아";
-    if (months < 12) return `${months}개월`;
+
+    if (months < 1) return t("sleep-analysis:upload.baby.newborn", { defaultValue: "신생아" });
+    if (months < 12) return t("sleep-analysis:upload.baby.months", { count: months, defaultValue: `${months}개월` });
     const years = Math.floor(months / 12);
     const remainingMonths = months % 12;
-    if (remainingMonths === 0) return `${years}세`;
-    return `${years}세 ${remainingMonths}개월`;
+    if (remainingMonths === 0) return t("sleep-analysis:upload.baby.years", { count: years, defaultValue: `${years}세` });
+    return t("sleep-analysis:upload.baby.yearsMonths", { years, months: remainingMonths, defaultValue: `${years}세 ${remainingMonths}개월` });
   };
 
   // 폼 완성도 체크
@@ -252,12 +254,12 @@ export function UploadForm({
             <div className="relative">
               <img
                 src={imagePreview}
-                alt="업로드된 사진"
+                alt={t("sleep-analysis:upload.uploadedPhoto", { defaultValue: "업로드된 사진" })}
                 className="w-full aspect-[4/3] object-cover"
               />
               {/* 오버레이 */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-              
+
               {/* 하단 정보 */}
               <div className="absolute bottom-0 left-0 right-0 p-4">
                 <div className="flex items-center justify-between">
@@ -265,7 +267,7 @@ export function UploadForm({
                     <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
                       <Check className="w-5 h-5 text-white" />
                     </div>
-                    <span className="text-white font-medium">사진 준비 완료</span>
+                    <span className="text-white font-medium">{t("sleep-analysis:upload.photoReady", { defaultValue: "사진 준비 완료" })}</span>
                   </div>
                   <button
                     type="button"
@@ -275,7 +277,7 @@ export function UploadForm({
                     }}
                     className="px-4 py-2 bg-white/20 backdrop-blur-sm text-white rounded-full text-sm font-medium hover:bg-white/30 transition-colors"
                   >
-                    다시 선택
+                    {t("sleep-analysis:upload.reselect", { defaultValue: "다시 선택" })}
                   </button>
                 </div>
               </div>
@@ -286,31 +288,31 @@ export function UploadForm({
               <div className="w-20 h-20 bg-gradient-to-br from-[#FF6B35] to-[#FF8F65] rounded-3xl flex items-center justify-center mb-5 shadow-lg shadow-orange-200 dark:shadow-none">
                 <Camera className="h-10 w-10 text-white" />
               </div>
-              
+
               {/* 텍스트 */}
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                수면 환경 사진 올리기
+                {t("sleep-analysis:upload.title")}
               </h3>
               <p className="text-gray-500 dark:text-gray-400 text-center text-sm mb-6 max-w-[240px]">
-                아기가 자는 공간 전체가 보이는 사진을 올려주세요
+                {t("sleep-analysis:upload.description")}
               </p>
-              
+
               {/* CTA 버튼 */}
               <div className="flex items-center gap-2 px-6 py-3 bg-[#FF6B35] text-white rounded-2xl font-semibold shadow-lg shadow-orange-200 dark:shadow-none">
                 <Camera className="w-5 h-5" />
-                <span>사진 선택하기</span>
+                <span>{t("sleep-analysis:upload.button")}</span>
               </div>
 
               {/* 가이드 힌트 */}
               <div className="mt-6 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
                 <span className="flex items-center gap-1">
-                  <span className="text-green-500">✓</span> 침대 전체
+                  <span className="text-green-500">✓</span> {t("sleep-analysis:hub.guide.tips.0", { defaultValue: "침대 전체" })}
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="text-green-500">✓</span> 밝은 조명
+                  <span className="text-green-500">✓</span> {t("sleep-analysis:hub.guide.tips.2", { defaultValue: "밝은 조명" })}
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="text-green-500">✓</span> 선명한 사진
+                  <span className="text-green-500">✓</span> {t("sleep-analysis:upload.clearPhoto", { defaultValue: "선명한 사진" })}
                 </span>
               </div>
             </div>
@@ -323,13 +325,13 @@ export function UploadForm({
         <div className="flex items-center gap-3 mb-4">
           <div className={cn(
             "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold",
-            isBabyInfoReady 
-              ? "bg-green-500 text-white" 
+            isBabyInfoReady
+              ? "bg-green-500 text-white"
               : "bg-gray-100 dark:bg-gray-700 text-gray-500"
           )}>
             {isBabyInfoReady ? <Check className="w-4 h-4" /> : "1"}
           </div>
-          <h3 className="font-bold text-gray-900 dark:text-white">아이 정보</h3>
+          <h3 className="font-bold text-gray-900 dark:text-white">{t("sleep-analysis:upload.babyInfo", { defaultValue: "아이 정보" })}</h3>
         </div>
         
         {/* 등록된 아이가 있는 경우 */}
@@ -356,7 +358,7 @@ export function UploadForm({
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-gray-900 dark:text-white truncate">{baby.name}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {baby.gender === "male" ? "남아" : baby.gender === "female" ? "여아" : ""} 
+                      {baby.gender === "male" ? t("sleep-analysis:upload.baby.male", { defaultValue: "남아" }) : baby.gender === "female" ? t("sleep-analysis:upload.baby.female", { defaultValue: "여아" }) : ""}
                       {baby.birth_date && ` · ${calculateAge(baby.birth_date)}`}
                     </p>
                   </div>
@@ -379,7 +381,7 @@ export function UploadForm({
               className="w-full p-4 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700 text-gray-500 hover:border-[#FF6B35] hover:text-[#FF6B35] transition-colors flex items-center justify-center gap-2"
             >
               <Plus className="w-5 h-5" />
-              <span className="font-medium">새 아이로 분석하기</span>
+              <span className="font-medium">{t("sleep-analysis:upload.addNewBaby", { defaultValue: "새 아이로 분석하기" })}</span>
             </button>
           </div>
         )}
@@ -389,7 +391,7 @@ export function UploadForm({
           <div className="space-y-4">
             {babies.length > 0 && (
               <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
-                <span className="text-sm font-medium text-gray-500">새 아이 정보</span>
+                <span className="text-sm font-medium text-gray-500">{t("sleep-analysis:upload.newBabyInfo", { defaultValue: "새 아이 정보" })}</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -400,28 +402,28 @@ export function UploadForm({
                   }}
                   className="text-sm text-[#FF6B35] font-medium"
                 >
-                  취소
+                  {t("common:cancel", { defaultValue: "취소" })}
                 </button>
               </div>
             )}
-            
+
             {/* 이름 */}
             <div>
               <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                이름 또는 별명 <span className="text-red-500">*</span>
+                {t("sleep-analysis:upload.baby.name", { defaultValue: "이름 또는 별명" })} <span className="text-red-500">*</span>
               </Label>
               <Input
-                placeholder="예: 콩이, 서준이"
+                placeholder={t("sleep-analysis:upload.baby.namePlaceholder", { defaultValue: "예: 콩이, 서준이" })}
                 value={newBabyName}
                 onChange={(e) => setNewBabyName(e.target.value)}
                 className="h-14 rounded-2xl border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 text-base px-4"
               />
             </div>
-            
+
             {/* 생년월일 */}
             <div>
               <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                생년월일 <span className="text-red-500">*</span>
+                {t("sleep-analysis:upload.baby.birthDate", { defaultValue: "생년월일" })} <span className="text-red-500">*</span>
               </Label>
               <Input
                 type="date"
@@ -431,11 +433,11 @@ export function UploadForm({
                 className="h-14 rounded-2xl border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 text-base px-4"
               />
             </div>
-            
+
             {/* 성별 */}
             <div>
               <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 block">
-                성별 <span className="text-gray-400">(선택)</span>
+                {t("sleep-analysis:upload.baby.gender", { defaultValue: "성별" })} <span className="text-gray-400">({t("common:optional", { defaultValue: "선택" })})</span>
               </Label>
               <div className="flex gap-3">
                 <button
@@ -449,7 +451,7 @@ export function UploadForm({
                   )}
                 >
                   <span className="text-xl">👦</span>
-                  <span>남아</span>
+                  <span>{t("sleep-analysis:upload.baby.male", { defaultValue: "남아" })}</span>
                 </button>
                 <button
                   type="button"
@@ -462,7 +464,7 @@ export function UploadForm({
                   )}
                 >
                   <span className="text-xl">👧</span>
-                  <span>여아</span>
+                  <span>{t("sleep-analysis:upload.baby.female", { defaultValue: "여아" })}</span>
                 </button>
               </div>
             </div>
@@ -475,21 +477,21 @@ export function UploadForm({
         <div className="flex items-center gap-3 mb-4">
           <div className={cn(
             "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold",
-            isPhoneReady 
-              ? "bg-green-500 text-white" 
+            isPhoneReady
+              ? "bg-green-500 text-white"
               : "bg-gray-100 dark:bg-gray-700 text-gray-500"
           )}>
             {isPhoneReady ? <Check className="w-4 h-4" /> : "2"}
           </div>
-          <h3 className="font-bold text-gray-900 dark:text-white">연락처</h3>
+          <h3 className="font-bold text-gray-900 dark:text-white">{t("sleep-analysis:upload.contact", { defaultValue: "연락처" })}</h3>
         </div>
-        
+
         <div className="space-y-4">
           {/* 전화번호 */}
           <div>
             <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
               <Phone className="w-4 h-4 text-[#FF6B35]" />
-              전화번호 <span className="text-red-500">*</span>
+              {t("sleep-analysis:upload.phone", { defaultValue: "전화번호" })} <span className="text-red-500">*</span>
             </Label>
             <Input
               type="tel"
@@ -499,14 +501,14 @@ export function UploadForm({
               maxLength={13}
               className="h-14 rounded-2xl border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 text-base px-4"
             />
-            <p className="text-xs text-gray-500 mt-2">📱 분석 결과 안내를 위해 필요합니다</p>
+            <p className="text-xs text-gray-500 mt-2">{t("sleep-analysis:upload.phoneHint", { defaultValue: "분석 결과 안내를 위해 필요합니다" })}</p>
           </div>
 
           {/* 인스타그램 ID */}
           <div>
             <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
               <Instagram className="w-4 h-4 text-pink-500" />
-              인스타그램 <span className="text-gray-400">(선택)</span>
+              {t("sleep-analysis:upload.instagram", { defaultValue: "인스타그램" })} <span className="text-gray-400">({t("common:optional", { defaultValue: "선택" })})</span>
             </Label>
             <Input
               type="text"
@@ -530,17 +532,17 @@ export function UploadForm({
       {/* ===== Privacy Agreement ===== */}
       <div className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-4">
         <label className="flex items-start gap-3 cursor-pointer">
-          <Checkbox 
-            id="privacy-agree" 
+          <Checkbox
+            id="privacy-agree"
             checked={privacyAgreed}
             onCheckedChange={(checked) => setPrivacyAgreed(checked === true)}
             className="mt-0.5 w-5 h-5 rounded-md border-gray-300 dark:border-gray-600 data-[state=checked]:bg-[#FF6B35] data-[state=checked]:border-[#FF6B35]"
           />
           <div className="text-sm">
-            <span className="font-semibold text-gray-900 dark:text-white">개인정보 수집 동의</span>
+            <span className="font-semibold text-gray-900 dark:text-white">{t("sleep-analysis:upload.privacyAgree", { defaultValue: "개인정보 수집 동의" })}</span>
             <span className="text-red-500 ml-1">*</span>
             <p className="text-gray-500 dark:text-gray-400 mt-1 text-xs leading-relaxed">
-              업로드된 사진은 분석 용도로만 사용되며, 연락처로 결과를 안내해드립니다.
+              {t("sleep-analysis:upload.privacyDescription", { defaultValue: "업로드된 사진은 분석 용도로만 사용되며, 연락처로 결과를 안내해드립니다." })}
             </p>
           </div>
         </label>
@@ -562,12 +564,12 @@ export function UploadForm({
           {isLoading ? (
             <span className="flex items-center gap-2">
               <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              AI 분석 중...
+              {t("sleep-analysis:upload.analyzing")}
             </span>
           ) : (
             <span className="flex items-center gap-2">
               <Sparkles className="w-5 h-5" />
-              수면 환경 분석하기
+              {t("sleep-analysis:hub.startButton")}
             </span>
           )}
         </Button>

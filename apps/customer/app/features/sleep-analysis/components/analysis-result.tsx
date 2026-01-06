@@ -3,19 +3,20 @@
  *
  * PC와 모바일 모두에서 세련되게 보이는 분석 결과 컴포넌트
  */
-import { 
-  ChevronDown, 
-  Download, 
-  RefreshCw, 
-  Share2, 
-  AlertTriangle, 
-  AlertCircle, 
+import {
+  ChevronDown,
+  Download,
+  RefreshCw,
+  Share2,
+  AlertTriangle,
+  AlertCircle,
   CheckCircle,
   Moon,
   Image as ImageIcon,
   MessageCircle
 } from "lucide-react";
 import { useState, useRef } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "~/core/components/ui/button";
 import { cn } from "~/core/lib/utils";
@@ -33,22 +34,22 @@ function getScoreColor(score: number): string {
   return "#ef4444"; // red-500
 }
 
-// 점수에 따른 등급 반환
-function getScoreGrade(score: number): string {
-  if (score >= 90) return "매우 안전한 환경이에요! 🎉";
-  if (score >= 75) return "안전한 환경이에요! 👍";
-  if (score >= 60) return "괜찮지만 개선이 필요해요";
-  if (score >= 40) return "주의가 필요한 환경이에요 ⚠️";
-  return "즉시 개선이 필요해요! 🚨";
+// 점수에 따른 등급 반환 (키 반환)
+function getScoreGradeKey(score: number): string {
+  if (score >= 90) return "excellent";
+  if (score >= 75) return "good";
+  if (score >= 60) return "fair";
+  if (score >= 40) return "poor";
+  return "critical";
 }
 
-// 기본 점수 코멘트
-function getDefaultScoreComment(score: number): string {
-  if (score >= 90) return "우리 아기가 안전하게 잘 수 있는 환경입니다.";
-  if (score >= 75) return "전반적으로 양호하지만 몇 가지 개선점이 있어요.";
-  if (score >= 60) return "안전을 위해 개선이 필요한 부분이 있어요.";
-  if (score >= 40) return "아기의 안전을 위해 즉시 조치가 필요해요.";
-  return "심각한 위험 요소가 있어요. 즉시 개선해주세요.";
+// 기본 점수 코멘트 키 반환
+function getDefaultScoreCommentKey(score: number): string {
+  if (score >= 90) return "excellent";
+  if (score >= 75) return "good";
+  if (score >= 60) return "fair";
+  if (score >= 40) return "poor";
+  return "critical";
 }
 
 // 별점 렌더링
@@ -81,39 +82,39 @@ interface AnalysisResultProps {
 
 // 위험도별 설정 (영문 키 사용 - Gemini API 응답 형식)
 const riskConfig = {
-  High: { 
-    bg: "bg-red-50", 
+  High: {
+    bg: "bg-red-50",
     border: "border-red-200",
     text: "text-red-700",
     badge: "bg-red-100 text-red-700",
-    label: "위험",
+    labelKey: "high",
     icon: AlertTriangle,
     pin: "bg-red-500"
   },
-  Medium: { 
-    bg: "bg-amber-50", 
+  Medium: {
+    bg: "bg-amber-50",
     border: "border-amber-200",
     text: "text-amber-700",
     badge: "bg-amber-100 text-amber-700",
-    label: "주의",
+    labelKey: "medium",
     icon: AlertCircle,
     pin: "bg-amber-500"
   },
-  Low: { 
-    bg: "bg-emerald-50", 
+  Low: {
+    bg: "bg-emerald-50",
     border: "border-emerald-200",
     text: "text-emerald-700",
     badge: "bg-emerald-100 text-emerald-700",
-    label: "양호",
+    labelKey: "low",
     icon: CheckCircle,
     pin: "bg-emerald-500"
   },
-  Info: { 
-    bg: "bg-blue-50", 
+  Info: {
+    bg: "bg-blue-50",
     border: "border-blue-200",
     text: "text-blue-700",
     badge: "bg-blue-100 text-blue-700",
-    label: "정보",
+    labelKey: "info",
     icon: AlertCircle,
     pin: "bg-blue-500"
   },
@@ -129,6 +130,7 @@ export function AnalysisResult({
   onShareStoryCard,
   isGeneratingCard = false,
 }: AnalysisResultProps) {
+  const { t } = useTranslation(["sleep-analysis", "common"]);
   const [activeFeedbackId, setActiveFeedbackId] = useState<number | null>(null);
   const [showShareOptions, setShowShareOptions] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
@@ -206,14 +208,14 @@ export function AnalysisResult({
   const fallbackShare = (url: string, description: string) => {
     if (navigator.share) {
       navigator.share({
-        title: `🌙 수면 환경 분석 결과: ${report.safetyScore || 70}점`,
+        title: `${t("sleep-analysis:result.title")}: ${report.safetyScore || 70}${t("sleep-analysis:result.score.points", { defaultValue: "점" })}`,
         text: description,
         url: url,
       });
     } else {
       // 클립보드에 복사
       navigator.clipboard.writeText(url);
-      alert("링크가 복사되었습니다! 카카오톡에 붙여넣기 해주세요.");
+      alert(t("sleep-analysis:result.share.linkCopied", { defaultValue: "링크가 복사되었습니다! 카카오톡에 붙여넣기 해주세요." }));
     }
   };
 
@@ -225,14 +227,14 @@ export function AnalysisResult({
     if (!resultRef.current || isSavingImage) return;
 
     setIsSavingImage(true);
-    setSaveProgress("이미지 생성 중...");
-    
+    setSaveProgress(t("sleep-analysis:result.share.generatingImage", { defaultValue: "이미지 생성 중..." }));
+
     try {
       // 동적 import - Vite 번들 분석 제외
       const html2canvasModule = await import(/* @vite-ignore */ "html2canvas");
       const html2canvas = html2canvasModule.default;
-      
-      setSaveProgress("화면 캡처 중...");
+
+      setSaveProgress(t("sleep-analysis:result.share.capturingScreen", { defaultValue: "화면 캡처 중..." }));
       
       // 캡처 대상 요소
       const element = resultRef.current;
@@ -253,14 +255,14 @@ export function AnalysisResult({
         }
       });
       
-      setSaveProgress("이미지 저장 중...");
-      
+      setSaveProgress(t("sleep-analysis:result.share.savingImage", { defaultValue: "이미지 저장 중..." }));
+
       // Blob으로 변환하여 다운로드 (모바일 호환성 개선)
       const blob = await new Promise<Blob>((resolve) => {
         canvas.toBlob((b) => resolve(b!), "image/png", 1.0);
       });
-      
-      const fileName = `수면분석결과-${new Date().toISOString().split("T")[0]}.png`;
+
+      const fileName = `${t("sleep-analysis:result.title")}-${new Date().toISOString().split("T")[0]}.png`;
       
       // 모바일 체크
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -295,12 +297,12 @@ export function AnalysisResult({
       
       // 모바일에서 다운로드 안내
       if (isMobile) {
-        alert("이미지가 다운로드되었습니다.\n'파일' 또는 '다운로드' 폴더에서 확인하세요.");
+        alert(t("sleep-analysis:result.share.downloadComplete", { defaultValue: "이미지가 다운로드되었습니다.\n'파일' 또는 '다운로드' 폴더에서 확인하세요." }));
       }
-      
+
     } catch (error) {
       console.error("이미지 저장 실패:", error);
-      alert("이미지 저장에 실패했습니다. 다시 시도해주세요.");
+      alert(t("sleep-analysis:errors.analysisFailed"));
     } finally {
       setIsSavingImage(false);
       setSaveProgress("");
@@ -311,18 +313,18 @@ export function AnalysisResult({
     <div className="space-y-6">
       {/* Action Buttons */}
       <div className="flex flex-wrap items-center justify-center gap-3">
-        <Button 
-          onClick={onReset} 
+        <Button
+          onClick={onReset}
           variant="outline"
           className="rounded-xl border-gray-300 text-gray-700 hover:bg-gray-100"
         >
           <RefreshCw className="mr-2 h-4 w-4" />
-          새로 분석
+          {t("sleep-analysis:result.reanalyze")}
         </Button>
 
         {/* 스토리 카드 공유 버튼 */}
         {onShareStoryCard && (
-          <Button 
+          <Button
             onClick={onShareStoryCard}
             disabled={isGeneratingCard}
             className="rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
@@ -330,12 +332,12 @@ export function AnalysisResult({
             {isGeneratingCard ? (
               <>
                 <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                카드 생성 중...
+                {t("sleep-analysis:result.share.generatingCard", { defaultValue: "카드 생성 중..." })}
               </>
             ) : (
               <>
                 <Share2 className="mr-2 h-4 w-4" />
-                스토리 카드 공유
+                {t("sleep-analysis:result.share.button")}
               </>
             )}
           </Button>
@@ -344,7 +346,7 @@ export function AnalysisResult({
 
       {analysisId && (
         <p className="text-center text-sm text-gray-500">
-          ✓ 분석 저장 완료 (ID: {analysisId.substring(0, 8)}...)
+          {t("sleep-analysis:result.savedSuccess", { id: analysisId.substring(0, 8), defaultValue: `분석 저장 완료 (ID: ${analysisId.substring(0, 8)}...)` })}
         </p>
       )}
 
@@ -388,10 +390,10 @@ export function AnalysisResult({
                 {renderStars(report.safetyScore)}
               </div>
               <h2 className="text-xl md:text-2xl font-bold mb-1">
-                {getScoreGrade(report.safetyScore)}
+                {t(`sleep-analysis:result.score.${getScoreGradeKey(report.safetyScore)}`)}
               </h2>
               <p className="text-white/80 text-sm md:text-base">
-                {report.scoreComment || getDefaultScoreComment(report.safetyScore)}
+                {report.scoreComment || t(`sleep-analysis:result.scoreComment.${getDefaultScoreCommentKey(report.safetyScore)}`, { defaultValue: report.scoreComment })}
               </p>
             </div>
           </div>
@@ -400,7 +402,7 @@ export function AnalysisResult({
           <div className="border-t border-white/10 pt-5">
             <div className="flex items-center gap-3 mb-3">
               <Moon className="w-5 h-5 text-white/60" />
-              <h3 className="font-semibold text-white/90">종합 분석</h3>
+              <h3 className="font-semibold text-white/90">{t("sleep-analysis:result.overallAnalysis", { defaultValue: "종합 분석" })}</h3>
             </div>
             <p className="text-white/80 leading-relaxed text-sm md:text-base">
               {report.summary}
@@ -421,7 +423,7 @@ export function AnalysisResult({
 
               {/* Risk Pins */}
               {report.feedbackItems.map((item) => {
-                const risk = riskConfig[item.riskLevel as keyof typeof riskConfig] || riskConfig["낮음"];
+                const risk = riskConfig[item.riskLevel as keyof typeof riskConfig] || riskConfig.Low;
                 return (
                   <button
                     key={item.id}
@@ -448,15 +450,15 @@ export function AnalysisResult({
               <div className="flex flex-wrap items-center justify-center gap-4 text-sm">
                 <div className="flex items-center gap-2">
                   <span className="w-4 h-4 rounded-full bg-red-500"></span>
-                  <span className="text-gray-600">위험 높음</span>
+                  <span className="text-gray-600">{t("sleep-analysis:result.riskLevel.high", { defaultValue: "위험 높음" })}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-4 h-4 rounded-full bg-amber-500"></span>
-                  <span className="text-gray-600">주의 필요</span>
+                  <span className="text-gray-600">{t("sleep-analysis:result.riskLevel.medium", { defaultValue: "주의 필요" })}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-4 h-4 rounded-full bg-emerald-500"></span>
-                  <span className="text-gray-600">양호</span>
+                  <span className="text-gray-600">{t("sleep-analysis:result.riskLevel.low", { defaultValue: "양호" })}</span>
                 </div>
               </div>
             </div>
@@ -465,15 +467,15 @@ export function AnalysisResult({
           {/* Feedback Items */}
           <div className="space-y-4">
             <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">
-              📋 상세 분석
+              {t("sleep-analysis:result.detailAnalysis", { defaultValue: "상세 분석" })}
               <span className="text-sm font-normal text-gray-500">
-                ({report.feedbackItems.length}개 항목)
+                ({t("sleep-analysis:result.itemCount", { count: report.feedbackItems.length, defaultValue: `${report.feedbackItems.length}개 항목` })})
               </span>
             </h3>
 
             <div className="space-y-3">
               {report.feedbackItems.map((item) => {
-                const risk = riskConfig[item.riskLevel as keyof typeof riskConfig] || riskConfig["낮음"];
+                const risk = riskConfig[item.riskLevel as keyof typeof riskConfig] || riskConfig.Low;
                 const RiskIcon = risk.icon;
                 const isActive = activeFeedbackId === item.id;
 
@@ -505,7 +507,7 @@ export function AnalysisResult({
                             "px-2 py-0.5 rounded-full text-xs font-medium",
                             risk.badge
                           )}>
-                            {risk.label}
+                            {t(`sleep-analysis:result.riskLabel.${risk.labelKey}`, { defaultValue: risk.labelKey })}
                           </span>
                         </div>
                         <p className="text-gray-700 text-sm leading-relaxed">
@@ -528,7 +530,7 @@ export function AnalysisResult({
         {/* References */}
         {report.references && report.references.length > 0 && (
           <div className="bg-white rounded-2xl p-5 border border-gray-100">
-            <h3 className="font-bold text-gray-900 mb-3">📚 참고 자료</h3>
+            <h3 className="font-bold text-gray-900 mb-3">{t("sleep-analysis:result.references", { defaultValue: "참고 자료" })}</h3>
             <ul className="space-y-2">
               {report.references.map((ref, index) => (
                 <li key={index} className="text-sm">
@@ -550,7 +552,7 @@ export function AnalysisResult({
       {/* 안내 메시지 */}
       <div className="bg-gray-100 rounded-2xl p-4 text-center">
         <p className="text-gray-600 text-sm">
-          ⚠️ AI 분석 결과는 참고용이며,<br className="md:hidden" /> 전문가 상담을 권장합니다.
+          {t("sleep-analysis:result.disclaimer", { defaultValue: "AI 분석 결과는 참고용이며, 전문가 상담을 권장합니다." })}
         </p>
       </div>
     </div>

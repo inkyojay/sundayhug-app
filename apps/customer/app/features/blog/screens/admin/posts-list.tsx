@@ -8,6 +8,7 @@
  */
 import type { Route } from "./+types/posts-list";
 
+import { useTranslation } from "react-i18next";
 import { Link, useLoaderData, data, useFetcher } from "react-router";
 import { 
   Plus, 
@@ -168,6 +169,7 @@ export async function action({ request }: Route.ActionArgs) {
 type SortOption = "newest" | "oldest" | "title-asc" | "title-desc";
 
 export default function BlogPostsListScreen() {
+  const { t } = useTranslation(["blog", "common"]);
   const { posts, categories } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const audioFetcher = useFetcher();
@@ -323,7 +325,7 @@ export default function BlogPostsListScreen() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="글 제목 또는 요약 검색..."
+            placeholder={t("blog:search.placeholder")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -335,10 +337,10 @@ export default function BlogPostsListScreen() {
           {/* 카테고리 필터 */}
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
             <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="카테고리" />
+              <SelectValue placeholder={t("blog:categories.all")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">모든 카테고리</SelectItem>
+              <SelectItem value="all">{t("blog:categories.all")}</SelectItem>
               {categories.map((cat) => (
                 <SelectItem key={cat.id} value={cat.id}>
                   {cat.name}
@@ -454,7 +456,7 @@ export default function BlogPostsListScreen() {
         {filteredPosts.length === 0 ? (
           <div className="p-12 text-center">
             <p className="text-muted-foreground mb-4">
-              {searchTerm ? "검색 결과가 없습니다" : "작성된 글이 없습니다"}
+              {searchTerm ? t("blog:search.noResults") : t("blog:list.empty")}
             </p>
             <Button asChild variant="outline">
               <Link to="/dashboard/blog/new">첫 글 작성하기</Link>

@@ -14,6 +14,7 @@
  * without modifying the main authentication screens.
  */
 import { LockIcon, MailIcon, PhoneIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
@@ -25,14 +26,14 @@ import { KakaoLogo } from "./logos/kakao";
 
 /**
  * Generic authentication button component
- * 
+ *
  * This component renders a consistent button for any authentication provider.
  * It includes the provider's logo and a standardized "Continue with [Provider]" text.
  * The button uses the outline variant for a clean look and links to the appropriate
  * authentication flow.
- * 
+ *
  * @param logo - React node representing the provider's logo
- * @param label - Provider name (e.g., "Google", "Apple")
+ * @param label - Full label text for the button (e.g., "Google로 계속하기")
  * @param href - URL path to the authentication flow for this provider
  */
 function AuthLoginButton({
@@ -52,7 +53,7 @@ function AuthLoginButton({
     >
       <Link to={href}>
         <span>{logo}</span>
-        <span>Continue with {label}</span>
+        <span>{label}</span>
       </Link>
     </Button>
   );
@@ -60,16 +61,17 @@ function AuthLoginButton({
 
 /**
  * Visual divider with "OR" text
- * 
+ *
  * This component creates a horizontal divider with the text "OR" centered between
  * two lines. It's used to visually separate different authentication method groups
  * (e.g., social logins from passwordless options).
  */
 function Divider() {
+  const { t } = useTranslation(["auth"]);
   return (
     <div className="flex items-center gap-4">
       <span className="bg-input h-px w-full"></span>
-      <span className="text-muted-foreground text-xs">OR</span>
+      <span className="text-muted-foreground text-xs">{t("auth:login.orContinueWith")}</span>
       <span className="bg-input h-px w-full"></span>
     </div>
   );
@@ -107,23 +109,24 @@ function _SignInButtons() {
 
 /**
  * Social login authentication options
- * 
+ *
  * This component renders buttons for social authentication providers:
  * - Google
  * - GitHub
  * - Apple
  * - Kakao
- * 
+ *
  * Each button uses the provider's official logo and links to the appropriate
  * OAuth flow. The styling is consistent while respecting each provider's
  * brand guidelines for their logo presentation.
  */
 function SocialLoginButtons() {
+  const { t } = useTranslation(["auth"]);
   return (
     <>
       <AuthLoginButton
         logo={<GoogleLogo className="size-4" />}
-        label="Google"
+        label={t("auth:login.socialLogin.google")}
         href="/auth/social/start/google"
       />
       <AuthLoginButton
@@ -133,12 +136,12 @@ function SocialLoginButtons() {
       />
       <AuthLoginButton
         logo={<AppleLogo className="size-4 scale-150 dark:text-white" />}
-        label="Apple"
+        label={t("auth:login.socialLogin.apple")}
         href="/auth/social/start/apple"
       />
       <AuthLoginButton
         logo={<KakaoLogo className="size-4 scale-125 dark:text-yellow-300" />}
-        label="Kakao"
+        label={t("auth:login.socialLogin.kakao")}
         href="/auth/social/start/kakao"
       />
     </>

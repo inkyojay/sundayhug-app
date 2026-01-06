@@ -2,6 +2,7 @@
  * Chat Header Component
  */
 import { Link } from "react-router";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import type { ChatSession, BabyProfile } from "../types";
 
@@ -12,6 +13,8 @@ interface ChatHeaderProps {
 }
 
 export function ChatHeader({ session, babyProfile, babyMonths }: ChatHeaderProps) {
+  const { t } = useTranslation(["chat", "common"]);
+
   return (
     <div className="bg-white border-b px-4 py-3 flex items-center gap-3 flex-shrink-0">
       <Link
@@ -21,10 +24,10 @@ export function ChatHeader({ session, babyProfile, babyMonths }: ChatHeaderProps
         <ArrowLeft className="w-5 h-5 text-gray-600" />
       </Link>
       <div className="flex-1 min-w-0">
-        <h1 className="font-bold text-gray-900 truncate">{session?.title || "새 상담"}</h1>
+        <h1 className="font-bold text-gray-900 truncate">{session?.title || t("chat:room.newSession")}</h1>
         {babyProfile && (
           <p className="text-xs text-gray-500">
-            {babyProfile.name || "아기"} • {babyMonths}개월
+            {babyProfile.name || t("common:baby")} • {babyMonths}{t("common:months")}
           </p>
         )}
       </div>

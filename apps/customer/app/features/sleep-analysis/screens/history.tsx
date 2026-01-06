@@ -6,6 +6,7 @@
 import type { Route } from "./+types/history";
 
 import { Baby, Calendar, Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { data, Link, useLoaderData } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
@@ -43,21 +44,22 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function HistoryPage() {
+  const { t } = useTranslation(["sleep-analysis", "common"]);
   const { analyses } = useLoaderData<typeof loader>();
 
   return (
     <div className="container mx-auto px-4 py-8">
       <header className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">분석 이력</h1>
+          <h1 className="text-3xl font-bold">{t("sleep-analysis:history.title")}</h1>
           <p className="text-muted-foreground mt-1">
-            지금까지 분석한 수면 환경 결과입니다.
+            {t("sleep-analysis:history.description", { defaultValue: "지금까지 분석한 수면 환경 결과입니다." })}
           </p>
         </div>
         <Button asChild>
           <Link to="/sleep">
             <Plus className="mr-2 h-4 w-4" />
-            새로 분석하기
+            {t("sleep-analysis:result.reanalyze")}
           </Link>
         </Button>
       </header>
@@ -66,12 +68,12 @@ export default function HistoryPage() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Baby className="text-muted-foreground mb-4 h-16 w-16" />
-            <h2 className="mb-2 text-xl font-semibold">분석 이력이 없습니다</h2>
+            <h2 className="mb-2 text-xl font-semibold">{t("sleep-analysis:history.empty")}</h2>
             <p className="text-muted-foreground mb-4 text-center">
-              첫 번째 수면 환경 분석을 시작해보세요!
+              {t("sleep-analysis:history.startFirst")}
             </p>
             <Button asChild>
-              <Link to="/sleep">수면 환경 분석하기</Link>
+              <Link to="/sleep">{t("sleep-analysis:title")}</Link>
             </Button>
           </CardContent>
         </Card>
@@ -82,7 +84,7 @@ export default function HistoryPage() {
               <Card className="hover:bg-muted/50 h-full transition-colors">
                 <CardHeader>
                   <CardTitle className="text-lg">
-                    생후 {analysis.ageInMonths}개월 아기
+                    {t("sleep-analysis:history.babyAge", { months: analysis.ageInMonths, defaultValue: `생후 ${analysis.ageInMonths}개월 아기` })}
                   </CardTitle>
                   <CardDescription className="flex items-center gap-1">
                     <Calendar className="h-4 w-4" />

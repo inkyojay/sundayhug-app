@@ -1,7 +1,10 @@
 import { ChevronsRightIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Link, Outlet } from "react-router";
 
 function BlogNav() {
+  const { t } = useTranslation(["blog", "common"]);
+
   return (
     <nav className="mx-auto flex h-16 items-center justify-between border-b px-5 shadow-xs backdrop-blur-lg transition-opacity md:px-10">
       <div className="mx-auto flex h-full w-full max-w-screen-2xl items-center justify-between py-3">
@@ -15,7 +18,7 @@ function BlogNav() {
           </Link>
           <ChevronsRightIcon className="text-muted-foreground size-4" />
           <Link to="/blog" className="font-semibold" viewTransition>
-            Blog
+            {t("blog:title")}
           </Link>
         </h1>
       </div>

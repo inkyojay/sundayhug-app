@@ -1,6 +1,7 @@
 /**
  * Welcome Message Component
  */
+import { useTranslation } from "react-i18next";
 import { Bot } from "lucide-react";
 import type { BabyProfile } from "../types";
 
@@ -10,9 +11,11 @@ interface WelcomeMessageProps {
   onSuggestionClick: (suggestion: string) => void;
 }
 
-const SUGGESTIONS = ["밤에 자주 깨요", "이유식 시작 시기", "수면 교육 방법"];
-
 export function WelcomeMessage({ babyProfile, babyMonths, onSuggestionClick }: WelcomeMessageProps) {
+  const { t } = useTranslation(["chat", "common"]);
+
+  const suggestions = t("chat:room.welcome.suggestions", { returnObjects: true }) as string[];
+
   return (
     <div className="mb-6">
       <div className="flex gap-3">
@@ -22,18 +25,20 @@ export function WelcomeMessage({ babyProfile, babyMonths, onSuggestionClick }: W
         <div className="flex-1">
           <div className="bg-white rounded-2xl rounded-tl-md p-4 shadow-sm">
             <p className="text-gray-800">
-              안녕하세요! AI 육아 상담사예요.
+              {t("chat:room.welcome.greeting")}
               {babyProfile && (
                 <>
                   <br />
                   <br />
-                  <strong>{babyProfile.name || "아기"}</strong>({babyMonths}개월)에 대해 궁금한 점이
-                  있으시면 편하게 물어봐 주세요!
+                  {t("chat:room.welcome.withBaby", {
+                    name: babyProfile.name || t("common:baby"),
+                    months: babyMonths,
+                  })}
                 </>
               )}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {SUGGESTIONS.map((suggestion) => (
+              {Array.isArray(suggestions) && suggestions.map((suggestion) => (
                 <button
                   key={suggestion}
                   onClick={() => onSuggestionClick(suggestion)}

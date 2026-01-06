@@ -7,6 +7,7 @@ import type { Route } from "./+types/result";
 
 import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { data, Link, useLoaderData } from "react-router";
 
 import makeServerClient from "~/core/lib/supa-client.server";
@@ -108,6 +109,7 @@ function convertToReport(
 }
 
 export default function ResultPage() {
+  const { t } = useTranslation(["sleep-analysis", "common"]);
   const { analysisId, analysis, feedbackItems } = useLoaderData<typeof loader>();
   const [isGeneratingCard, setIsGeneratingCard] = useState(false);
   const [storyCardData, setStoryCardData] = useState<{ url: string; score: number } | null>(null);
@@ -140,7 +142,7 @@ export default function ResultPage() {
       const responseData = await response.json();
       
       if (!responseData.success || !responseData.data?.storyCardUrl) {
-        throw new Error(responseData.error || "스토리 카드 생성에 실패했습니다.");
+        throw new Error(responseData.error || t("sleep-analysis:errors.analysisFailed"));
       }
       
       const storyCardUrl = responseData.data.storyCardUrl as string;
@@ -151,7 +153,7 @@ export default function ResultPage() {
       
     } catch (err) {
       console.error("Story card error:", err);
-      alert(err instanceof Error ? err.message : "카드 생성 중 오류가 발생했습니다.");
+      alert(err instanceof Error ? err.message : t("sleep-analysis:errors.analysisFailed"));
     } finally {
       setIsGeneratingCard(false);
     }
@@ -162,16 +164,16 @@ export default function ResultPage() {
       <div className="mx-auto max-w-2xl px-4 md:px-6 py-8 md:py-10">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <Link 
+          <Link
             to="/customer/mypage/analyses"
             className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors shadow-sm"
           >
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">수면 분석 결과</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{t("sleep-analysis:result.title")}</h1>
             <p className="text-sm text-gray-500">
-              {analysis.created_at 
+              {analysis.created_at
                 ? new Date(analysis.created_at).toLocaleDateString("ko-KR", {
                     year: "numeric",
                     month: "long",
@@ -194,7 +196,7 @@ export default function ResultPage() {
 
         {/* 하단 안내 */}
         <div className="mt-6 text-center text-sm text-gray-400">
-          <p>AI 분석 결과는 참고용이며, 전문가 상담을 권장합니다.</p>
+          <p>{t("sleep-analysis:result.disclaimer", { defaultValue: "AI 분석 결과는 참고용이며, 전문가 상담을 권장합니다." })}</p>
         </div>
       </div>
 

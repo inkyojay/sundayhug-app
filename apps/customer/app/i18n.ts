@@ -1,32 +1,78 @@
 /**
  * Internationalization (i18n) Configuration
- * 
- * This file defines the core configuration for the application's
- * internationalization using i18next. It specifies supported languages,
- * fallback language, and the default namespace for translations.
+ *
+ * 다국어 글로벌화 설정
+ * - 7개 언어 지원 (한국어 기본)
+ * - RTL 지원 (아랍어)
+ * - 네임스페이스별 번역 파일 분리
  */
 
 /**
- * List of supported languages in the application
- * Currently supports English (en), Spanish (es), and Korean (ko)
- * Using 'as const' to create a readonly tuple type for type safety
+ * 지원 언어 목록
  */
-export const supportedLngs = ["en", "es", "ko"] as const;
+export const supportedLngs = [
+  "ko",     // 한국어 (기본)
+  "en",     // English
+  "ja",     // 日本語
+  "vi",     // Tiếng Việt
+  "zh-TW",  // 繁體中文 (대만)
+  "zh-CN",  // 简体中文 (중국)
+  "ar",     // العربية (아랍어)
+] as const;
+
+export type SupportedLanguage = typeof supportedLngs[number];
 
 /**
- * Default i18next configuration
- * This is used by both client and server rendering to ensure consistent
- * translation behavior throughout the application.
+ * RTL (Right-to-Left) 언어 목록
+ */
+export const rtlLanguages = ["ar"] as const;
+
+/**
+ * 번역 네임스페이스 목록
+ */
+export const namespaces = [
+  "common",           // 공통 UI (버튼, 네비게이션, 상태)
+  "auth",             // 로그인, 회원가입, 비밀번호
+  "customer",         // 홈, 마이페이지, 프로필
+  "sleep-analysis",   // 수면 분석
+  "warranty",         // 보증서
+  "chat",             // AI 상담
+  "blog",             // 블로그
+  "errors",           // 에러 메시지
+] as const;
+
+export type Namespace = typeof namespaces[number];
+
+/**
+ * 언어 정보
+ */
+export const languageInfo: Record<SupportedLanguage, {
+  name: string;
+  nativeName: string;
+  direction: "ltr" | "rtl";
+}> = {
+  ko: { name: "Korean", nativeName: "한국어", direction: "ltr" },
+  en: { name: "English", nativeName: "English", direction: "ltr" },
+  ja: { name: "Japanese", nativeName: "日本語", direction: "ltr" },
+  vi: { name: "Vietnamese", nativeName: "Tiếng Việt", direction: "ltr" },
+  "zh-TW": { name: "Traditional Chinese", nativeName: "繁體中文", direction: "ltr" },
+  "zh-CN": { name: "Simplified Chinese", nativeName: "简体中文", direction: "ltr" },
+  ar: { name: "Arabic", nativeName: "العربية", direction: "rtl" },
+};
+
+/**
+ * RTL 언어 여부 확인
+ */
+export function isRtlLanguage(lang: string): boolean {
+  return rtlLanguages.includes(lang as typeof rtlLanguages[number]);
+}
+
+/**
+ * i18next 기본 설정
  */
 export default {
-  // List of languages the application supports
   supportedLngs,
-  
-  // Fallback language when user's preferred language is not supported
-  // English is used as the default fallback
-  fallbackLng: "en",
-  
-  // The default namespace for translations
-  // All general translations are stored in the 'common' namespace
+  fallbackLng: "ko",  // 한국어 기본
   defaultNS: "common",
+  ns: namespaces,
 };

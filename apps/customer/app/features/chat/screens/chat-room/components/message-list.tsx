@@ -2,6 +2,7 @@
  * Message List Component
  */
 import { forwardRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Bot, Loader2 } from "lucide-react";
 import type { Message, BabyProfile } from "../types";
 import { MessageItem } from "./message-item";
@@ -40,6 +41,8 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
     },
     ref
   ) => {
+    const { t } = useTranslation(["chat", "common"]);
+
     return (
       <div className="flex-1 overflow-y-auto px-4 py-6 bg-[#F5F5F0]">
         {messages.length === 0 && (
@@ -72,7 +75,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
             <div className="bg-white rounded-2xl rounded-tl-md p-4 shadow-sm">
               <div className="flex items-center gap-2 text-gray-500">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>답변 작성 중...</span>
+                <span>{t("chat:room.typing")}</span>
               </div>
             </div>
           </div>

@@ -8,6 +8,7 @@
 import type { Route } from "./+types/baby-history";
 
 import { Link, redirect, useLoaderData, data } from "react-router";
+import { useTranslation } from "react-i18next";
 import { 
   Baby,
   MessageCircle,
@@ -104,6 +105,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 export default function BabyHistoryScreen() {
   const { babyProfile, chatSessions, sleepAnalyses, ageMonths } = useLoaderData<typeof loader>();
+  const { t } = useTranslation(["customer", "common"]);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -119,12 +121,12 @@ export default function BabyHistoryScreen() {
     <div className="min-h-screen bg-[#F5F5F0] dark:bg-[#121212]">
       <div className="mx-auto max-w-2xl px-4 py-8">
         {/* 뒤로가기 */}
-        <Link 
-          to="/customer/mypage" 
+        <Link
+          to="/customer/mypage"
           className="inline-flex items-center text-gray-500 hover:text-gray-700 dark:text-gray-400 mb-6"
         >
           <ChevronLeft className="w-5 h-5" />
-          <span>마이페이지</span>
+          <span>{t("common:navigation.mypage")}</span>
         </Link>
 
         {/* 아이 정보 헤더 */}
@@ -135,21 +137,21 @@ export default function BabyHistoryScreen() {
             </div>
             <div className="flex-1">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                {babyProfile.name || "우리 아기"}
+                {babyProfile.name || t("customer:babyHistory.defaultName")}
               </h1>
               <p className="text-gray-500 dark:text-gray-400 mt-1">
-                {ageMonths !== null ? `${ageMonths}개월` : "월령 미설정"}
+                {ageMonths !== null ? t("common:time.months", { count: ageMonths }) : t("customer:babyHistory.noAge")}
                 {babyProfile.feeding_type && ` • ${
-                  babyProfile.feeding_type === "breast" ? "모유" :
-                  babyProfile.feeding_type === "formula" ? "분유" :
-                  babyProfile.feeding_type === "mixed" ? "혼합" : ""
+                  babyProfile.feeding_type === "breast" ? t("customer:babyHistory.feedingType.breast") :
+                  babyProfile.feeding_type === "formula" ? t("customer:babyHistory.feedingType.formula") :
+                  babyProfile.feeding_type === "mixed" ? t("customer:babyHistory.feedingType.mixed") : ""
                 }`}
               </p>
-              <Link 
+              <Link
                 to={`/customer/chat/baby-profile?id=${babyProfile.id}`}
                 className="inline-flex items-center text-[#FF6B35] text-sm font-medium mt-2 hover:underline"
               >
-                정보 수정하기 <ChevronRight className="w-4 h-4" />
+                {t("customer:babyHistory.editInfo")} <ChevronRight className="w-4 h-4" />
               </Link>
             </div>
           </div>
@@ -157,19 +159,19 @@ export default function BabyHistoryScreen() {
 
         {/* 새 상담/분석 시작 버튼 */}
         <div className="grid grid-cols-2 gap-3 mb-8">
-          <Link 
+          <Link
             to={`/customer/chat/new?babyId=${babyProfile.id}`}
             className="bg-gradient-to-r from-[#FF6B35] to-orange-500 text-white rounded-2xl p-4 text-center font-medium hover:opacity-90 transition-opacity"
           >
             <MessageCircle className="w-6 h-6 mx-auto mb-2" />
-            새 상담 시작
+            {t("customer:babyHistory.newChat")}
           </Link>
-          <Link 
+          <Link
             to="/customer/sleep/analyze"
             className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-2xl p-4 text-center font-medium hover:opacity-90 transition-opacity"
           >
             <Camera className="w-6 h-6 mx-auto mb-2" />
-            수면 환경 분석
+            {t("customer:babyHistory.sleepAnalysis")}
           </Link>
         </div>
 
@@ -178,9 +180,9 @@ export default function BabyHistoryScreen() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <MessageCircle className="w-5 h-5 text-[#FF6B35]" />
-              상담 내역
+              {t("customer:babyHistory.chatHistory")}
             </h2>
-            <span className="text-sm text-gray-400">{chatSessions.length}건</span>
+            <span className="text-sm text-gray-400">{t("customer:babyHistory.count", { count: chatSessions.length })}</span>
           </div>
 
           {chatSessions.length > 0 ? (
@@ -194,7 +196,7 @@ export default function BabyHistoryScreen() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <h3 className="font-medium text-gray-900 dark:text-white line-clamp-1">
-                        {session.title || "새 상담"}
+                        {session.title || t("customer:babyHistory.newSession")}
                       </h3>
                       {session.topic && (
                         <span className="inline-block mt-1 px-2 py-0.5 bg-orange-50 dark:bg-orange-900/30 text-[#FF6B35] text-xs rounded-full">

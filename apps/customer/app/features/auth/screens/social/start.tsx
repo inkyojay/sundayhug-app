@@ -13,6 +13,7 @@
  */
 import type { Route } from "./+types/start";
 
+import { useTranslation } from "react-i18next";
 import { data, redirect } from "react-router";
 import { z } from "zod";
 
@@ -88,6 +89,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
  * @param loaderData - Data from the loader containing any error messages
  */
 export default function StartSocialLogin({ loaderData }: Route.ComponentProps) {
+  const { t } = useTranslation(["auth", "common"]);
   // Extract error from loader data
   const { error } = loaderData;
 
@@ -95,7 +97,7 @@ export default function StartSocialLogin({ loaderData }: Route.ComponentProps) {
     <div className="flex flex-col items-center justify-center gap-2.5">
       {/* Display error message */}
       <h1 className="text-2xl font-semibold">{error}</h1>
-      <p className="text-muted-foreground">Please try again.</p>
+      <p className="text-muted-foreground">{t("auth:errors.tryAgain")}</p>
     </div>
   );
 }

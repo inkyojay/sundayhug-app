@@ -1,6 +1,6 @@
 /**
  * 보증서 관리 - 전체 목록 (관리자용)
- * 
+ *
  * 기능:
  * - 보증서 목록 조회/검색/필터
  * - 체크박스로 선택 후 일괄 삭제
@@ -18,6 +18,7 @@ import {
   AlertTriangleIcon,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { useFetcher, useRevalidator } from "react-router";
 
 import { Badge } from "~/core/components/ui/badge";
@@ -169,17 +170,18 @@ export async function action({ request }: Route.ActionArgs) {
   return { success: false, error: "알 수 없는 액션입니다." };
 }
 
-// 상태별 배지 스타일
-const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  pending: { label: "승인 대기", variant: "outline" },
-  approved: { label: "승인 완료", variant: "default" },
-  rejected: { label: "거절", variant: "destructive" },
-  expired: { label: "만료", variant: "secondary" },
-};
-
 export default function WarrantyList({ loaderData }: Route.ComponentProps) {
+  const { t } = useTranslation(["warranty", "common"]);
   const { warranties, stats, totalCount, currentPage, totalPages, search, statusFilter } = loaderData;
   const [searchInput, setSearchInput] = useState(search);
+
+  // 상태별 배지 스타일
+  const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+    pending: { label: t("warranty:admin.warrantyManagement.status.pending"), variant: "outline" },
+    approved: { label: t("warranty:admin.warrantyManagement.status.approved"), variant: "default" },
+    rejected: { label: t("warranty:admin.warrantyManagement.status.rejected"), variant: "destructive" },
+    expired: { label: t("warranty:admin.warrantyManagement.status.expired"), variant: "secondary" },
+  };
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
@@ -277,20 +279,20 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangleIcon className="h-5 w-5" />
-              보증서 삭제
+              {t("warranty:admin.warrantyManagement.deleteDialog.title")}
             </DialogTitle>
             <DialogDescription>
-              선택한 <strong>{selectedIds.size}개</strong>의 보증서를 삭제하시겠습니까?
+              {t("warranty:admin.warrantyManagement.deleteDialog.description", { count: selectedIds.size })}
               <br />
-              <span className="text-destructive">이 작업은 되돌릴 수 없습니다.</span>
+              <span className="text-destructive">{t("warranty:admin.warrantyManagement.deleteDialog.warning")}</span>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={isDeleting}>
-              취소
+              {t("common:buttons.cancel")}
             </Button>
             <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
-              {isDeleting ? "삭제 중..." : "삭제"}
+              {isDeleting ? t("warranty:admin.warrantyManagement.deleteDialog.deleting") : t("common:buttons.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -301,21 +303,21 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <ShieldCheckIcon className="h-6 w-6" />
-            보증서 관리
+            {t("warranty:admin.warrantyManagement.title")}
           </h1>
-          <p className="text-muted-foreground">디지털 보증서 발급 현황</p>
+          <p className="text-muted-foreground">{t("warranty:admin.warrantyManagement.subtitle")}</p>
         </div>
         <div className="flex gap-2">
           {selectedIds.size > 0 && (
             <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
               <Trash2Icon className="h-4 w-4 mr-2" />
-              선택 삭제 ({selectedIds.size})
+              {t("warranty:admin.warrantyManagement.deleteSelected", { count: selectedIds.size })}
             </Button>
           )}
           <Button asChild>
             <a href="/dashboard/warranty/pending">
               <ClockIcon className="h-4 w-4 mr-2" />
-              승인 대기 ({stats.pending_count})
+              {t("warranty:admin.warrantyManagement.pendingApproval", { count: stats.pending_count })}
             </a>
           </Button>
         </div>
@@ -325,7 +327,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
       <div className="grid gap-4 md:grid-cols-5">
         <Card className="cursor-pointer hover:bg-muted/50" onClick={() => handleStatusChange("all")}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">전체 보증서</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("warranty:admin.warrantyManagement.stats.total")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.total_warranties}</div>
@@ -335,7 +337,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               <ClockIcon className="h-4 w-4 text-yellow-500" />
-              승인 대기
+              {t("warranty:admin.warrantyManagement.stats.pending")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -346,7 +348,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               <CheckCircleIcon className="h-4 w-4 text-green-500" />
-              승인 완료
+              {t("warranty:admin.warrantyManagement.stats.approved")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -357,7 +359,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               <XCircleIcon className="h-4 w-4 text-destructive" />
-              거절
+              {t("warranty:admin.warrantyManagement.stats.rejected")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -366,7 +368,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">이번 주 등록</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("warranty:admin.warrantyManagement.stats.thisWeek")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.this_week}</div>
@@ -382,27 +384,27 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
               <div className="relative flex-1">
                 <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="보증서번호, 송장번호, 연락처로 검색..."
+                  placeholder={t("warranty:admin.warrantyManagement.searchPlaceholder")}
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   className="pl-10"
                 />
               </div>
-              <Button type="submit">검색</Button>
+              <Button type="submit">{t("warranty:admin.warrantyManagement.search")}</Button>
             </form>
 
             <div className="flex items-center gap-2">
               <FilterIcon className="h-4 w-4 text-muted-foreground" />
               <Select value={statusFilter} onValueChange={handleStatusChange}>
                 <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="상태" />
+                  <SelectValue placeholder={t("warranty:admin.warrantyManagement.filter.status")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">전체</SelectItem>
-                  <SelectItem value="pending">승인 대기</SelectItem>
-                  <SelectItem value="approved">승인 완료</SelectItem>
-                  <SelectItem value="rejected">거절</SelectItem>
-                  <SelectItem value="expired">만료</SelectItem>
+                  <SelectItem value="all">{t("warranty:admin.warrantyManagement.filter.all")}</SelectItem>
+                  <SelectItem value="pending">{t("warranty:admin.warrantyManagement.status.pending")}</SelectItem>
+                  <SelectItem value="approved">{t("warranty:admin.warrantyManagement.status.approved")}</SelectItem>
+                  <SelectItem value="rejected">{t("warranty:admin.warrantyManagement.status.rejected")}</SelectItem>
+                  <SelectItem value="expired">{t("warranty:admin.warrantyManagement.status.expired")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -415,12 +417,12 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>보증서 목록</CardTitle>
+              <CardTitle>{t("warranty:admin.warrantyManagement.warrantyList")}</CardTitle>
               <CardDescription>
-                총 {totalCount.toLocaleString()}개
+                {t("warranty:admin.warrantyManagement.totalItems", { count: totalCount.toLocaleString() })}
                 {selectedIds.size > 0 && (
                   <span className="ml-2 text-primary">
-                    ({selectedIds.size}개 선택됨)
+                    {t("warranty:admin.warrantyManagement.selectedItems", { count: selectedIds.size })}
                   </span>
                 )}
               </CardDescription>
@@ -435,18 +437,18 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
                   <Checkbox
                     checked={isAllSelected}
                     onCheckedChange={handleSelectAll}
-                    aria-label="전체 선택"
+                    aria-label={t("warranty:admin.warrantyManagement.selectAll")}
                     className={isSomeSelected ? "opacity-50" : ""}
                   />
                 </TableHead>
-                <TableHead className="w-[180px]">보증서번호</TableHead>
-                <TableHead>구매자명</TableHead>
-                <TableHead>제품</TableHead>
-                <TableHead>송장번호</TableHead>
-                <TableHead>보증기간</TableHead>
-                <TableHead>상태</TableHead>
-                <TableHead>등록일</TableHead>
-                <TableHead className="w-[80px]">상세</TableHead>
+                <TableHead className="w-[180px]">{t("warranty:admin.warrantyManagement.table.warrantyNumber")}</TableHead>
+                <TableHead>{t("warranty:admin.warrantyManagement.table.buyerName")}</TableHead>
+                <TableHead>{t("warranty:admin.warrantyManagement.table.product")}</TableHead>
+                <TableHead>{t("warranty:admin.warrantyManagement.table.trackingNumber")}</TableHead>
+                <TableHead>{t("warranty:admin.warrantyManagement.table.warrantyPeriod")}</TableHead>
+                <TableHead>{t("warranty:admin.warrantyManagement.table.status")}</TableHead>
+                <TableHead>{t("warranty:admin.warrantyManagement.table.registrationDate")}</TableHead>
+                <TableHead className="w-[80px]">{t("warranty:admin.warrantyManagement.table.detail")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -459,7 +461,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
                     <Checkbox
                       checked={selectedIds.has(item.id)}
                       onCheckedChange={(checked) => handleSelectOne(item.id, !!checked)}
-                      aria-label={`${item.warranty_number} 선택`}
+                      aria-label={t("warranty:admin.warrantyManagement.selectItem", { number: item.warranty_number })}
                     />
                   </TableCell>
                   <TableCell className="font-mono text-xs">
@@ -468,7 +470,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
                   <TableCell>
                     <div className="font-medium">{item.buyer_name || "-"}</div>
                     {item.customers?.name && item.customers.name !== item.buyer_name && (
-                      <div className="text-xs text-muted-foreground">회원: {item.customers.name}</div>
+                      <div className="text-xs text-muted-foreground">{t("warranty:admin.warrantyManagement.table.member", { name: item.customers.name })}</div>
                     )}
                   </TableCell>
                   <TableCell>
@@ -503,7 +505,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
                   </TableCell>
                   <TableCell>
                     <Button variant="ghost" size="sm" asChild>
-                      <a href={`/dashboard/warranty/${item.id}`}>보기</a>
+                      <a href={`/dashboard/warranty/${item.id}`}>{t("warranty:admin.warrantyManagement.table.view")}</a>
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -511,7 +513,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
               {warranties.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                    {search || statusFilter !== "all" ? "검색 결과가 없습니다" : "등록된 보증서가 없습니다"}
+                    {search || statusFilter !== "all" ? t("warranty:admin.warrantyManagement.noSearchResults") : t("warranty:admin.warrantyManagement.noWarranties")}
                   </TableCell>
                 </TableRow>
               )}
@@ -522,7 +524,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
               <p className="text-sm text-muted-foreground">
-                페이지 {currentPage} / {totalPages}
+                {t("warranty:admin.asManagement.pagination.page", { current: currentPage, total: totalPages })}
               </p>
               <div className="flex gap-2">
                 <Button
@@ -531,7 +533,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
                   disabled={currentPage <= 1}
                   onClick={() => window.location.href = buildUrl({ page: String(currentPage - 1) })}
                 >
-                  이전
+                  {t("warranty:admin.asManagement.pagination.previous")}
                 </Button>
                 <Button
                   variant="outline"
@@ -539,7 +541,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
                   disabled={currentPage >= totalPages}
                   onClick={() => window.location.href = buildUrl({ page: String(currentPage + 1) })}
                 >
-                  다음
+                  {t("warranty:admin.asManagement.pagination.next")}
                 </Button>
               </div>
             </div>

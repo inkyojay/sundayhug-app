@@ -13,6 +13,7 @@
 import type { Route } from "./+types/magic-link";
 
 import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Form, data } from "react-router";
 import { z } from "zod";
 
@@ -126,9 +127,10 @@ export async function action({ request }: Route.ActionArgs) {
  * @param actionData - Data returned from the form action, including errors or success status
  */
 export default function MagicLink({ actionData }: Route.ComponentProps) {
+  const { t } = useTranslation(["auth", "common"]);
   // Reference to the form element for resetting after successful submission
   const formRef = useRef<HTMLFormElement>(null);
-  
+
   // Reset the form when the magic link is successfully sent
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success) {
@@ -141,10 +143,10 @@ export default function MagicLink({ actionData }: Route.ComponentProps) {
       <Card className="w-full max-w-md">
         <CardHeader className="flex flex-col items-center">
           <CardTitle className="text-2xl font-semibold">
-            Enter your email
+            {t("auth:forgotPassword.title")}
           </CardTitle>
           <CardDescription className="text-center text-base">
-            We&apos;ll send you a verification code.
+            {t("auth:forgotPassword.subtitle")}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -155,22 +157,22 @@ export default function MagicLink({ actionData }: Route.ComponentProps) {
           >
             <div className="flex flex-col items-start space-y-2">
               <Label htmlFor="name" className="flex flex-col items-start gap-1">
-                Email
+                {t("auth:forgotPassword.email")}
               </Label>
               <Input
                 id="email"
                 name="email"
                 required
                 type="email"
-                placeholder="nico@supaplate.com"
+                placeholder={t("common:form.placeholder.email")}
               />
             </div>
-            <FormButton label="Send magic link" className="w-full" />
+            <FormButton label={t("auth:forgotPassword.button")} className="w-full" />
             {actionData && "error" in actionData && actionData.error ? (
               <FormErrors errors={[actionData.error]} />
             ) : null}
             {actionData && "success" in actionData && actionData.success ? (
-              <FormSuccess message="Check your email and click the magic link to continue. You can close this tab." />
+              <FormSuccess message={t("auth:forgotPassword.checkEmail")} />
             ) : null}
           </Form>
         </CardContent>

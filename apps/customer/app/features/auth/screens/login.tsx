@@ -10,6 +10,7 @@ import type { Route } from "./+types/login";
 
 import { AlertCircle, Loader2Icon } from "lucide-react";
 import { useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Form, Link, data, redirect, useFetcher } from "react-router";
 import { z } from "zod";
 
@@ -93,6 +94,7 @@ export async function action({ request }: Route.ActionArgs) {
  * 로그인 컴포넌트
  */
 export default function Login({ actionData }: Route.ComponentProps) {
+  const { t } = useTranslation(["auth", "common"]);
   const formRef = useRef<HTMLFormElement>(null);
   const fetcher = useFetcher();
 
@@ -112,10 +114,10 @@ export default function Login({ actionData }: Route.ComponentProps) {
       <Card className="w-full max-w-md">
         <CardHeader className="flex flex-col items-center">
           <CardTitle className="text-2xl font-semibold">
-            Sundayhug Admin
+            {t("auth:login.title")}
           </CardTitle>
           <CardDescription className="text-base">
-            내부 관리 시스템에 로그인하세요
+            {t("auth:login.subtitle")}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -125,13 +127,13 @@ export default function Login({ actionData }: Route.ComponentProps) {
             ref={formRef}
           >
             <div className="flex flex-col items-start space-y-2">
-              <Label htmlFor="email">이메일</Label>
+              <Label htmlFor="email">{t("auth:login.email")}</Label>
               <Input
                 id="email"
                 name="email"
                 required
                 type="email"
-                placeholder="example@sundayhug.com"
+                placeholder={t("common:form.placeholder.email")}
               />
               {actionData &&
               "fieldErrors" in actionData &&
@@ -141,14 +143,14 @@ export default function Login({ actionData }: Route.ComponentProps) {
             </div>
             <div className="flex flex-col items-start space-y-2">
               <div className="flex w-full items-center justify-between">
-                <Label htmlFor="password">비밀번호</Label>
+                <Label htmlFor="password">{t("auth:login.password")}</Label>
                 <Link
                   to="/auth/forgot-password/reset"
                   className="text-muted-foreground text-underline hover:text-foreground self-end text-sm underline transition-colors"
                   tabIndex={-1}
                   viewTransition
                 >
-                  비밀번호 찾기
+                  {t("auth:login.forgotPassword")}
                 </Link>
               </div>
               <Input
@@ -156,7 +158,7 @@ export default function Login({ actionData }: Route.ComponentProps) {
                 name="password"
                 required
                 type="password"
-                placeholder="비밀번호를 입력하세요"
+                placeholder={t("common:form.placeholder.password")}
               />
 
               {actionData &&
@@ -165,7 +167,7 @@ export default function Login({ actionData }: Route.ComponentProps) {
                 <FormErrors errors={actionData.fieldErrors.password} />
               ) : null}
             </div>
-            <FormButton label="로그인" className="w-full" />
+            <FormButton label={t("auth:login.button")} className="w-full" />
             {actionData && "error" in actionData ? (
               actionData.error === "이메일 인증이 필요합니다" ? (
                 <Alert variant="destructive" className="bg-destructive/10">
@@ -196,7 +198,7 @@ export default function Login({ actionData }: Route.ComponentProps) {
       </Card>
       {/* 내부 시스템이므로 회원가입 링크 제거 */}
       <p className="text-muted-foreground text-sm">
-        계정이 필요하신가요? 관리자에게 문의하세요
+        {t("auth:login.noAccount")} 관리자에게 문의하세요
       </p>
     </div>
   );

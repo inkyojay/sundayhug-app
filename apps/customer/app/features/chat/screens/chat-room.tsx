@@ -5,8 +5,9 @@
 import type { Route } from "./+types/chat-room";
 
 import { Link, useLoaderData, useFetcher, data } from "react-router";
-import { 
-  ArrowLeft, 
+import { useTranslation } from "react-i18next";
+import {
+  ArrowLeft,
   Send,
   ImagePlus,
   Mic,
@@ -204,6 +205,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function ChatRoomScreen() {
+  const { t } = useTranslation(["chat", "common"]);
   const { session, messages: initialMessages, babyProfile: initialBabyProfile } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const chatFetcher = useFetcher();
@@ -379,7 +381,7 @@ export default function ChatRoomScreen() {
     : null;
 
   const handleSaveBabyProfile = () => {
-    if (!birthDate) { alert("생년월일을 입력해주세요."); return; }
+    if (!birthDate) { alert(t("chat:babyProfile.validation.birthDateRequired")); return; }
     profileFetcher.submit({ actionType: "saveBabyProfile", babyName, birthDate, feedingType }, { method: "post" });
   };
 
@@ -391,7 +393,7 @@ export default function ChatRoomScreen() {
           <Link to="/customer/chat" className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200">
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </Link>
-          <h1 className="font-bold text-gray-900">AI 육아 상담</h1>
+          <h1 className="font-bold text-gray-900">{t("chat:title")}</h1>
         </div>
 
         <div className="flex-1 flex items-center justify-center p-4">
@@ -400,23 +402,23 @@ export default function ChatRoomScreen() {
               <div className="w-16 h-16 bg-gradient-to-br from-[#FF6B35] to-orange-400 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Bot className="w-8 h-8 text-white" />
               </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">아기 정보 등록</h2>
-              <p className="text-gray-500 text-sm">맞춤형 상담을 위해 아기 정보를 알려주세요</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">{t("chat:babyProfile.title")}</h2>
+              <p className="text-gray-500 text-sm">{t("chat:babyProfile.subtitle")}</p>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">아기 이름 (선택)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("chat:babyProfile.name")} ({t("chat:babyProfile.nameOptional")})</label>
                 <input
                   type="text"
                   value={babyName}
                   onChange={(e) => setBabyName(e.target.value)}
-                  placeholder="예: 콩이"
+                  placeholder={t("chat:babyProfile.namePlaceholder")}
                   className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:border-[#FF6B35] focus:ring-1 focus:ring-[#FF6B35] outline-none"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">생년월일 *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("chat:babyProfile.birthDate")} *</label>
                 <input
                   type="date"
                   value={birthDate}
@@ -425,16 +427,16 @@ export default function ChatRoomScreen() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">수유 방식 (선택)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("chat:babyProfile.feedingType")} ({t("chat:babyProfile.nameOptional")})</label>
                 <select
                   value={feedingType}
                   onChange={(e) => setFeedingType(e.target.value)}
                   className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:border-[#FF6B35] focus:ring-1 focus:ring-[#FF6B35] outline-none bg-white"
                 >
-                  <option value="">선택해주세요</option>
-                  <option value="breast">모유</option>
-                  <option value="formula">분유</option>
-                  <option value="mixed">혼합</option>
+                  <option value="">{t("chat:babyProfile.feedingPlaceholder")}</option>
+                  <option value="breast">{t("chat:babyProfile.feedingOptions.breast")}</option>
+                  <option value="formula">{t("chat:babyProfile.feedingOptions.formula")}</option>
+                  <option value="mixed">{t("chat:babyProfile.feedingOptions.mixed")}</option>
                 </select>
               </div>
               <Button
@@ -442,7 +444,7 @@ export default function ChatRoomScreen() {
                 disabled={profileFetcher.state !== "idle"}
                 className="w-full h-12 bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white rounded-xl font-medium"
               >
-                {profileFetcher.state !== "idle" ? "저장 중..." : "상담 시작하기"}
+                {profileFetcher.state !== "idle" ? t("chat:babyProfile.saving") : t("chat:babyProfile.submit")}
               </Button>
             </div>
           </div>
@@ -461,9 +463,9 @@ export default function ChatRoomScreen() {
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </Link>
           <div className="flex-1 min-w-0">
-            <h1 className="font-bold text-gray-900 truncate">{session?.title || "새 상담"}</h1>
+            <h1 className="font-bold text-gray-900 truncate">{session?.title || t("chat:room.newSession")}</h1>
             {babyProfile && (
-              <p className="text-xs text-gray-500">{babyProfile.name || "아기"} • {babyMonths}개월</p>
+              <p className="text-xs text-gray-500">{babyProfile.name || t("common:baby")} • {babyMonths}{t("common:months")}</p>
             )}
           </div>
           <div className="w-9 h-9 bg-gradient-to-br from-[#FF6B35] to-orange-400 rounded-full flex items-center justify-center">
@@ -483,16 +485,16 @@ export default function ChatRoomScreen() {
                 <div className="flex-1">
                   <div className="bg-white rounded-2xl rounded-tl-md p-4 shadow-sm">
                     <p className="text-gray-800">
-                      안녕하세요! 👋 AI 육아 상담사예요.
+                      {t("chat:room.welcome.greeting")}
                       {babyProfile && (
                         <>
                           <br /><br />
-                          <strong>{babyProfile.name || "아기"}</strong>({babyMonths}개월)에 대해 궁금한 점이 있으시면 편하게 물어봐 주세요!
+                          {t("chat:room.welcome.withBaby", { name: babyProfile.name || t("common:baby"), months: babyMonths })}
                         </>
                       )}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {["밤에 자주 깨요", "이유식 시작 시기", "수면 교육 방법"].map((suggestion) => (
+                      {(t("chat:room.welcome.suggestions", { returnObjects: true }) as string[]).map((suggestion) => (
                         <button
                           key={suggestion}
                           onClick={() => setInputValue(suggestion)}
@@ -518,7 +520,7 @@ export default function ChatRoomScreen() {
               </div>
               <div className={`flex-1 max-w-[80%] ${msg.role === "user" ? "flex flex-col items-end" : ""}`}>
                 {msg.role === "assistant" && (
-                  <p className="text-xs text-gray-500 mb-1 font-medium">AI 육아 상담사</p>
+                  <p className="text-xs text-gray-500 mb-1 font-medium">{t("chat:room.title")}</p>
                 )}
                 <div className={`rounded-2xl p-4 ${
                   msg.role === "user"
@@ -527,10 +529,10 @@ export default function ChatRoomScreen() {
                 }`}>
                   {/* 이미지 표시 */}
                   {msg.image_url && (
-                    <img src={msg.image_url} alt="첨부 이미지" className="max-w-full rounded-xl mb-2" />
+                    <img src={msg.image_url} alt={t("chat:room.image.attach")} className="max-w-full rounded-xl mb-2" />
                   )}
                   <p className="whitespace-pre-wrap text-inherit">{msg.content}</p>
-                  
+
                   {/* 출처 */}
                   {msg.role === "assistant" && msg.sources && (() => {
                     try {
@@ -538,7 +540,7 @@ export default function ChatRoomScreen() {
                       if (!Array.isArray(sources) || sources.length === 0) return null;
                       return (
                         <div className="mt-3 pt-3 border-t border-gray-100">
-                          <p className="text-xs text-gray-400 mb-1">📚 참고 자료</p>
+                          <p className="text-xs text-gray-400 mb-1">{t("chat:room.sources.title")}</p>
                           <div className="flex flex-wrap gap-1">
                             {sources.map((source: { name: string; url?: string }, i: number) => (
                               <a key={i} href={source.url || "#"} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline flex items-center gap-1">
@@ -552,7 +554,7 @@ export default function ChatRoomScreen() {
                     } catch { return null; }
                   })()}
                 </div>
-                
+
                 {/* AI 메시지 액션 버튼 */}
                 {msg.role === "assistant" && (
                   <div className="flex gap-1 mt-1">
@@ -564,31 +566,31 @@ export default function ChatRoomScreen() {
                           ? "text-[#FF6B35] bg-orange-50"
                           : "text-gray-400 hover:text-[#FF6B35] hover:bg-orange-50"
                       }`}
-                      title="음성으로 듣기"
+                      title={t("chat:room.actions.playAudio")}
                     >
-                      {loadingTtsId === msg.id ? <Loader2 className="w-4 h-4 animate-spin" /> 
-                        : audioPlayer.currentPlayingId === msg.id && audioPlayer.isPlaying 
-                          ? <VolumeX className="w-4 h-4" /> 
+                      {loadingTtsId === msg.id ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : audioPlayer.currentPlayingId === msg.id && audioPlayer.isPlaying
+                          ? <VolumeX className="w-4 h-4" />
                           : <Volume2 className="w-4 h-4" />}
                     </button>
                     <button
                       onClick={() => handleCopy(msg.id, msg.content)}
                       className="p-1.5 text-gray-400 hover:text-[#FF6B35] hover:bg-orange-50 rounded-full transition-colors"
-                      title="복사"
+                      title={t("chat:room.actions.copy")}
                     >
                       {copiedId === msg.id ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                     </button>
                     <button
                       onClick={() => handleFeedback(msg.id, true)}
                       className="p-1.5 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-full transition-colors"
-                      title="도움이 됐어요"
+                      title={t("chat:room.actions.helpful")}
                     >
                       <ThumbsUp className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleFeedback(msg.id, false)}
                       className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                      title="도움이 안 됐어요"
+                      title={t("chat:room.actions.notHelpful")}
                     >
                       <ThumbsDown className="w-4 h-4" />
                     </button>
@@ -607,7 +609,7 @@ export default function ChatRoomScreen() {
               <div className="bg-white rounded-2xl rounded-tl-md p-4 shadow-sm">
                 <div className="flex items-center gap-2 text-gray-500">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>답변 작성 중...</span>
+                  <span>{t("chat:room.typing")}</span>
                 </div>
               </div>
             </div>
@@ -621,7 +623,7 @@ export default function ChatRoomScreen() {
           {/* 선택된 이미지 미리보기 */}
           {selectedImage && (
             <div className="mb-3 relative inline-block">
-              <img src={selectedImage.preview} alt="미리보기" className="h-20 rounded-lg border" />
+              <img src={selectedImage.preview} alt={t("chat:room.image.preview")} className="h-20 rounded-lg border" />
               <button
                 onClick={() => setSelectedImage(null)}
                 className="absolute -top-2 -right-2 w-6 h-6 bg-gray-800 text-white rounded-full flex items-center justify-center hover:bg-gray-700"
@@ -635,7 +637,7 @@ export default function ChatRoomScreen() {
           {voiceRecorder.isRecording && (
             <div className="mb-2 flex items-center gap-2 text-red-500 text-sm animate-pulse">
               <span className="w-2 h-2 bg-red-500 rounded-full" />
-              🎙️ 녹음 중... 다시 클릭하면 종료됩니다
+              {t("chat:room.voice.recording")} {t("chat:room.voice.tapToStop")}
             </div>
           )}
 
@@ -656,16 +658,16 @@ export default function ChatRoomScreen() {
               onClick={handleVoiceRecord}
               disabled={voiceRecorder.isProcessing || isLoading}
               className={`w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
-                voiceRecorder.isRecording 
-                  ? "bg-red-500 text-white animate-pulse" 
+                voiceRecorder.isRecording
+                  ? "bg-red-500 text-white animate-pulse"
                   : voiceRecorder.isProcessing
                     ? "bg-orange-400 text-white"
                     : "bg-gray-100 text-gray-500 hover:bg-gray-200"
               }`}
-              title={voiceRecorder.isRecording ? "녹음 중지" : voiceRecorder.isProcessing ? "변환 중..." : "음성으로 입력"}
+              title={voiceRecorder.isRecording ? t("chat:room.actions.stopAudio") : voiceRecorder.isProcessing ? t("chat:room.voice.processing") : t("chat:room.actions.playAudio")}
             >
-              {voiceRecorder.isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> 
-                : voiceRecorder.isRecording ? <Square className="w-4 h-4" /> 
+              {voiceRecorder.isProcessing ? <Loader2 className="w-5 h-5 animate-spin" />
+                : voiceRecorder.isRecording ? <Square className="w-4 h-4" />
                 : <Mic className="w-5 h-5" />}
             </button>
 
@@ -676,7 +678,7 @@ export default function ChatRoomScreen() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="메시지를 입력하세요..."
+                placeholder={t("chat:room.placeholder")}
                 className="resize-none pr-12 min-h-[44px] max-h-[120px]"
                 rows={1}
               />
@@ -693,7 +695,7 @@ export default function ChatRoomScreen() {
           </form>
 
           <p className="text-xs text-gray-400 text-center mt-2">
-            AI가 생성한 답변은 참고용이며, 전문의 상담을 대체하지 않습니다.
+            {t("chat:room.disclaimer")}
           </p>
         </div>
       </div>

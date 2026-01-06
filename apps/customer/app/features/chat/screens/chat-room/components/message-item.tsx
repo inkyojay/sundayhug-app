@@ -1,6 +1,7 @@
 /**
  * Message Item Component
  */
+import { useTranslation } from "react-i18next";
 import {
   Bot,
   User,
@@ -36,6 +37,7 @@ export function MessageItem({
   onCopy,
   onFeedback,
 }: MessageItemProps) {
+  const { t } = useTranslation(["chat", "common"]);
   const isUser = message.role === "user";
 
   const renderSources = () => {
@@ -48,7 +50,7 @@ export function MessageItem({
 
       return (
         <div className="mt-3 pt-3 border-t border-gray-100">
-          <p className="text-xs text-gray-400 mb-1">참고 자료</p>
+          <p className="text-xs text-gray-400 mb-1">{t("chat:room.sources.title")}</p>
           <div className="flex flex-wrap gap-1">
             {sources.map((source, i) => (
               <a
@@ -84,7 +86,7 @@ export function MessageItem({
         )}
       </div>
       <div className={`flex-1 max-w-[80%] ${isUser ? "flex flex-col items-end" : ""}`}>
-        {!isUser && <p className="text-xs text-gray-500 mb-1 font-medium">AI 육아 상담사</p>}
+        {!isUser && <p className="text-xs text-gray-500 mb-1 font-medium">{t("chat:room.title")}</p>}
         <div
           className={`rounded-2xl p-4 ${
             isUser
@@ -93,7 +95,7 @@ export function MessageItem({
           }`}
         >
           {message.image_url && (
-            <img src={message.image_url} alt="첨부 이미지" className="max-w-full rounded-xl mb-2" />
+            <img src={message.image_url} alt={t("chat:room.image.attach")} className="max-w-full rounded-xl mb-2" />
           )}
           <p className="whitespace-pre-wrap text-inherit">{message.content}</p>
           {renderSources()}
@@ -109,7 +111,7 @@ export function MessageItem({
                   ? "text-[#FF6B35] bg-orange-50"
                   : "text-gray-400 hover:text-[#FF6B35] hover:bg-orange-50"
               }`}
-              title="음성으로 듣기"
+              title={t("chat:room.actions.playAudio")}
             >
               {loadingTtsId === message.id ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -122,7 +124,7 @@ export function MessageItem({
             <button
               onClick={() => onCopy(message.id, message.content)}
               className="p-1.5 text-gray-400 hover:text-[#FF6B35] hover:bg-orange-50 rounded-full transition-colors"
-              title="복사"
+              title={t("chat:room.actions.copy")}
             >
               {copiedId === message.id ? (
                 <Check className="w-4 h-4 text-green-500" />
@@ -133,14 +135,14 @@ export function MessageItem({
             <button
               onClick={() => onFeedback(message.id, true)}
               className="p-1.5 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-full transition-colors"
-              title="도움이 됐어요"
+              title={t("chat:room.actions.helpful")}
             >
               <ThumbsUp className="w-4 h-4" />
             </button>
             <button
               onClick={() => onFeedback(message.id, false)}
               className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
-              title="도움이 안 됐어요"
+              title={t("chat:room.actions.notHelpful")}
             >
               <ThumbsDown className="w-4 h-4" />
             </button>

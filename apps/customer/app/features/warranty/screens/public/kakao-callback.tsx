@@ -183,6 +183,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function KakaoCallback() {
+  // Note: useTranslation hook cannot be used here since this is a loading state
+  // before the component fully mounts. The text is kept as is for this edge case.
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center">
       <div className="text-white text-center">

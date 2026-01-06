@@ -4,6 +4,7 @@
 import type { Route } from "./+types/analyze-public";
 
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useFetcher, useLoaderData, data } from "react-router";
 import { Loader2, Moon, Baby, Shield, Clock, Thermometer, Music, ArrowLeft } from "lucide-react";
 
@@ -200,7 +201,7 @@ const sleepTips = [
 ];
 
 // 로딩 중 수면 팁 카드 컴포넌트
-function LoadingWithTips() {
+function LoadingWithTips({ t }: { t: (key: string, options?: Record<string, unknown>) => string }) {
   const [currentTipIndex, setCurrentTipIndex] = useState(0);
 
   useEffect(() => {
@@ -222,7 +223,7 @@ function LoadingWithTips() {
           <div className="w-12 h-12 border-4 border-gray-200 dark:border-gray-700 rounded-full"></div>
           <div className="absolute top-0 left-0 w-12 h-12 border-4 border-[#FF6B35] border-t-transparent rounded-full animate-spin"></div>
         </div>
-        <p className="text-xl font-semibold text-gray-900 dark:text-white">AI가 분석 중입니다...</p>
+        <p className="text-xl font-semibold text-gray-900 dark:text-white">{t("sleep-analysis:upload.analyzing")}</p>
       </div>
 
       {/* 수면 팁 카드 */}
@@ -267,7 +268,7 @@ function LoadingWithTips() {
 
         {/* 안내 메시지 */}
         <p className="text-center text-gray-500 dark:text-gray-400 text-sm mt-8">
-          💡 분석에는 약 10~20초가 소요됩니다
+          {t("sleep-analysis:upload.analyzingDescription")}
         </p>
       </div>
     </div>
@@ -275,12 +276,13 @@ function LoadingWithTips() {
 }
 
 export default function AnalyzePublicPage() {
+  const { t } = useTranslation(["sleep-analysis", "common"]);
   const loaderData = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [formData, setFormData] = useState<UploadFormData | null>(null);
   const [isGeneratingCard, setIsGeneratingCard] = useState(false);
   const [storyCardData, setStoryCardData] = useState<{ url: string; score: number } | null>(null);
-  
+
   const defaultPhoneNumber = loaderData?.defaultPhoneNumber || "";
   const babies = loaderData?.babies || [];
   const isLoggedIn = loaderData?.isLoggedIn || false;
@@ -315,7 +317,7 @@ export default function AnalyzePublicPage() {
   // 스토리 카드 공유 (한 장짜리 인스타 스토리 카드)
   const handleShareStoryCard = async () => {
     if (!analysisId) {
-      alert("분석 ID가 없어 이미지를 생성할 수 없습니다.");
+      alert(t("sleep-analysis:errors.analysisFailed"));
       return;
     }
     
@@ -332,7 +334,7 @@ export default function AnalyzePublicPage() {
       const responseData = await response.json();
       
       if (!responseData.success || !responseData.data?.storyCardUrl) {
-        throw new Error(responseData.error || "스토리 카드 생성에 실패했습니다.");
+        throw new Error(responseData.error || t("sleep-analysis:errors.analysisFailed"));
       }
       
       const storyCardUrl = responseData.data.storyCardUrl as string;
@@ -343,7 +345,7 @@ export default function AnalyzePublicPage() {
       
     } catch (err) {
       console.error("Story card error:", err);
-      alert(err instanceof Error ? err.message : "카드 생성 중 오류가 발생했습니다.");
+      alert(err instanceof Error ? err.message : t("sleep-analysis:errors.analysisFailed"));
     } finally {
       setIsGeneratingCard(false);
     }
@@ -354,28 +356,28 @@ export default function AnalyzePublicPage() {
       <div className="mx-auto max-w-lg px-4 py-6 pb-24">
         {/* Compact Header */}
         <div className="flex items-center gap-3 mb-6">
-          <Link 
+          <Link
             to="/customer/sleep"
             className="w-10 h-10 flex items-center justify-center rounded-full bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-shadow"
           >
             <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">AI 수면 환경 분석</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">아기 수면 공간을 분석해드려요</p>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">{t("sleep-analysis:title")}</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t("sleep-analysis:subtitle")}</p>
           </div>
         </div>
 
         <main>
           {/* Loading State with Sleep Tips */}
-          {isLoading && <LoadingWithTips />}
+          {isLoading && <LoadingWithTips t={t} />}
 
           {/* Error State */}
           {error && !isLoading && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl px-4 py-3 mb-4 flex items-start gap-2">
               <span className="text-lg">⚠️</span>
               <div>
-                <strong className="font-semibold">오류 발생</strong>
+                <strong className="font-semibold">{t("sleep-analysis:errors.analysisFailed")}</strong>
                 <p className="text-sm mt-0.5">{error}</p>
               </div>
             </div>

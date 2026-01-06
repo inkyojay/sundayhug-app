@@ -4,6 +4,7 @@
 import type { Route } from "./+types/analyses";
 
 import { Link, redirect, useLoaderData, data } from "react-router";
+import { useTranslation } from "react-i18next";
 import { 
   ArrowLeft, 
   Moon,
@@ -146,13 +147,13 @@ function getScoreBgColor(score: number): string {
   return "bg-red-50";
 }
 
-// 점수 등급
-function getScoreGrade(score: number): string {
-  if (score >= 90) return "매우 안전";
-  if (score >= 75) return "안전";
-  if (score >= 60) return "보통";
-  if (score >= 40) return "주의";
-  return "위험";
+// 점수 등급 key
+function getScoreGradeKey(score: number): string {
+  if (score >= 90) return "verySafe";
+  if (score >= 75) return "safe";
+  if (score >= 60) return "normal";
+  if (score >= 40) return "caution";
+  return "danger";
 }
 
 // 아기 나이 계산
@@ -172,19 +173,20 @@ function calculateAge(birthDate: string | null): string {
 
 export default function MypageAnalysesScreen() {
   const { analyses, babies } = useLoaderData<typeof loader>();
+  const { t } = useTranslation(["customer", "common"]);
 
   return (
     <div className="min-h-screen bg-[#F5F5F0]">
       <div className="mx-auto max-w-2xl px-6 py-10">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <Link 
+          <Link
             to="/customer/mypage"
             className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">수면 분석 이력</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t("customer:mypage.analyses.title")}</h1>
         </div>
 
         {/* 새 분석 버튼 */}
@@ -195,8 +197,8 @@ export default function MypageAnalysesScreen() {
                 <Plus className="w-6 h-6 text-white" />
               </div>
               <div>
-                <p className="text-white font-semibold text-lg">새로운 분석 시작</p>
-                <p className="text-gray-400 text-sm">AI가 수면 환경을 분석해드려요</p>
+                <p className="text-white font-semibold text-lg">{t("customer:mypage.analyses.newAnalysis")}</p>
+                <p className="text-gray-400 text-sm">{t("customer:mypage.analyses.newAnalysisDescription")}</p>
               </div>
             </div>
             <ChevronRight className="w-5 h-5 text-gray-500 group-hover:translate-x-1 transition-transform" />
@@ -209,9 +211,9 @@ export default function MypageAnalysesScreen() {
             <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Moon className="w-10 h-10 text-gray-300" />
             </div>
-            <p className="text-gray-500 font-medium">분석 이력이 없습니다</p>
+            <p className="text-gray-500 font-medium">{t("customer:mypage.analyses.noHistory")}</p>
             <p className="text-sm text-gray-400 mt-1">
-              아기의 수면 환경을 AI로 분석해보세요
+              {t("customer:mypage.analyses.noHistoryDescription")}
             </p>
           </div>
         ) : (
@@ -236,11 +238,11 @@ export default function MypageAnalysesScreen() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className={`text-sm font-semibold ${getScoreColor(score)}`}>
-                            {getScoreGrade(score)}
+                            {t(`customer:mypage.analyses.grade.${getScoreGradeKey(score)}`)}
                           </span>
                           <span className="text-gray-300">•</span>
                           <span className="text-sm text-gray-500">
-                            {analysis.age_in_months ? `${analysis.age_in_months}개월` : calculateAge(analysis.birth_date)}
+                            {analysis.age_in_months ? t("common:time.months", { count: analysis.age_in_months }) : calculateAge(analysis.birth_date)}
                           </span>
                         </div>
                         
@@ -260,19 +262,19 @@ export default function MypageAnalysesScreen() {
                           {highCount > 0 && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-xs">
                               <AlertTriangle className="w-3 h-3" />
-                              위험 {highCount}
+                              {t("customer:mypage.analyses.riskLevel.high")} {highCount}
                             </span>
                           )}
                           {mediumCount > 0 && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 text-xs">
                               <AlertCircle className="w-3 h-3" />
-                              주의 {mediumCount}
+                              {t("customer:mypage.analyses.riskLevel.medium")} {mediumCount}
                             </span>
                           )}
                           {lowCount > 0 && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-xs">
                               <CheckCircle className="w-3 h-3" />
-                              양호 {lowCount}
+                              {t("customer:mypage.analyses.riskLevel.low")} {lowCount}
                             </span>
                           )}
                         </div>
@@ -291,7 +293,7 @@ export default function MypageAnalysesScreen() {
         {/* 안내 메시지 */}
         <div className="mt-8 p-4 bg-white/60 rounded-2xl border border-gray-200/50 text-center">
           <p className="text-sm text-gray-400">
-            로그인한 상태에서 분석한 결과만 표시됩니다.
+            {t("customer:mypage.analyses.notice")}
           </p>
         </div>
       </div>

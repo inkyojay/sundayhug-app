@@ -12,6 +12,7 @@
  */
 import type { Route } from "./+types/start";
 
+import { useTranslation } from "react-i18next";
 import { Form, data, redirect } from "react-router";
 import { z } from "zod";
 
@@ -115,16 +116,17 @@ export async function action({ request }: Route.ActionArgs) {
  * @param actionData - Data returned from the form action, including any errors
  */
 export default function OtpStart({ actionData }: Route.ComponentProps) {
+  const { t } = useTranslation(["auth", "common"]);
   return (
     <div className="flex items-center justify-center">
       <Card className="w-full max-w-md">
         {/* Card header with title and description */}
         <CardHeader className="flex flex-col items-center">
           <CardTitle className="text-2xl font-semibold">
-            Enter your email
+            {t("auth:otp.title")}
           </CardTitle>
           <CardDescription className="text-center text-base">
-            We&apos;ll send you a verification code.
+            {t("auth:otp.subtitle", { phone: t("auth:forgotPassword.email") })}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -133,18 +135,18 @@ export default function OtpStart({ actionData }: Route.ComponentProps) {
             {/* Email input field */}
             <div className="flex flex-col items-start space-y-2">
               <Label htmlFor="name" className="flex flex-col items-start gap-1">
-                Email
+                {t("auth:forgotPassword.email")}
               </Label>
               <Input
                 id="email"
                 name="email"
                 required
                 type="email"
-                placeholder="nico@supaplate.com"
+                placeholder={t("common:form.placeholder.email")}
               />
             </div>
             {/* Submit button */}
-            <FormButton label="Send verification code" className="w-full" />
+            <FormButton label={t("auth:forgotPassword.button")} className="w-full" />
             {/* Error message display */}
             {actionData && "error" in actionData && actionData.error ? (
               <FormErrors errors={[actionData.error]} />

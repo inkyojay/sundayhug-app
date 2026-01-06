@@ -15,6 +15,7 @@ import type { Route } from "./+types/join";
 
 import { CheckCircle2Icon } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Form, Link, data, redirect } from "react-router";
 import { z } from "zod";
 
@@ -185,9 +186,10 @@ export async function action({ request }: Route.ActionArgs) {
  * @param actionData - Data returned from the form action, including errors or success status
  */
 export default function Join({ actionData }: Route.ComponentProps) {
+  const { t } = useTranslation(["auth", "common"]);
   // Reference to the form element for resetting after successful submission
   const formRef = useRef<HTMLFormElement>(null);
-  
+
   // Reset the form when registration is successful
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success) {
@@ -200,10 +202,10 @@ export default function Join({ actionData }: Route.ComponentProps) {
       <Card className="w-full max-w-md">
         <CardHeader className="flex flex-col items-center">
           <CardTitle className="text-2xl font-semibold" role="heading">
-            Create an account
+            {t("auth:register.title")}
           </CardTitle>
           <CardDescription className="text-base">
-            Enter your details to create an account
+            {t("auth:register.subtitle")}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -214,14 +216,14 @@ export default function Join({ actionData }: Route.ComponentProps) {
           >
             <div className="flex flex-col items-start space-y-2">
               <Label htmlFor="name" className="flex flex-col items-start gap-1">
-                Name
+                {t("auth:register.name")}
               </Label>
               <Input
                 id="name"
                 name="name"
                 required
                 type="text"
-                placeholder="Nico"
+                placeholder={t("common:form.placeholder.name")}
               />
               {actionData &&
               "fieldErrors" in actionData &&
@@ -234,14 +236,14 @@ export default function Join({ actionData }: Route.ComponentProps) {
                 htmlFor="email"
                 className="flex flex-col items-start gap-1"
               >
-                Email
+                {t("auth:register.email")}
               </Label>
               <Input
                 id="email"
                 name="email"
                 required
                 type="email"
-                placeholder="nico@supaplate.com"
+                placeholder={t("common:form.placeholder.email")}
               />
               {actionData &&
               "fieldErrors" in actionData &&
@@ -254,9 +256,9 @@ export default function Join({ actionData }: Route.ComponentProps) {
                 htmlFor="password"
                 className="flex flex-col items-start gap-1"
               >
-                Password
+                {t("auth:register.password")}
                 <small className="text-muted-foreground">
-                  Must be at least 8 characters.
+                  {t("auth:validation.passwordMin")}
                 </small>
               </Label>
               <Input
@@ -264,7 +266,7 @@ export default function Join({ actionData }: Route.ComponentProps) {
                 name="password"
                 required
                 type="password"
-                placeholder="Enter your password"
+                placeholder={t("common:form.placeholder.password")}
               />
               {actionData &&
               "fieldErrors" in actionData &&
@@ -277,14 +279,14 @@ export default function Join({ actionData }: Route.ComponentProps) {
                 htmlFor="confirmPassword"
                 className="flex flex-col items-start gap-1"
               >
-                Confirm password
+                {t("auth:register.confirmPassword")}
               </Label>
               <Input
                 id="confirmPassword"
                 name="confirmPassword"
                 required
                 type="password"
-                placeholder="Confirm your password"
+                placeholder={t("auth:register.confirmPassword")}
               />
               {actionData &&
               "fieldErrors" in actionData &&
@@ -292,7 +294,7 @@ export default function Join({ actionData }: Route.ComponentProps) {
                 <FormErrors errors={actionData.fieldErrors.confirmPassword} />
               ) : null}
             </div>
-            <FormButton label="Create account" className="w-full" />
+            <FormButton label={t("auth:register.button")} className="w-full" />
             {actionData && "error" in actionData && actionData.error ? (
               <FormErrors errors={[actionData.error]} />
             ) : null}
@@ -300,28 +302,28 @@ export default function Join({ actionData }: Route.ComponentProps) {
             <div className="flex items-center gap-2">
               <input type="checkbox" id="marketing" name="marketing" className="h-4 w-4 rounded border" />
               <Label htmlFor="marketing" className="text-muted-foreground">
-                Sign up for marketing emails
+                {t("auth:register.agreeMarketing")}
               </Label>
             </div>
             <div className="flex items-center gap-2">
               <input type="checkbox" id="terms" name="terms" defaultChecked className="h-4 w-4 rounded border" />
               <Label htmlFor="terms" className="text-muted-foreground">
                 <span>
-                  I have read and agree to the{" "}
+                  {t("auth:register.agreeTerms")}{" "}
                   <Link
                     to="/legal/terms-of-service"
                     viewTransition
                     className="text-muted-foreground text-underline hover:text-foreground underline transition-colors"
                   >
-                    Terms of Service
+                    {t("common:navigation.terms")}
                   </Link>{" "}
-                  and{" "}
+                  {t("auth:register.agreePrivacy")}{" "}
                   <Link
                     to="/legal/privacy-policy"
                     viewTransition
                     className="text-muted-foreground hover:text-foreground text-underline underline transition-colors"
                   >
-                    Privacy Policy
+                    {t("common:navigation.privacy")}
                   </Link>
                 </span>
               </Label>
@@ -332,10 +334,9 @@ export default function Join({ actionData }: Route.ComponentProps) {
                   className="size-4"
                   color="oklch(0.627 0.194 149.214)"
                 />
-                <AlertTitle>Account created!</AlertTitle>
+                <AlertTitle>{t("auth:register.success")}</AlertTitle>
                 <AlertDescription className="text-green-700 dark:text-green-600">
-                  Before you can sign in, please verify your email. You can
-                  close this tab.
+                  {t("auth:forgotPassword.checkEmail")}
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -345,14 +346,14 @@ export default function Join({ actionData }: Route.ComponentProps) {
       </Card>
       <div className="flex flex-col items-center justify-center text-sm">
         <p className="text-muted-foreground">
-          Already have an account?{" "}
+          {t("auth:register.hasAccount")}{" "}
           <Link
             to="/login"
             viewTransition
             data-testid="form-signin-link"
             className="text-muted-foreground hover:text-foreground text-underline underline transition-colors"
           >
-            Sign in
+            {t("auth:register.signIn")}
           </Link>
         </p>
       </div>

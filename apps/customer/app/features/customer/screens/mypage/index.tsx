@@ -7,6 +7,7 @@
 import type { Route } from "./+types/index";
 
 import { Link, redirect, useLoaderData, data } from "react-router";
+import { useTranslation } from "react-i18next";
 import { 
   Moon, 
   Headphones,
@@ -126,6 +127,7 @@ const SHOW_REVIEW_HISTORY = false;
 
 export default function CustomerMypageIndexScreen() {
   const { user, reviewSubmissions, reviewCounts, babyProfiles } = useLoaderData<typeof loader>();
+  const { t } = useTranslation(["customer", "common"]);
 
   return (
     <div className="min-h-screen bg-[#F5F5F0]">
@@ -137,7 +139,7 @@ export default function CustomerMypageIndexScreen() {
             <span className="text-gray-400">{user.firstName}님.</span>
           </h1>
           <p className="mt-3 text-gray-500 text-lg">
-            오늘도 썬데이허그와 함께 편안한 하루 보내세요.
+            {t("customer:mypage.subtitle")}
           </p>
         </div>
 
@@ -155,7 +157,7 @@ export default function CustomerMypageIndexScreen() {
                     AI Sleep Tech
                   </p>
                   <h2 className="text-white text-3xl md:text-4xl font-bold mt-2">
-                    수면 분석
+                    {t("customer:home.services.sleepAnalysis.title")}
                   </h2>
                 </div>
                 <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center">
@@ -165,11 +167,10 @@ export default function CustomerMypageIndexScreen() {
               
               <div>
                 <p className="text-gray-400 text-base md:text-lg">
-                  AI가 우리 아이 수면 환경을 분석하고<br />
-                  맞춤 솔루션을 제공해드립니다.
+                  {t("customer:mypage.sleepAnalysis.description")}
                 </p>
                 <div className="mt-4 flex items-center text-gray-500 group-hover:text-white transition-colors">
-                  <span className="text-sm font-medium">분석하기</span>
+                  <span className="text-sm font-medium">{t("customer:home.services.sleepAnalysis.button")}</span>
                   <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>
@@ -192,7 +193,7 @@ export default function CustomerMypageIndexScreen() {
               </div>
               
               <h3 className="text-gray-900 text-lg md:text-xl font-bold">
-                내 보증서
+                {t("customer:mypage.menu.warranties")}
               </h3>
             </div>
           </Link>
@@ -213,7 +214,7 @@ export default function CustomerMypageIndexScreen() {
               </div>
               
               <h3 className="text-gray-900 text-lg md:text-xl font-bold">
-                분석 이력
+                {t("customer:mypage.menu.analyses")}
               </h3>
             </div>
           </Link>
@@ -234,7 +235,7 @@ export default function CustomerMypageIndexScreen() {
               </div>
               
               <h3 className="text-gray-900 text-lg md:text-xl font-bold">
-                A/S 접수
+                {t("customer:mypage.menu.asList")}
               </h3>
             </div>
           </Link>
@@ -255,7 +256,7 @@ export default function CustomerMypageIndexScreen() {
               </div>
               
               <h3 className="text-gray-900 text-lg md:text-xl font-bold">
-                내 정보
+                {t("customer:mypage.menu.profile")}
               </h3>
             </div>
           </Link>
@@ -278,13 +279,13 @@ export default function CustomerMypageIndexScreen() {
                 
                 <div>
                   <h3 className="text-white text-lg md:text-xl font-bold">
-                    후기 인증
+                    {t("customer:mypage.menu.reviews")}
                   </h3>
                   {reviewCounts.total > 0 && (
                     <p className="text-white/80 text-xs mt-1">
-                      {reviewCounts.pending > 0 && `대기 ${reviewCounts.pending}건`}
+                      {reviewCounts.pending > 0 && t("customer:mypage.reviewStatus.pending", { count: reviewCounts.pending })}
                       {reviewCounts.pending > 0 && reviewCounts.approved > 0 && " · "}
-                      {reviewCounts.approved > 0 && `승인 ${reviewCounts.approved}건`}
+                      {reviewCounts.approved > 0 && t("customer:mypage.reviewStatus.approved", { count: reviewCounts.approved })}
                     </p>
                   )}
                 </div>
@@ -314,7 +315,7 @@ export default function CustomerMypageIndexScreen() {
                     <span className="text-lg ml-1">P</span>
                   </h3>
                   <p className="text-white/80 text-xs mt-1">
-                    포인트 내역 보기
+                    {t("customer:mypage.viewPoints")}
                   </p>
                 </div>
               </div>
@@ -327,13 +328,13 @@ export default function CustomerMypageIndexScreen() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
               <Baby className="w-5 h-5 text-[#FF6B35]" />
-              우리 아이
+              {t("customer:mypage.baby.title")}
             </h2>
-            <Link 
+            <Link
               to="/customer/chat/baby-profile"
               className="text-sm text-[#FF6B35] font-medium hover:underline flex items-center gap-1"
             >
-              <Plus className="w-4 h-4" /> 추가
+              <Plus className="w-4 h-4" /> {t("customer:mypage.baby.add")}
             </Link>
           </div>
 
@@ -353,14 +354,14 @@ export default function CustomerMypageIndexScreen() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-bold text-gray-900 truncate">
-                          {baby.name || "우리 아기"}
+                          {baby.name || t("customer:mypage.baby.defaultName")}
                         </h3>
                         <p className="text-gray-500 text-sm">
-                          {months !== null ? `${months}개월` : "월령 미설정"}
+                          {months !== null ? t("customer:mypage.baby.months", { count: months }) : t("customer:mypage.baby.noAge")}
                           {baby.feeding_type && ` • ${
-                            baby.feeding_type === "breast" ? "모유" :
-                            baby.feeding_type === "formula" ? "분유" :
-                            baby.feeding_type === "mixed" ? "혼합" : ""
+                            baby.feeding_type === "breast" ? t("customer:mypage.baby.feedingType.breast") :
+                            baby.feeding_type === "formula" ? t("customer:mypage.baby.feedingType.formula") :
+                            baby.feeding_type === "mixed" ? t("customer:mypage.baby.feedingType.mixed") : ""
                           }`}
                         </p>
                       </div>
@@ -378,8 +379,8 @@ export default function CustomerMypageIndexScreen() {
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
                 <Plus className="w-8 h-8 text-gray-400" />
               </div>
-              <p className="text-gray-600 font-medium">아이 정보 등록하기</p>
-              <p className="text-gray-400 text-sm mt-1">AI 상담을 위해 아이 정보를 등록해주세요</p>
+              <p className="text-gray-600 font-medium">{t("customer:mypage.baby.register")}</p>
+              <p className="text-gray-400 text-sm mt-1">{t("customer:mypage.baby.registerDescription")}</p>
             </Link>
           )}
         </div>
@@ -388,12 +389,12 @@ export default function CustomerMypageIndexScreen() {
         {SHOW_REVIEW_HISTORY && reviewSubmissions.length > 0 && (
           <div className="mt-8">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-900">후기 인증 내역</h2>
-              <Link 
+              <h2 className="text-lg font-bold text-gray-900">{t("customer:mypage.reviewHistory.title")}</h2>
+              <Link
                 to="/customer/mypage/review-submit"
                 className="text-sm text-[#FF6B35] font-medium hover:underline flex items-center gap-1"
               >
-                전체보기 <ChevronRight className="w-4 h-4" />
+                {t("customer:mypage.reviewHistory.viewAll")} <ChevronRight className="w-4 h-4" />
               </Link>
             </div>
             
@@ -418,7 +419,7 @@ export default function CustomerMypageIndexScreen() {
                             {reviewTypeLabels[submission.review_type] || submission.review_type}
                           </p>
                           <p className="text-sm text-gray-500">
-                            {submission.product_name || "제품 미지정"}
+                            {submission.product_name || t("customer:mypage.reviewHistory.noProduct")}
                           </p>
                         </div>
                       </div>
@@ -432,7 +433,7 @@ export default function CustomerMypageIndexScreen() {
                     </div>
                     
                     <p className="text-xs text-gray-400 mt-2">
-                      {new Date(submission.created_at).toLocaleDateString("ko-KR")} 신청
+                      {new Date(submission.created_at).toLocaleDateString("ko-KR")} {t("customer:mypage.reviewHistory.applied")}
                     </p>
                   </Link>
                 );

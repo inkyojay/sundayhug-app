@@ -8,6 +8,7 @@
 import type { Route } from "./+types/baby-profile";
 
 import { Link, useLoaderData, useNavigate, data, Form, useActionData } from "react-router";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, Baby, Calendar, Milk, Moon, User } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -128,6 +129,7 @@ function calculateAgeInMonths(birthDate: string): number {
 }
 
 export default function BabyProfileScreen() {
+  const { t } = useTranslation(["chat", "common"]);
   const { profile, isEdit } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
@@ -164,7 +166,7 @@ export default function BabyProfileScreen() {
       <div className="mx-auto max-w-lg px-6 py-10">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <Link 
+          <Link
             to="/customer/chat"
             className="w-10 h-10 rounded-full bg-white dark:bg-gray-800 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
@@ -172,9 +174,9 @@ export default function BabyProfileScreen() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              {profile ? "아기 정보 수정" : "아기 정보 등록"}
+              {t("chat:babyProfile.title")}
             </h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">맞춤형 상담을 위해 아기 정보를 알려주세요</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">{t("chat:babyProfile.subtitle")}</p>
           </div>
         </div>
 
@@ -201,14 +203,14 @@ export default function BabyProfileScreen() {
           {/* 이름 (필수) */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700">
             <Label htmlFor="name" className="text-gray-700 dark:text-gray-200 font-medium mb-2 block">
-              아기 이름 또는 별명 <span className="text-red-500">*</span>
+              {t("chat:babyProfile.name")} <span className="text-red-500">*</span>
             </Label>
             <Input
               id="name"
               name="name"
               required
               defaultValue={profile?.name || ""}
-              placeholder="예: 콩이, 우리 아기"
+              placeholder={t("chat:babyProfile.namePlaceholder")}
               className="bg-gray-50 dark:bg-gray-900 border-0"
             />
           </div>
@@ -217,7 +219,7 @@ export default function BabyProfileScreen() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700">
             <Label htmlFor="birthDate" className="text-gray-700 dark:text-gray-200 font-medium mb-2 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-[#FF6B35]" />
-              생년월일 <span className="text-red-500">*</span>
+              {t("chat:babyProfile.birthDate")} <span className="text-red-500">*</span>
             </Label>
             <Input
               id="birthDate"
@@ -241,18 +243,18 @@ export default function BabyProfileScreen() {
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700 animate-in fade-in slide-in-from-top-2 duration-300">
               <Label className="text-gray-700 dark:text-gray-200 font-medium mb-2 flex items-center gap-2">
                 <User className="w-4 h-4 text-[#FF6B35]" />
-                성별
+                {t("common:gender")}
               </Label>
-              <select 
-                name="gender" 
+              <select
+                name="gender"
                 defaultValue={profile?.gender || ""}
                 className="w-full h-10 px-3 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
               >
-                <option value="">선택해주세요</option>
-                <option value="male">남아</option>
-                <option value="female">여아</option>
+                <option value="">{t("chat:babyProfile.feedingPlaceholder")}</option>
+                <option value="male">{t("common:male")}</option>
+                <option value="female">{t("common:female")}</option>
               </select>
-              <p className="text-xs text-gray-400 mt-2">성별에 따른 발달 정보를 제공해드려요</p>
+              <p className="text-xs text-gray-400 mt-2">{t("common:genderDescription")}</p>
             </div>
           ) : null}
 
@@ -261,19 +263,19 @@ export default function BabyProfileScreen() {
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700 animate-in fade-in slide-in-from-top-2 duration-300">
               <Label className="text-gray-700 dark:text-gray-200 font-medium mb-2 flex items-center gap-2">
                 <Milk className="w-4 h-4 text-[#FF6B35]" />
-                수유 방식
+                {t("chat:babyProfile.feedingType")}
               </Label>
-              <select 
-                name="feedingType" 
+              <select
+                name="feedingType"
                 defaultValue={profile?.feeding_type || ""}
                 className="w-full h-10 px-3 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
               >
-                <option value="">선택해주세요</option>
-                <option value="breast">모유 수유</option>
-                <option value="formula">분유 수유</option>
-                <option value="mixed">혼합 수유</option>
+                <option value="">{t("chat:babyProfile.feedingPlaceholder")}</option>
+                <option value="breast">{t("chat:babyProfile.feedingOptions.breast")}</option>
+                <option value="formula">{t("chat:babyProfile.feedingOptions.formula")}</option>
+                <option value="mixed">{t("chat:babyProfile.feedingOptions.mixed")}</option>
               </select>
-              <p className="text-xs text-gray-400 mt-2">수유 방식에 맞는 상담을 제공해드려요</p>
+              <p className="text-xs text-gray-400 mt-2">{t("common:feedingDescription")}</p>
             </div>
           ) : null}
 
@@ -282,42 +284,42 @@ export default function BabyProfileScreen() {
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700 animate-in fade-in slide-in-from-top-2 duration-300">
               <Label className="text-gray-700 dark:text-gray-200 font-medium mb-2 flex items-center gap-2">
                 <Moon className="w-4 h-4 text-[#FF6B35]" />
-                수면 민감도
+                {t("common:sleepSensitivity")}
               </Label>
-              <select 
-                name="sleepSensitivity" 
+              <select
+                name="sleepSensitivity"
                 defaultValue={profile?.sleep_sensitivity || "normal"}
                 className="w-full h-10 px-3 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
               >
-                <option value="high">예민한 편 (작은 소리에도 깸)</option>
-                <option value="normal">보통</option>
-                <option value="low">잘 자는 편 (웬만하면 안 깸)</option>
+                <option value="high">{t("common:sleepSensitivityHigh")}</option>
+                <option value="normal">{t("common:sleepSensitivityNormal")}</option>
+                <option value="low">{t("common:sleepSensitivityLow")}</option>
               </select>
-              <p className="text-xs text-gray-400 mt-2">수면 패턴 분석에 활용돼요</p>
+              <p className="text-xs text-gray-400 mt-2">{t("common:sleepSensitivityDescription")}</p>
             </div>
           ) : null}
 
           {/* 메모 */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700">
             <Label htmlFor="notes" className="text-gray-700 dark:text-gray-200 font-medium mb-2 block">
-              기타 메모
+              {t("common:notes")}
             </Label>
             <Textarea
               id="notes"
               name="notes"
               defaultValue={profile?.notes || ""}
-              placeholder="알레르기, 특이사항 등을 적어주세요"
+              placeholder={t("common:notesPlaceholder")}
               className="bg-gray-50 dark:bg-gray-900 border-0 resize-none"
               rows={3}
             />
           </div>
 
           {/* 저장 버튼 */}
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             className="w-full h-14 bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-lg font-medium rounded-2xl"
           >
-            {profile ? "수정하기" : "상담 시작하기"}
+            {profile ? t("common:edit") : t("chat:babyProfile.submit")}
           </Button>
         </Form>
       </div>

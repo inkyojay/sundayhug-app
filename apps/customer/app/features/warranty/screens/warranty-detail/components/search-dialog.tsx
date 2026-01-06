@@ -2,6 +2,7 @@
  * Order Search Dialog Component
  */
 import { SearchIcon, LinkIcon, Loader2Icon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
 import { Badge } from "~/core/components/ui/badge";
@@ -40,20 +41,22 @@ export function SearchDialog({
   error,
   hasSearched,
 }: SearchDialogProps) {
+  const { t } = useTranslation(["warranty", "common"]);
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>주문 검색</DialogTitle>
+          <DialogTitle>{t("warranty:admin.warrantyDetail.searchDialog.title")}</DialogTitle>
           <DialogDescription>
-            송장번호, 전화번호, 주문번호, 수령인명으로 검색할 수 있습니다.
+            {t("warranty:admin.warrantyDetail.searchDialog.description")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="flex gap-2">
             <Input
-              placeholder="검색어 입력 (3자 이상)"
+              placeholder={t("warranty:admin.warrantyDetail.searchDialog.placeholder")}
               value={searchQuery}
               onChange={(e) => onSearchQueryChange(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && onSearch()}
@@ -84,7 +87,7 @@ export function SearchDialog({
                     <div className="flex-1">
                       <p className="font-medium">{order.shop_sale_name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {order.shop_name} · 주문번호: {order.shop_ord_no}
+                        {order.shop_name} · {t("warranty:admin.warrantyDetail.searchDialog.orderNumber")}: {order.shop_ord_no}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {order.ord_time
@@ -92,11 +95,11 @@ export function SearchDialog({
                           : "-"}
                       </p>
                       <div className="flex gap-3 mt-1 text-xs">
-                        <span>수령인: {order.to_name}</span>
+                        <span>{t("warranty:admin.warrantyDetail.searchDialog.recipient")}: {order.to_name}</span>
                         <span className="font-mono">{order.to_htel || order.to_tel}</span>
                       </div>
                       {order.invoice_no && (
-                        <p className="text-xs font-mono mt-1">송장: {order.invoice_no}</p>
+                        <p className="text-xs font-mono mt-1">{t("warranty:admin.warrantyDetail.searchDialog.tracking")}: {order.invoice_no}</p>
                       )}
                     </div>
                     <div className="text-right">
@@ -105,7 +108,7 @@ export function SearchDialog({
                       </p>
                       {order.already_linked ? (
                         <Badge variant="secondary" className="text-xs">
-                          이미 연결됨
+                          {t("warranty:admin.warrantyDetail.searchDialog.alreadyLinked")}
                         </Badge>
                       ) : (
                         <Button
@@ -114,7 +117,7 @@ export function SearchDialog({
                           disabled={isSubmitting}
                         >
                           <LinkIcon className="h-3 w-3 mr-1" />
-                          연결
+                          {t("warranty:admin.warrantyDetail.searchDialog.link")}
                         </Button>
                       )}
                     </div>
@@ -124,14 +127,14 @@ export function SearchDialog({
             </div>
           ) : searchQuery.length >= 3 && hasSearched ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              검색 결과가 없습니다.
+              {t("warranty:admin.warrantyDetail.searchDialog.noResults")}
             </p>
           ) : null}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            닫기
+            {t("common:buttons.close")}
           </Button>
         </DialogFooter>
       </DialogContent>

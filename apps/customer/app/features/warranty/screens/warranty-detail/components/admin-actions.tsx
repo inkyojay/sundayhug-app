@@ -2,6 +2,7 @@
  * Admin Actions Card Component
  */
 import { CheckCircleIcon, XCircleIcon, Loader2Icon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useFetcher } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/core/components/ui/card";
 import { Button } from "~/core/components/ui/button";
@@ -14,6 +15,7 @@ interface AdminActionsProps {
 }
 
 export function AdminActions({ warranty, isSubmitting, onRejectClick }: AdminActionsProps) {
+  const { t } = useTranslation(["warranty", "common"]);
   const fetcher = useFetcher();
 
   if (warranty.status !== "pending") return null;
@@ -21,7 +23,7 @@ export function AdminActions({ warranty, isSubmitting, onRejectClick }: AdminAct
   return (
     <Card>
       <CardHeader>
-        <CardTitle>관리자 액션</CardTitle>
+        <CardTitle>{t("warranty:admin.warrantyDetail.adminActions.title")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <fetcher.Form method="POST">
@@ -36,7 +38,7 @@ export function AdminActions({ warranty, isSubmitting, onRejectClick }: AdminAct
             ) : (
               <CheckCircleIcon className="h-4 w-4 mr-2" />
             )}
-            승인
+            {t("warranty:admin.warrantyDetail.adminActions.approve")}
           </Button>
         </fetcher.Form>
         <Button
@@ -46,7 +48,7 @@ export function AdminActions({ warranty, isSubmitting, onRejectClick }: AdminAct
           disabled={isSubmitting}
         >
           <XCircleIcon className="h-4 w-4 mr-2" />
-          거절
+          {t("warranty:admin.warrantyDetail.adminActions.reject")}
         </Button>
       </CardContent>
     </Card>

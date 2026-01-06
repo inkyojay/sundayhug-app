@@ -6,6 +6,7 @@ import type { Route } from "./+types/profile";
 
 import { useState, useEffect } from "react";
 import { data, useActionData, Form, Link, redirect, useLoaderData, useNavigation } from "react-router";
+import { useTranslation } from "react-i18next";
 import { 
   ArrowLeft, 
   User, 
@@ -209,6 +210,7 @@ export default function ProfileScreen() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+  const { t } = useTranslation(["customer", "common"]);
   
   // 폼 상태
   const [name, setName] = useState(user.name);
@@ -300,13 +302,13 @@ export default function ProfileScreen() {
     const birth = new Date(birthDate);
     const today = new Date();
     const months = (today.getFullYear() - birth.getFullYear()) * 12 + (today.getMonth() - birth.getMonth());
-    
-    if (months < 1) return "신생아";
-    if (months < 12) return `${months}개월`;
+
+    if (months < 1) return t("customer:profile.baby.newborn");
+    if (months < 12) return t("customer:profile.baby.monthsOld", { count: months });
     const years = Math.floor(months / 12);
     const remainingMonths = months % 12;
-    if (remainingMonths === 0) return `${years}세`;
-    return `${years}세 ${remainingMonths}개월`;
+    if (remainingMonths === 0) return t("customer:profile.baby.yearsOld", { count: years });
+    return t("customer:profile.baby.yearsMonthsOld", { years, months: remainingMonths });
   };
 
   return (
@@ -314,13 +316,13 @@ export default function ProfileScreen() {
       <div className="mx-auto max-w-2xl px-6 py-10">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <Link 
+          <Link
             to="/customer/mypage"
             className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">내 정보 변경</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t("customer:profile.title")}</h1>
         </div>
 
         <div className="space-y-6">
@@ -331,8 +333,8 @@ export default function ProfileScreen() {
                 <User className="w-5 h-5 text-[#FF6B35]" />
               </div>
               <div>
-                <h2 className="font-semibold text-gray-900">기본 정보</h2>
-                <p className="text-sm text-gray-500">이름, 전화번호를 수정할 수 있습니다</p>
+                <h2 className="font-semibold text-gray-900">{t("customer:profile.basicInfo.title")}</h2>
+                <p className="text-sm text-gray-500">{t("customer:profile.basicInfo.description")}</p>
               </div>
             </div>
             
@@ -351,30 +353,30 @@ export default function ProfileScreen() {
               )}
               
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium text-gray-700">이메일</Label>
+                <Label htmlFor="email" className="text-sm font-medium text-gray-700">{t("customer:profile.email")}</Label>
                 <Input
                   id="email"
                   value={user.email || ""}
                   disabled
                   className="h-12 rounded-xl bg-gray-50 border-gray-200 text-gray-500"
                 />
-                <p className="text-xs text-gray-400">이메일은 변경할 수 없습니다</p>
+                <p className="text-xs text-gray-400">{t("customer:profile.emailCannotChange")}</p>
               </div>
-              
+
               <div className="space-y-2">
-                <Label htmlFor="name" className="text-sm font-medium text-gray-700">이름</Label>
+                <Label htmlFor="name" className="text-sm font-medium text-gray-700">{t("customer:profile.name")}</Label>
                 <Input
                   id="name"
                   name="name"
-                  placeholder="이름을 입력하세요"
+                  placeholder={t("common:form.placeholder.name")}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="h-12 rounded-xl border-gray-200 text-gray-900 bg-white focus:border-[#FF6B35] focus:ring-[#FF6B35]"
                 />
               </div>
-              
+
               <div className="space-y-2">
-                <Label htmlFor="phone" className="text-sm font-medium text-gray-700">전화번호</Label>
+                <Label htmlFor="phone" className="text-sm font-medium text-gray-700">{t("customer:profile.phone")}</Label>
                 <Input
                   id="phone"
                   name="phone"
@@ -386,14 +388,14 @@ export default function ProfileScreen() {
                   className="h-12 rounded-xl border-gray-200 text-gray-900 bg-white focus:border-[#FF6B35] focus:ring-[#FF6B35]"
                 />
               </div>
-              
-              <Button 
-                type="submit" 
+
+              <Button
+                type="submit"
                 className="w-full h-12 rounded-xl bg-[#FF6B35] hover:bg-[#FF6B35]/90"
                 disabled={isSubmitting}
               >
                 <Check className="mr-2 h-4 w-4" />
-                기본 정보 저장
+                {t("customer:profile.saveBasicInfo")}
               </Button>
             </Form>
           </div>
@@ -405,8 +407,8 @@ export default function ProfileScreen() {
                 <Lock className="w-5 h-5 text-orange-600" />
               </div>
               <div>
-                <h2 className="font-semibold text-gray-900">비밀번호 변경</h2>
-                <p className="text-sm text-gray-500">새로운 비밀번호를 설정하세요</p>
+                <h2 className="font-semibold text-gray-900">{t("customer:profile.password")}</h2>
+                <p className="text-sm text-gray-500">{t("customer:profile.passwordDescription")}</p>
               </div>
             </div>
             
@@ -425,13 +427,13 @@ export default function ProfileScreen() {
               )}
               
               <div className="space-y-2">
-                <Label htmlFor="newPassword" className="text-sm font-medium text-gray-700">새 비밀번호</Label>
+                <Label htmlFor="newPassword" className="text-sm font-medium text-gray-700">{t("customer:profile.newPassword")}</Label>
                 <div className="relative">
                   <Input
                     id="newPassword"
                     name="newPassword"
                     type={showNewPassword ? "text" : "password"}
-                    placeholder="6자 이상"
+                    placeholder={t("customer:profile.passwordPlaceholder")}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     className="h-12 rounded-xl border-gray-200 pr-12 text-gray-900 bg-white focus:border-[#FF6B35] focus:ring-[#FF6B35]"
@@ -445,27 +447,27 @@ export default function ProfileScreen() {
                   </button>
                 </div>
               </div>
-              
+
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700">새 비밀번호 확인</Label>
+                <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700">{t("customer:profile.confirmPassword")}</Label>
                 <Input
                   id="confirmPassword"
                   name="confirmPassword"
                   type="password"
-                  placeholder="새 비밀번호 재입력"
+                  placeholder={t("customer:profile.confirmPasswordPlaceholder")}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="h-12 rounded-xl border-gray-200 text-gray-900 bg-white focus:border-[#FF6B35] focus:ring-[#FF6B35]"
                 />
               </div>
-              
-              <Button 
-                type="submit" 
+
+              <Button
+                type="submit"
                 className="w-full h-12 rounded-xl bg-gray-800 hover:bg-gray-700 text-white"
                 disabled={!newPassword || newPassword !== confirmPassword || isSubmitting}
               >
                 <Lock className="mr-2 h-4 w-4" />
-                비밀번호 변경
+                {t("customer:profile.password")}
               </Button>
             </Form>
           </div>
@@ -478,8 +480,8 @@ export default function ProfileScreen() {
                   <Baby className="w-5 h-5 text-pink-600" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-gray-900">아이 정보</h2>
-                  <p className="text-sm text-gray-500">수면 분석 등에 활용되는 정보입니다</p>
+                  <h2 className="font-semibold text-gray-900">{t("customer:profile.baby.title")}</h2>
+                  <p className="text-sm text-gray-500">{t("customer:profile.baby.description")}</p>
                 </div>
               </div>
               {!isAddingBaby && babies.length > 0 && (
@@ -489,7 +491,7 @@ export default function ProfileScreen() {
                   className="flex items-center gap-1 text-sm text-[#FF6B35] hover:text-[#FF6B35]/80 font-medium"
                 >
                   <Plus className="w-4 h-4" />
-                  추가
+                  {t("customer:profile.baby.add")}
                 </button>
               )}
             </div>
@@ -518,7 +520,7 @@ export default function ProfileScreen() {
                         
                         <div className="flex items-center justify-between mb-3">
                           <span className="text-sm font-medium text-pink-700">
-                            {index === 0 ? "첫째" : index === 1 ? "둘째" : index === 2 ? "셋째" : `${index + 1}번째`} 아이 수정
+                            {t("customer:profile.baby.ordinal", { index: index + 1 })} {t("customer:profile.baby.editing")}
                           </span>
                           <button
                             type="button"
@@ -532,7 +534,7 @@ export default function ProfileScreen() {
                         <div className="space-y-3">
                 <Input
                   name="babyName"
-                            placeholder="이름 또는 별명"
+                            placeholder={t("customer:profile.baby.namePlaceholder")}
                             value={editBabyName}
                             onChange={(e) => setEditBabyName(e.target.value)}
                             className="h-10 rounded-lg border-pink-200 text-gray-900 bg-white"
@@ -551,11 +553,11 @@ export default function ProfileScreen() {
                           >
                             <label className="flex items-center gap-2 cursor-pointer">
                               <RadioGroupItem value="male" />
-                              <span className="text-sm text-gray-700">남아</span>
+                              <span className="text-sm text-gray-700">{t("customer:profile.baby.male")}</span>
                             </label>
                             <label className="flex items-center gap-2 cursor-pointer">
                               <RadioGroupItem value="female" />
-                              <span className="text-sm text-gray-700">여아</span>
+                              <span className="text-sm text-gray-700">{t("customer:profile.baby.female")}</span>
                             </label>
                           </RadioGroup>
                           <input type="hidden" name="babyGender" value={editBabyGender} />
@@ -568,14 +570,14 @@ export default function ProfileScreen() {
                             onClick={cancelEditBaby}
                             className="flex-1 h-10 rounded-lg border-gray-300 bg-white text-gray-700 hover:bg-gray-100 hover:text-gray-900 hover:border-gray-400"
                           >
-                            취소
+                            {t("common:buttons.cancel")}
                           </Button>
                           <Button
                             type="submit"
                             className="flex-1 h-10 rounded-lg bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white"
                             disabled={!editBabyName || isSubmitting}
                           >
-                            저장
+                            {t("common:buttons.save")}
                           </Button>
                         </div>
                       </Form>
@@ -593,11 +595,11 @@ export default function ProfileScreen() {
                               <div className="flex items-center gap-2">
                                 <span className="font-bold text-gray-900">{baby.name}</span>
                                 <span className="text-xs bg-pink-200 text-pink-700 px-2 py-0.5 rounded-full">
-                                  {index === 0 ? "첫째" : index === 1 ? "둘째" : index === 2 ? "셋째" : `${index + 1}번째`}
+                                  {t("customer:profile.baby.ordinal", { index: index + 1 })}
                                 </span>
                               </div>
                               <p className="text-sm text-gray-500">
-                                {baby.gender === "male" ? "남아" : baby.gender === "female" ? "여아" : ""}
+                                {baby.gender === "male" ? t("customer:profile.baby.male") : baby.gender === "female" ? t("customer:profile.baby.female") : ""}
                                 {baby.birth_date && baby.gender && " · "}
                                 {baby.birth_date && calculateAge(baby.birth_date)}
                               </p>
@@ -617,7 +619,7 @@ export default function ProfileScreen() {
                               <button
                                 type="submit"
                                 onClick={(e) => {
-                                  if (!confirm(`${baby.name} 정보를 삭제하시겠습니까?`)) {
+                                  if (!confirm(t("customer:profile.baby.confirmDelete", { name: baby.name }))) {
                                     e.preventDefault();
                                   }
                                 }}
@@ -645,14 +647,14 @@ export default function ProfileScreen() {
                     <div className="w-16 h-16 bg-pink-50 rounded-full flex items-center justify-center mx-auto mb-3">
                       <Baby className="w-8 h-8 text-pink-300" />
                     </div>
-                    <p className="text-gray-500 mb-4">등록된 아이 정보가 없습니다</p>
+                    <p className="text-gray-500 mb-4">{t("customer:profile.baby.noBabies")}</p>
                     <Button
                       type="button"
                       onClick={() => setIsAddingBaby(true)}
                       className="bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white"
                     >
                       <Plus className="w-4 h-4 mr-2" />
-                      아이 등록하기
+                      {t("customer:profile.baby.register")}
                     </Button>
                   </div>
                 )}
@@ -661,7 +663,7 @@ export default function ProfileScreen() {
                   <>
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-gray-700">
-                        {babies.length === 0 ? "첫째" : babies.length === 1 ? "둘째" : babies.length === 2 ? "셋째" : `${babies.length + 1}번째`} 아이 등록
+                        {t("customer:profile.baby.ordinal", { index: babies.length + 1 })} {t("customer:profile.baby.registering")}
                       </span>
                       {babies.length > 0 && (
                         <button
@@ -681,20 +683,20 @@ export default function ProfileScreen() {
                     
                     <div className="space-y-2">
                       <Label className="text-sm font-medium text-gray-700">
-                        아이 이름 또는 별명 <span className="text-red-500">*</span>
+                        {t("customer:profile.baby.name")} <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         name="babyName"
-                        placeholder="예: 콩이, 서준이"
+                        placeholder={t("customer:profile.baby.namePlaceholderExample")}
                         value={newBabyName}
                         onChange={(e) => setNewBabyName(e.target.value)}
                         required
                         className="h-12 rounded-xl border-gray-200 text-gray-900 bg-white focus:border-[#FF6B35] focus:ring-[#FF6B35]"
                 />
               </div>
-              
+
               <div className="space-y-2">
-                      <Label className="text-sm font-medium text-gray-700">생년월일 (선택)</Label>
+                      <Label className="text-sm font-medium text-gray-700">{t("customer:profile.baby.birthDate")} ({t("common:form.optional")})</Label>
                 <Input
                   name="babyBirthDate"
                   type="date"
@@ -703,9 +705,9 @@ export default function ProfileScreen() {
                         className="h-12 rounded-xl border-gray-200 text-gray-900 bg-white focus:border-[#FF6B35] focus:ring-[#FF6B35]"
                 />
               </div>
-              
+
               <div className="space-y-3">
-                      <Label className="text-sm font-medium text-gray-700">성별 (선택)</Label>
+                      <Label className="text-sm font-medium text-gray-700">{t("customer:profile.baby.gender")} ({t("common:form.optional")})</Label>
                 <RadioGroup
                         value={newBabyGender}
                         onValueChange={setNewBabyGender}
@@ -713,11 +715,11 @@ export default function ProfileScreen() {
                 >
                         <label className="flex items-center gap-2 cursor-pointer">
                           <RadioGroupItem value="male" />
-                          <span className="text-gray-700">남아</span>
+                          <span className="text-gray-700">{t("customer:profile.baby.male")}</span>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <RadioGroupItem value="female" />
-                          <span className="text-gray-700">여아</span>
+                          <span className="text-gray-700">{t("customer:profile.baby.female")}</span>
                         </label>
                 </RadioGroup>
                       <input type="hidden" name="babyGender" value={newBabyGender} />
@@ -725,7 +727,7 @@ export default function ProfileScreen() {
               
                     <div className="flex gap-3">
                       {babies.length > 0 && (
-                        <Button 
+                        <Button
                           type="button"
                           variant="outline"
                           onClick={() => {
@@ -736,16 +738,16 @@ export default function ProfileScreen() {
                           }}
                           className="flex-1 h-12 rounded-xl border-gray-300 bg-white text-gray-700 hover:bg-gray-100 hover:text-gray-900 hover:border-gray-400"
                         >
-                          취소
+                          {t("common:buttons.cancel")}
                         </Button>
                       )}
-                      <Button 
-                        type="submit" 
+                      <Button
+                        type="submit"
                         className={`${babies.length > 0 ? "flex-1" : "w-full"} h-12 rounded-xl bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white`}
                         disabled={!newBabyName || isSubmitting}
                       >
                         <Check className="mr-2 h-4 w-4" />
-                        등록하기
+                        {t("customer:profile.baby.register")}
                       </Button>
                     </div>
                   </>

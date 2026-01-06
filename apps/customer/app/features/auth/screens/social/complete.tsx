@@ -13,6 +13,7 @@
  */
 import type { Route } from "./+types/complete";
 
+import { useTranslation } from "react-i18next";
 import { data, redirect } from "react-router";
 import { z } from "zod";
 
@@ -118,10 +119,11 @@ export async function loader({ request }: Route.LoaderArgs) {
  * @param loaderData - Data from the loader containing any error messages
  */
 export default function Confirm({ loaderData }: Route.ComponentProps) {
+  const { t } = useTranslation(["auth", "common"]);
   return (
     <div className="flex flex-col items-center justify-center gap-2.5">
       {/* Display error heading */}
-      <h1 className="text-2xl font-semibold">Login failed</h1>
+      <h1 className="text-2xl font-semibold">{t("auth:errors.loginFailed")}</h1>
       {/* Display specific error message from the provider or Supabase */}
       <p className="text-muted-foreground">{loaderData.error}</p>
     </div>

@@ -14,6 +14,7 @@ import {
   ClockIcon,
   XCircleIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
@@ -66,16 +67,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return { warranty };
 }
 
-const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
-  pending: { label: "승인 대기", color: "text-yellow-600 bg-yellow-50", icon: ClockIcon },
-  approved: { label: "유효", color: "text-green-600 bg-green-50", icon: CheckCircleIcon },
-  rejected: { label: "거절됨", color: "text-red-600 bg-red-50", icon: XCircleIcon },
-  expired: { label: "만료", color: "text-gray-600 bg-gray-50", icon: ClockIcon },
-};
-
 export default function WarrantyView({ loaderData }: Route.ComponentProps) {
+  const { t } = useTranslation(["warranty", "common"]);
   const { warranty } = loaderData;
-  
+
+  const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
+    pending: { label: t("warranty:public.view.status.pending"), color: "text-yellow-600 bg-yellow-50", icon: ClockIcon },
+    approved: { label: t("warranty:public.view.status.approved"), color: "text-green-600 bg-green-50", icon: CheckCircleIcon },
+    rejected: { label: t("warranty:public.view.status.rejected"), color: "text-red-600 bg-red-50", icon: XCircleIcon },
+    expired: { label: t("warranty:public.view.status.expired"), color: "text-gray-600 bg-gray-50", icon: ClockIcon },
+  };
+
   const StatusIcon = statusConfig[warranty.status]?.icon || ClockIcon;
   const isExpired = warranty.warranty_end && new Date(warranty.warranty_end) < new Date();
   const displayStatus = isExpired && warranty.status === "approved" ? "expired" : warranty.status;
@@ -93,8 +95,8 @@ export default function WarrantyView({ loaderData }: Route.ComponentProps) {
           {/* 헤더 */}
           <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-white p-6 text-center">
             <ShieldCheckIcon className="h-12 w-12 mx-auto mb-2" />
-            <h1 className="text-xl font-bold">디지털 품질보증서</h1>
-            <p className="text-amber-100">SUNDAY HUG</p>
+            <h1 className="text-xl font-bold">{t("warranty:public.view.digitalWarranty")}</h1>
+            <p className="text-amber-100">{t("warranty:public.view.brand")}</p>
           </div>
 
           <CardContent className="p-6 space-y-6">
@@ -137,7 +139,7 @@ export default function WarrantyView({ loaderData }: Route.ComponentProps) {
               <div className="text-center p-4 border-2 border-dashed rounded-lg">
                 <div className="flex items-center justify-center gap-2 mb-2">
                   <CalendarIcon className="h-5 w-5 text-muted-foreground" />
-                  <span className="font-medium">보증기간</span>
+                  <span className="font-medium">{t("warranty:public.view.warrantyPeriod")}</span>
                 </div>
                 <p className="text-xl font-bold">
                   {new Date(warranty.warranty_start).toLocaleDateString("ko-KR")}
@@ -146,7 +148,7 @@ export default function WarrantyView({ loaderData }: Route.ComponentProps) {
                 </p>
                 {daysRemaining > 0 && (
                   <p className="text-sm text-muted-foreground mt-1">
-                    (남은 기간: {daysRemaining}일)
+                    {t("warranty:public.view.remainingDays", { days: daysRemaining })}
                   </p>
                 )}
               </div>
@@ -154,7 +156,7 @@ export default function WarrantyView({ loaderData }: Route.ComponentProps) {
 
             {/* 보증서 번호 */}
             <div className="text-center">
-              <p className="text-sm text-muted-foreground mb-1">보증서 번호</p>
+              <p className="text-sm text-muted-foreground mb-1">{t("warranty:public.view.warrantyNumber")}</p>
               <p className="font-mono font-bold text-lg">{warranty.warranty_number}</p>
             </div>
 
@@ -167,13 +169,13 @@ export default function WarrantyView({ loaderData }: Route.ComponentProps) {
                 <Button variant="outline" className="flex-col h-auto py-4" asChild>
                   <a href={`/warranty/as/${warranty.id}`}>
                     <WrenchIcon className="h-5 w-5 mb-1" />
-                    <span className="text-sm">A/S 신청</span>
+                    <span className="text-sm">{t("warranty:public.view.actions.requestAS")}</span>
                   </a>
                 </Button>
                 <Button variant="outline" className="flex-col h-auto py-4" asChild>
                   <a href="https://sundayhug.com/manual" target="_blank">
                     <BookOpenIcon className="h-5 w-5 mb-1" />
-                    <span className="text-sm">사용설명서</span>
+                    <span className="text-sm">{t("warranty:public.view.actions.manual")}</span>
                   </a>
                 </Button>
               </div>
@@ -184,10 +186,10 @@ export default function WarrantyView({ loaderData }: Route.ComponentProps) {
               <div className="text-center p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
                 <ClockIcon className="h-8 w-8 mx-auto text-yellow-600 mb-2" />
                 <p className="font-medium text-yellow-800 dark:text-yellow-200">
-                  관리자 확인 중입니다
+                  {t("warranty:public.view.pendingNotice.title")}
                 </p>
                 <p className="text-sm text-yellow-600 dark:text-yellow-300 mt-1">
-                  영업일 기준 1-2일 내 처리됩니다
+                  {t("warranty:public.view.pendingNotice.description")}
                 </p>
               </div>
             )}
@@ -197,15 +199,15 @@ export default function WarrantyView({ loaderData }: Route.ComponentProps) {
               <div className="text-center p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
                 <XCircleIcon className="h-8 w-8 mx-auto text-red-600 mb-2" />
                 <p className="font-medium text-red-800 dark:text-red-200">
-                  보증서 등록이 거절되었습니다
+                  {t("warranty:public.view.rejectedNotice.title")}
                 </p>
                 {warranty.rejection_reason && (
                   <p className="text-sm text-red-600 dark:text-red-300 mt-2">
-                    사유: {warranty.rejection_reason}
+                    {t("warranty:public.view.rejectedNotice.reason", { reason: warranty.rejection_reason })}
                   </p>
                 )}
                 <Button className="mt-4" asChild>
-                  <a href="/warranty">다시 등록하기</a>
+                  <a href="/warranty">{t("warranty:public.view.rejectedNotice.reRegister")}</a>
                 </Button>
               </div>
             )}
@@ -214,7 +216,7 @@ export default function WarrantyView({ loaderData }: Route.ComponentProps) {
             {isExpired && warranty.status === "approved" && (
               <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <p className="text-muted-foreground">
-                  보증 기간이 만료되었습니다
+                  {t("warranty:public.view.expiredNotice")}
                 </p>
               </div>
             )}
@@ -222,7 +224,7 @@ export default function WarrantyView({ loaderData }: Route.ComponentProps) {
 
           {/* 푸터 */}
           <div className="bg-muted/30 p-4 text-center text-sm text-muted-foreground">
-            <p>문의: 1234-5678</p>
+            <p>{t("warranty:public.view.contact", { phone: "1234-5678" })}</p>
             <p className="mt-1">sundayhug.com</p>
           </div>
         </Card>

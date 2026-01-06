@@ -4,6 +4,7 @@
  */
 import type { Route } from "./+types/chat-room";
 import { useLoaderData, useFetcher, data } from "react-router";
+import { useTranslation } from "react-i18next";
 import { useState, useRef, useEffect } from "react";
 
 import makeServerClient from "~/core/lib/supa-client.server";
@@ -131,6 +132,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function ChatRoomScreen() {
+  const { t } = useTranslation(["chat", "common"]);
   const {
     session,
     messages: initialMessages,
@@ -322,7 +324,7 @@ export default function ChatRoomScreen() {
 
   const handleSaveBabyProfile = () => {
     if (!birthDate) {
-      alert("생년월일을 입력해주세요.");
+      alert(t("chat:babyProfile.validation.birthDateRequired"));
       return;
     }
     profileFetcher.submit(
