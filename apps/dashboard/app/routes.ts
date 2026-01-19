@@ -72,6 +72,12 @@ export default [
       route("/disconnect", "features/integrations/api/naver-disconnect.tsx"),
       route("/sync-orders", "features/integrations/api/naver-sync-orders.tsx"),
       route("/sync-products", "features/integrations/api/naver-sync-products.tsx"),
+      // 신규 API (클레임/정산/문의/상품관리/주문변경)
+      route("/claims/action", "features/integrations/api/naver-claims-action.tsx"),
+      route("/settlements", "features/integrations/api/naver-settlements.tsx"),
+      route("/inquiries", "features/integrations/api/naver-inquiries.tsx"),
+      route("/products/manage", "features/integrations/api/naver-products-manage.tsx"),
+      route("/orders/changes", "features/integrations/api/naver-orders-changes.tsx"),
     ]),
 
     // ----- 쿠팡 로켓그로스 연동 API -----
@@ -279,6 +285,8 @@ export default [
         ...prefix("/integrations", [
           route("/cafe24", "features/integrations/screens/cafe24-status.tsx"),
           route("/naver", "features/integrations/screens/naver-status.tsx"),
+          route("/naver/manage", "features/integrations/screens/naver-manage.tsx"),
+          route("/naver/inquiries", "features/integrations/screens/naver-inquiries.tsx"),
           route("/coupang", "features/integrations/screens/coupang-status.tsx"),
           route("/coupang/products", "features/integrations/screens/coupang-products.tsx"),
           route("/coupang/inventory", "features/integrations/screens/coupang-inventory.tsx"),

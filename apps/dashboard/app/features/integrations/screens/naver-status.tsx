@@ -14,6 +14,7 @@ import {
   ExternalLink,
   Link2,
   Link2Off,
+  MessageSquare,
   RefreshCw,
   ShoppingBag,
   ShoppingCart,
@@ -295,9 +296,37 @@ export default function NaverStatus({ loaderData, actionData }: Route.ComponentP
 
       {/* 기능 안내 카드 */}
       {isConnected && (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card className="cursor-pointer hover:bg-muted/50 transition-colors">
-            <Link to="/dashboard/orders">
+            <Link to="/dashboard/integrations/naver/manage">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Store className="h-5 w-5 text-green-500" />
+                  통합 관리
+                </CardTitle>
+                <CardDescription>
+                  클레임, 정산, 주문변경 내역을 관리합니다
+                </CardDescription>
+              </CardHeader>
+            </Link>
+          </Card>
+
+          <Card className="cursor-pointer hover:bg-muted/50 transition-colors">
+            <Link to="/dashboard/integrations/naver/inquiries">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <MessageSquare className="h-5 w-5 text-green-500" />
+                  문의 관리
+                </CardTitle>
+                <CardDescription>
+                  고객 문의를 확인하고 답변합니다
+                </CardDescription>
+              </CardHeader>
+            </Link>
+          </Card>
+
+          <Card className="cursor-pointer hover:bg-muted/50 transition-colors">
+            <Link to="/dashboard/orders/unified">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <ShoppingBag className="h-5 w-5 text-green-500" />
@@ -309,17 +338,19 @@ export default function NaverStatus({ loaderData, actionData }: Route.ComponentP
               </CardHeader>
             </Link>
           </Card>
-          
-          <Card className="opacity-50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Store className="h-5 w-5 text-gray-400" />
-                상품 동기화 (준비중)
-              </CardTitle>
-              <CardDescription>
-                네이버 스마트스토어 상품 정보를 동기화합니다
-              </CardDescription>
-            </CardHeader>
+
+          <Card className="cursor-pointer hover:bg-muted/50 transition-colors">
+            <Link to="/dashboard/products/naver">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <ShoppingCart className="h-5 w-5 text-green-500" />
+                  상품 관리
+                </CardTitle>
+                <CardDescription>
+                  네이버 스마트스토어 상품 정보를 관리합니다
+                </CardDescription>
+              </CardHeader>
+            </Link>
           </Card>
         </div>
       )}
