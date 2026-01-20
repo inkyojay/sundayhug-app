@@ -4,7 +4,7 @@
  * 고객 문의 (주문 관련) 및 상품 문의 (Q&A) API
  */
 
-import { naverFetch } from "./naver-auth.server";
+import { naverFetch, toKSTString } from "./naver-auth.server";
 import type {
   NaverInquiry,
   NaverProductQna,
@@ -28,21 +28,8 @@ function formatDateToYYYYMMDD(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-/**
- * 날짜를 ISO date-time 형식으로 변환 (상품 문의용)
- * 형식: yyyy-MM-dd'T'HH:mm:ss.SSS+09:00 (KST 타임존)
- * 네이버 API 문서: "일시(date-time). 타임존 포함."
- */
-function formatDateToISO(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  const seconds = String(date.getSeconds()).padStart(2, "0");
-  // KST 타임존 (+09:00) 추가
-  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+09:00`;
-}
+// formatDateToISO 함수는 제거됨 - toKSTString (naver-auth.server.ts) 사용
+// toKSTString은 UTC 환경에서도 올바른 KST 시간을 반환함
 
 // ============================================================================
 // 고객 문의 (Customer Inquiry) - 주문 관련
@@ -245,19 +232,18 @@ export async function getProductQnas(params: GetProductQnasParams = {}): Promise
 }> {
   const queryParams = new URLSearchParams();
 
-  // 기본값: 최근 30일, ISO date-time 형식
+  // 기본값: 최근 30일, ISO date-time 형식 (KST)
+  // toKSTString을 사용하여 UTC 환경에서도 올바른 KST 시간 생성
   const now = new Date();
-  now.setHours(23, 59, 59);
   const defaultStart = new Date();
   defaultStart.setDate(defaultStart.getDate() - 30);
-  defaultStart.setHours(0, 0, 0);
 
   const toDate = params.toDate
-    ? formatDateToISO(new Date(params.toDate))
-    : formatDateToISO(now);
+    ? toKSTString(new Date(params.toDate))
+    : toKSTString(now);
   const fromDate = params.fromDate
-    ? formatDateToISO(new Date(params.fromDate))
-    : formatDateToISO(defaultStart);
+    ? toKSTString(new Date(params.fromDate))
+    : toKSTString(defaultStart);
 
   // 필수 파라미터
   queryParams.set("fromDate", fromDate);

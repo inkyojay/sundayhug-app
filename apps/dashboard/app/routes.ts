@@ -78,6 +78,8 @@ export default [
       route("/inquiries", "features/integrations/api/naver-inquiries.tsx"),
       route("/products/manage", "features/integrations/api/naver-products-manage.tsx"),
       route("/orders/changes", "features/integrations/api/naver-orders-changes.tsx"),
+      // 재고 자동 할당 워크플로우
+      route("/workflows", "features/integrations/api/naver-workflows.tsx"),
     ]),
 
     // ----- 쿠팡 로켓그로스 연동 API -----

@@ -287,9 +287,15 @@ export async function deleteProduct(originProductNo: number): Promise<{
 // ============================================================================
 
 /**
- * 상품 옵션 재고/가격 변경
+ * 상품 옵션 재고/가격 변경 (옵션 전용 API)
  * PUT /v1/products/origin-products/:originProductNo/option-stock
- * 참고: https://apicenter.commerce.naver.com/docs/commerce-api/current/update-options-product
+ *
+ * 옵션 상품의 재고, 가격, 할인가를 전체 상품 조회 없이 직접 변경 가능.
+ * 참고: https://apicenter.commerce.naver.com/ko/product/product-api/ko-update-options-product
+ *
+ * @param originProductNo 원상품번호
+ * @param options 옵션 목록 (조합형 또는 표준형)
+ * @param salePrice 판매가 정보 (선택)
  */
 export async function updateProductOptionStock(
   originProductNo: number,
@@ -297,20 +303,31 @@ export async function updateProductOptionStock(
     optionCombinationId: number;
     stockQuantity?: number;
     price?: number;
-  }[]
+  }[],
+  salePrice?: number
 ): Promise<{
   success: boolean;
   error?: string;
 }> {
-  const body = {
-    optionStockUpdateRequests: options.map((opt) => ({
-      id: opt.optionCombinationId,
-      stockQuantity: opt.stockQuantity,
-      price: opt.price,
-    })),
+  // API 요청 본문 구성
+  const body: Record<string, any> = {
+    optionInfo: {
+      optionCombinations: options.map((opt) => ({
+        id: opt.optionCombinationId,
+        stockQuantity: opt.stockQuantity,
+        price: opt.price,
+      })),
+    },
   };
 
-  console.log(`📦 네이버 옵션 재고 변경: originProductNo=${originProductNo}`, body);
+  // 판매가 정보가 있으면 추가
+  if (salePrice !== undefined) {
+    body.productSalePrice = {
+      salePrice,
+    };
+  }
+
+  console.log(`📦 네이버 옵션 재고 변경: originProductNo=${originProductNo}`, JSON.stringify(body, null, 2));
 
   const result = await naverFetch<any>(
     `/external/v1/products/origin-products/${originProductNo}/option-stock`,
@@ -321,15 +338,22 @@ export async function updateProductOptionStock(
   );
 
   if (!result.success) {
+    console.error(`❌ 옵션 재고 변경 실패: ${result.error}`);
     return { success: false, error: result.error };
   }
 
+  console.log(`✅ 옵션 재고 변경 완료: originProductNo=${originProductNo}`);
   return { success: true };
 }
 
 /**
  * 상품 전체 재고 변경 (단일 상품용)
- * PUT /external/v2/products/origin-products/{originProductNo}
+ *
+ * - 옵션 상품: 전용 API (PUT /v1/.../option-stock)를 사용하여 모든 옵션 재고를 동일하게 설정
+ * - 단일 상품: 상품 수정 API (PUT /v2/.../origin-products/{id})를 사용
+ *
+ * @param originProductNo 원상품번호
+ * @param stockQuantity 설정할 재고 수량
  */
 export async function updateProductStock(
   originProductNo: number,
@@ -340,14 +364,42 @@ export async function updateProductStock(
 }> {
   console.log(`📦 네이버 재고 변경: originProductNo=${originProductNo}, stock=${stockQuantity}`);
 
+  // 1. 먼저 원상품 전체 정보 조회
+  const productResult = await getOriginProduct(originProductNo);
+
+  if (!productResult.success || !productResult.product) {
+    console.error(`❌ 상품 정보 조회 실패: ${productResult.error}`);
+    return { success: false, error: productResult.error || "상품 정보를 조회할 수 없습니다" };
+  }
+
+  const originProduct = productResult.product as any;
+
+  // 2. 옵션 상품인지 확인 (옵션 상품은 옵션별 재고로 관리됨)
+  const optionCombinations = originProduct.originProduct?.optionInfo?.optionCombinations;
+  const hasOptions = optionCombinations && optionCombinations.length > 0;
+
+  if (hasOptions) {
+    // 옵션 상품의 경우: 전용 option-stock API 사용
+    console.log(`📦 옵션 상품 감지됨. 전용 API로 전체 옵션 재고를 ${stockQuantity}로 설정합니다.`);
+
+    const options = optionCombinations.map((opt: any) => ({
+      optionCombinationId: opt.id,
+      stockQuantity,
+    }));
+
+    return updateProductOptionStock(originProductNo, options);
+  }
+
+  // 3. 단일 상품의 경우: 상품 수정 API 사용
+  console.log(`📦 단일 상품. 상품 수정 API로 재고를 ${stockQuantity}로 설정합니다.`);
+  originProduct.originProduct.stockQuantity = stockQuantity;
+
   const result = await naverFetch<any>(
     `/external/v2/products/origin-products/${originProductNo}`,
     {
       method: "PUT",
       body: {
-        originProduct: {
-          stockQuantity,
-        },
+        originProduct: originProduct.originProduct,
       },
     }
   );
@@ -405,4 +457,204 @@ export async function getCategoryDetail(categoryId: string): Promise<{
     success: true,
     category: result.data,
   };
+}
+
+// ============================================================================
+// 상태 변경
+// ============================================================================
+
+import type {
+  ProductStatusType,
+  ChangeStatusRequest,
+  BulkUpdateRequest,
+  BulkOperationResult,
+  BulkUpdateResult,
+} from "./naver-products-types";
+
+/**
+ * 상품 상태 변경
+ * PUT /v1/products/origin-products/:originProductNo/change-status
+ * 참고: https://apicenter.commerce.naver.com/docs/commerce-api/current/update-product-status
+ */
+export async function changeProductStatus(
+  originProductNo: number,
+  statusType: ProductStatusType,
+  changeReason?: string
+): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  console.log(`📦 네이버 상품 상태 변경: originProductNo=${originProductNo}, status=${statusType}`);
+
+  const body: Record<string, unknown> = { statusType };
+  if (changeReason) {
+    body.changeReason = changeReason;
+  }
+
+  const result = await naverFetch<any>(
+    `/external/v1/products/origin-products/${originProductNo}/change-status`,
+    {
+      method: "PUT",
+      body,
+    }
+  );
+
+  if (!result.success) {
+    console.error(`❌ 상품 상태 변경 실패: ${result.error}`);
+    return { success: false, error: result.error };
+  }
+
+  console.log(`✅ 상품 상태 변경 완료: originProductNo=${originProductNo}`);
+  return { success: true };
+}
+
+/**
+ * 다중 상품 상태 변경 (순차 처리)
+ * 각 상품에 대해 개별적으로 change-status API 호출
+ */
+export async function changeProductStatusBulk(
+  products: ChangeStatusRequest[]
+): Promise<BulkOperationResult[]> {
+  console.log(`📦 네이버 상품 일괄 상태 변경: ${products.length}개 상품`);
+
+  const results: BulkOperationResult[] = [];
+
+  for (const product of products) {
+    const result = await changeProductStatus(
+      product.originProductNo,
+      product.statusType,
+      product.changeReason
+    );
+    results.push({
+      originProductNo: product.originProductNo,
+      success: result.success,
+      error: result.error,
+    });
+  }
+
+  const successCount = results.filter((r) => r.success).length;
+  console.log(`✅ 일괄 상태 변경 완료: ${successCount}/${products.length}개 성공`);
+
+  return results;
+}
+
+// ============================================================================
+// 대량 상품 수정
+// ============================================================================
+
+/**
+ * 대량 상품 수정
+ * PUT /v1/products/origin-products/bulk-update
+ * 참고: https://apicenter.commerce.naver.com/docs/commerce-api/current/bulk-update-products
+ *
+ * 지원 타입:
+ * - IMMEDIATE_DISCOUNT: 즉시할인가
+ * - SALE_PRICE: 판매가
+ * - SALE_PERIOD: 판매기간
+ * - DELIVERY: 배송정보
+ * - PURCHASE_QUANTITY_LIMIT: 구매수량제한
+ */
+export async function bulkUpdateProducts(
+  request: BulkUpdateRequest
+): Promise<BulkUpdateResult> {
+  console.log(
+    `📦 네이버 대량 상품 수정: type=${request.bulkUpdateType}, products=${request.originProductNos.length}개`
+  );
+
+  const result = await naverFetch<{
+    successProductNos?: number[];
+    failProductNos?: number[];
+    failReasons?: { originProductNo: number; reason: string }[];
+  }>(`/external/v1/products/origin-products/bulk-update`, {
+    method: "PUT",
+    body: {
+      bulkUpdateType: request.bulkUpdateType,
+      originProductNos: request.originProductNos,
+      ...request.updateData,
+    },
+  });
+
+  if (!result.success) {
+    console.error(`❌ 대량 상품 수정 실패: ${result.error}`);
+    return { success: false, error: result.error };
+  }
+
+  // 결과 변환
+  const successNos = result.data?.successProductNos || [];
+  const failReasons = result.data?.failReasons || [];
+
+  const results: BulkOperationResult[] = [
+    ...successNos.map((no) => ({
+      originProductNo: no,
+      success: true,
+    })),
+    ...failReasons.map((f) => ({
+      originProductNo: f.originProductNo,
+      success: false,
+      error: f.reason,
+    })),
+  ];
+
+  console.log(
+    `✅ 대량 상품 수정 완료: ${successNos.length}개 성공, ${failReasons.length}개 실패`
+  );
+
+  return {
+    success: true,
+    results,
+  };
+}
+
+/**
+ * 다중 상품 재고 일괄 수정
+ * 각 상품에 대해 개별적으로 재고 수정 API 호출
+ */
+export async function updateProductStockBulk(
+  products: { originProductNo: number; stockQuantity: number }[]
+): Promise<BulkOperationResult[]> {
+  console.log(`📦 네이버 재고 일괄 수정: ${products.length}개 상품`);
+
+  const results: BulkOperationResult[] = [];
+
+  for (const product of products) {
+    const result = await updateProductStock(product.originProductNo, product.stockQuantity);
+    results.push({
+      originProductNo: product.originProductNo,
+      success: result.success,
+      error: result.error,
+    });
+  }
+
+  const successCount = results.filter((r) => r.success).length;
+  console.log(`✅ 재고 일괄 수정 완료: ${successCount}/${products.length}개 성공`);
+
+  return results;
+}
+
+/**
+ * 다중 상품 옵션 재고 일괄 수정
+ */
+export async function updateProductOptionStockBulk(
+  products: {
+    originProductNo: number;
+    options: { optionCombinationId: number; stockQuantity?: number; price?: number }[];
+  }[]
+): Promise<BulkOperationResult[]> {
+  console.log(`📦 네이버 옵션 재고 일괄 수정: ${products.length}개 상품`);
+
+  const results: BulkOperationResult[] = [];
+
+  for (const product of products) {
+    const result = await updateProductOptionStock(product.originProductNo, product.options);
+    results.push({
+      originProductNo: product.originProductNo,
+      success: result.success,
+      error: result.error,
+    });
+  }
+
+  const successCount = results.filter((r) => r.success).length;
+  console.log(`✅ 옵션 재고 일괄 수정 완료: ${successCount}/${products.length}개 성공`);
+
+  return results;
 }

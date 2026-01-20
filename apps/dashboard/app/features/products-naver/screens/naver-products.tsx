@@ -28,12 +28,14 @@ import {
   ExternalLinkIcon,
   PackageOpenIcon,
   MessageSquareIcon,
+  ClockIcon,
 } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useFetcher, useRevalidator, useLoaderData } from "react-router";
 
 import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
+import { Checkbox } from "~/core/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -70,6 +72,16 @@ import { ColorBadge, SizeBadge } from "~/core/components/ui/color-badge";
 import { ScrollArea } from "~/core/components/ui/scroll-area";
 
 import makeServerClient from "~/core/lib/supa-client.server";
+
+import {
+  NaverProductBulkBar,
+  StatusChangeDialog,
+  BulkInventoryDialog,
+  BulkPriceDialog,
+  GlobalInventoryAllocDialog,
+  WorkflowSettingsDialog,
+} from "../components";
+import type { ProductStatusType, BulkUpdateType } from "~/features/integrations/lib/naver/naver-products-types";
 
 export const meta: MetaFunction = () => {
   return [{ title: `스마트스토어 제품 리스트 | Sundayhug Admin` }];
@@ -156,6 +168,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .from("products")
     .select("sku, product_name, color_kr, sku_6_size")
     .order("sku", { ascending: true });
+
+  // 창고 재고 조회 (inventory_summary 뷰 사용)
+  const { data: inventorySummary } = await supabase
+    .from("inventory_summary")
+    .select("sku, current_stock");
 
   // 제품별로 옵션 그룹핑
   let productsWithOptions = (products || []).map((product: NaverProduct) => ({
@@ -302,10 +319,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
     unmappedProducts,
   };
 
+  // 창고 재고 맵 생성
+  const warehouseStockMap: Record<string, number> = {};
+  (inventorySummary || []).forEach((item: { sku: string; current_stock: number }) => {
+    warehouseStockMap[item.sku] = item.current_stock;
+  });
+
   return {
     products: productsWithOptions,
     stats,
     internalProducts: internalProducts || [],
+    warehouseStockMap,
     availableColors: Array.from(colorSet).sort(),
     availableSizes: Array.from(sizeSet).sort(),
     error: productsError || optionsError,
@@ -375,7 +399,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function NaverProducts() {
-  const { products, stats, internalProducts, availableColors, availableSizes, error, filters } = useLoaderData<typeof loader>();
+  const { products, stats, internalProducts, warehouseStockMap, availableColors, availableSizes, error, filters } = useLoaderData<typeof loader>();
   
   // 내부 제품을 SKU 기준 Map으로 변환 (O(1) 조회)
   const internalProductsMap = useMemo(() => {
@@ -413,20 +437,57 @@ export default function NaverProducts() {
   const [bulkMappings, setBulkMappings] = useState<Record<string, string>>({});
   const [bulkSkuSearch, setBulkSkuSearch] = useState<string>("");
 
+  // 일괄 선택 상태
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [bulkInventoryDialogOpen, setBulkInventoryDialogOpen] = useState(false);
+  const [bulkPriceDialogOpen, setBulkPriceDialogOpen] = useState(false);
+  // 전체 재고 할당 다이얼로그
+  const [globalInventoryDialogOpen, setGlobalInventoryDialogOpen] = useState(false);
+  // 워크플로우 설정 다이얼로그
+  const [workflowDialogOpen, setWorkflowDialogOpen] = useState(false);
+  const [workflows, setWorkflows] = useState<any[]>([]);
+  const [workflowLogs, setWorkflowLogs] = useState<any[]>([]);
+
   const syncFetcher = useFetcher();
+  const bulkActionFetcher = useFetcher();
   const inventoryFetcher = useFetcher();
   const mappingFetcher = useFetcher();
   const bulkMappingFetcher = useFetcher();
+  const workflowFetcher = useFetcher();
   const revalidator = useRevalidator();
+
+  // 워크플로우 데이터 로드
+  const loadWorkflows = async () => {
+    try {
+      const response = await fetch("/api/integrations/naver/workflows");
+      const data = await response.json();
+      if (data.success) {
+        setWorkflows(data.workflows || []);
+        setWorkflowLogs(data.logs || []);
+      }
+    } catch (error) {
+      console.error("워크플로우 로드 실패:", error);
+    }
+  };
+
+  // 워크플로우 다이얼로그가 열릴 때 데이터 로드
+  useEffect(() => {
+    if (workflowDialogOpen) {
+      loadWorkflows();
+    }
+  }, [workflowDialogOpen]);
   
   const syncing = syncFetcher.state === "submitting" || syncFetcher.state === "loading";
   const updatingInventory = inventoryFetcher.state === "submitting" || inventoryFetcher.state === "loading";
   const updatingMapping = mappingFetcher.state === "submitting" || mappingFetcher.state === "loading";
   const updatingBulkMapping = bulkMappingFetcher.state === "submitting" || bulkMappingFetcher.state === "loading";
+  const processingBulkAction = bulkActionFetcher.state === "submitting" || bulkActionFetcher.state === "loading";
   const hasHandledSyncRef = useRef(false);
   const hasHandledInventoryRef = useRef(false);
   const hasHandledMappingRef = useRef(false);
   const hasHandledBulkMappingRef = useRef(false);
+  const hasHandledBulkActionRef = useRef(false);
 
   // 동기화 결과 처리
   useEffect(() => {
@@ -499,6 +560,121 @@ export default function NaverProducts() {
       hasHandledBulkMappingRef.current = false;
     }
   }, [bulkMappingFetcher.data, bulkMappingFetcher.state, revalidator]);
+
+  // 일괄 작업 결과 처리
+  useEffect(() => {
+    if (bulkActionFetcher.data && bulkActionFetcher.state === "idle" && !hasHandledBulkActionRef.current) {
+      hasHandledBulkActionRef.current = true;
+      if ((bulkActionFetcher.data as any).success) {
+        setSyncMessage(`✅ ${(bulkActionFetcher.data as any).message}`);
+        setSelectedIds(new Set());
+        revalidator.revalidate();
+      } else {
+        setSyncMessage(`❌ ${(bulkActionFetcher.data as any).error}`);
+      }
+      setTimeout(() => setSyncMessage(null), 5000);
+    }
+    if (bulkActionFetcher.state === "submitting") {
+      hasHandledBulkActionRef.current = false;
+    }
+  }, [bulkActionFetcher.data, bulkActionFetcher.state, revalidator]);
+
+  // 전체 선택 / 해제
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(products.map((p: NaverProduct) => String(p.origin_product_no))));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  // 개별 선택
+  const handleSelectItem = (id: string, checked: boolean) => {
+    const newSelected = new Set(selectedIds);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  // 선택된 상품 목록
+  const selectedProducts = useMemo(() => {
+    return products.filter((p: NaverProduct) => selectedIds.has(String(p.origin_product_no)));
+  }, [products, selectedIds]);
+
+  // 상태 변경 처리
+  const handleStatusChange = async (statusType: ProductStatusType, reason?: string) => {
+    const productList = selectedProducts.map((p: NaverProduct) => ({
+      originProductNo: p.origin_product_no,
+      statusType,
+      changeReason: reason,
+    }));
+
+    bulkActionFetcher.submit(
+      {
+        action: "change_status_bulk",
+        products: JSON.stringify(productList),
+      },
+      {
+        method: "POST",
+        action: "/api/integrations/naver/products/manage",
+      }
+    );
+  };
+
+  // 재고 일괄 수정 처리
+  const handleBulkInventoryUpdate = async (
+    updates: { originProductNo: number; stockQuantity: number }[]
+  ) => {
+    bulkActionFetcher.submit(
+      {
+        action: "update_stock_bulk",
+        products: JSON.stringify(updates),
+      },
+      {
+        method: "POST",
+        action: "/api/integrations/naver/products/manage",
+      }
+    );
+  };
+
+  // 옵션별 재고 일괄 수정 처리 (창고 재고 비율 할당용)
+  const handleBulkOptionInventoryUpdate = async (
+    updates: { originProductNo: number; optionCombinationId: number; stockQuantity: number }[]
+  ) => {
+    bulkActionFetcher.submit(
+      {
+        action: "update_option_stock_bulk",
+        options: JSON.stringify(updates),
+      },
+      {
+        method: "POST",
+        action: "/api/integrations/naver/products/manage",
+      }
+    );
+  };
+
+  // 가격 일괄 변경 처리
+  const handleBulkPriceUpdate = async (
+    bulkUpdateType: BulkUpdateType,
+    originProductNos: number[],
+    updateData: Record<string, unknown>
+  ) => {
+    bulkActionFetcher.submit(
+      {
+        action: "bulk_update",
+        bulkUpdateType,
+        originProductNos: JSON.stringify(originProductNos),
+        updateData: JSON.stringify(updateData),
+      },
+      {
+        method: "POST",
+        action: "/api/integrations/naver/products/manage",
+      }
+    );
+  };
 
   const toggleProduct = (originProductNo: number) => {
     const newExpanded = new Set(expandedProducts);
@@ -759,6 +935,10 @@ export default function NaverProducts() {
             <DownloadIcon className="h-4 w-4 mr-2" />
             CSV
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setWorkflowDialogOpen(true)}>
+            <ClockIcon className="h-4 w-4 mr-2" />
+            자동화
+          </Button>
           <Button onClick={handleSync} disabled={syncing}>
             <RefreshCwIcon className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
             {syncing ? "동기화 중..." : "제품 동기화"}
@@ -767,7 +947,7 @@ export default function NaverProducts() {
       </div>
 
       {/* 통계 카드 */}
-      <div className="grid gap-4 md:grid-cols-7">
+      <div className="grid gap-4 md:grid-cols-8">
         <Card className="cursor-pointer hover:bg-muted/50" onClick={() => window.location.href = buildUrl({ status: "all", stock: "all", option: "all", mapping: "all" })}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">전체 제품</CardTitle>
@@ -839,6 +1019,17 @@ export default function NaverProducts() {
           </CardHeader>
           <CardContent>
             <div className="text-sm font-medium">{formatDate(stats.lastSyncedAt)}</div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:bg-green-50 border-green-200" onClick={() => setGlobalInventoryDialogOpen(true)}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-1 text-green-700">
+              <PackageIcon className="h-4 w-4" />
+              전체 재고 할당
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">창고 재고 비율로 일괄 할당</p>
           </CardContent>
         </Card>
       </div>
@@ -1005,6 +1196,12 @@ export default function NaverProducts() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
+                  <TableHead className="w-[40px]">
+                    <Checkbox
+                      checked={products.length > 0 && products.every((p: NaverProduct) => selectedIds.has(String(p.origin_product_no)))}
+                      onCheckedChange={handleSelectAll}
+                    />
+                  </TableHead>
                   <TableHead className="w-[40px]"></TableHead>
                   <TableHead className="w-[80px]">이미지</TableHead>
                   <TableHead>제품명</TableHead>
@@ -1031,14 +1228,22 @@ export default function NaverProducts() {
                   const firstSku = firstOption?.internal_sku || firstOption?.seller_management_code || product.seller_management_code;
                   const firstMappedProduct = firstSku ? internalProductsMap.get(firstSku) : null;
                   
+                  const isSelected = selectedIds.has(String(product.origin_product_no));
+
                   return (
                     <>
                       {/* 메인 제품 행 */}
-                      <TableRow 
+                      <TableRow
                         key={product.origin_product_no}
-                        className={isSingleOption ? "hover:bg-muted/50" : "cursor-pointer hover:bg-muted/50"}
+                        className={`${isSelected ? "bg-blue-50" : ""} ${isSingleOption ? "hover:bg-muted/50" : "cursor-pointer hover:bg-muted/50"}`}
                         onClick={() => !isSingleOption && toggleProduct(product.origin_product_no)}
                       >
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={(checked) => handleSelectItem(String(product.origin_product_no), !!checked)}
+                          />
+                        </TableCell>
                         <TableCell>
                           {!isSingleOption && (
                             expandedProducts.has(product.origin_product_no) ? (
@@ -1162,7 +1367,7 @@ export default function NaverProducts() {
                       {/* 옵션 아코디언 */}
                       {expandedProducts.has(product.origin_product_no) && product.options && product.options.length > 0 && (
                         <TableRow>
-                          <TableCell colSpan={13} className="bg-muted/30 p-0">
+                          <TableCell colSpan={14} className="bg-muted/30 p-0">
                             <div className="p-4">
                               <Table>
                                 <TableHeader>
@@ -1172,7 +1377,8 @@ export default function NaverProducts() {
                                     <TableHead className="w-[100px]">색상</TableHead>
                                     <TableHead className="w-[80px]">사이즈</TableHead>
                                     <TableHead className="w-[100px]">가격</TableHead>
-                                    <TableHead className="w-[80px]">재고</TableHead>
+                                    <TableHead className="w-[90px]">네이버 재고</TableHead>
+                                    <TableHead className="w-[90px]">창고 재고</TableHead>
                                     <TableHead className="w-[70px]">사용</TableHead>
                                     <TableHead className="w-[100px]">액션</TableHead>
                                   </TableRow>
@@ -1233,16 +1439,55 @@ export default function NaverProducts() {
                                           )}
                                         </TableCell>
                                         <TableCell>{formatPrice(option.price)}</TableCell>
+                                        {/* 네이버 재고 - 클릭하면 수정 모달 */}
                                         <TableCell>
-                                          <Badge 
-                                            variant={option.stock_quantity <= 0 ? "destructive" : option.stock_quantity <= 10 ? "outline" : "secondary"}
-                                            className={option.stock_quantity <= 10 && option.stock_quantity > 0 ? "border-yellow-500 text-yellow-700" : ""}
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              openInventoryModal(
+                                                product.origin_product_no,
+                                                option.option_combination_id,
+                                                option.stock_quantity,
+                                                product.product_name,
+                                                getOptionDisplayName()
+                                              );
+                                            }}
+                                            className="cursor-pointer hover:opacity-70 transition-opacity"
+                                            title="클릭하여 재고 수정"
                                           >
-                                            {option.stock_quantity}개
-                                          </Badge>
+                                            <Badge
+                                              variant={option.stock_quantity <= 0 ? "destructive" : option.stock_quantity <= 10 ? "outline" : "secondary"}
+                                              className={`${option.stock_quantity <= 10 && option.stock_quantity > 0 ? "border-yellow-500 text-yellow-700" : ""} cursor-pointer`}
+                                            >
+                                              {option.stock_quantity}개
+                                            </Badge>
+                                          </button>
+                                        </TableCell>
+                                        {/* 창고 재고 */}
+                                        <TableCell>
+                                          {sku && warehouseStockMap[sku] !== undefined ? (
+                                            <div className="flex items-center gap-1">
+                                              <Badge
+                                                variant={warehouseStockMap[sku] <= 0 ? "destructive" : warehouseStockMap[sku] <= 10 ? "outline" : "default"}
+                                                className={`${warehouseStockMap[sku] <= 10 && warehouseStockMap[sku] > 0 ? "border-orange-500 text-orange-700 bg-orange-50" : warehouseStockMap[sku] > 10 ? "bg-green-100 text-green-700 border-green-300" : ""}`}
+                                              >
+                                                {warehouseStockMap[sku]}개
+                                              </Badge>
+                                              {/* 네이버 재고와 창고 재고 차이 표시 */}
+                                              {option.stock_quantity !== warehouseStockMap[sku] && (
+                                                <span className={`text-xs ${option.stock_quantity > warehouseStockMap[sku] ? "text-red-500" : "text-blue-500"}`}>
+                                                  {option.stock_quantity > warehouseStockMap[sku] ? "▲" : "▼"}
+                                                  {Math.abs(option.stock_quantity - warehouseStockMap[sku])}
+                                                </span>
+                                              )}
+                                            </div>
+                                          ) : (
+                                            <span className="text-muted-foreground text-xs">-</span>
+                                          )}
                                         </TableCell>
                                         <TableCell>
-                                          <Badge 
+                                          <Badge
                                             variant={option.use_yn === "Y" ? "default" : "secondary"}
                                             className="text-xs"
                                           >
@@ -1300,9 +1545,9 @@ export default function NaverProducts() {
                 })}
                 {products.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
-                      {hasActiveFilters 
-                        ? "검색 결과가 없습니다" 
+                    <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">
+                      {hasActiveFilters
+                        ? "검색 결과가 없습니다"
                         : "제품이 없습니다. \"제품 동기화\" 버튼을 클릭해 스마트스토어에서 제품을 가져오세요."}
                     </TableCell>
                   </TableRow>
@@ -1438,8 +1683,8 @@ export default function NaverProducts() {
       </Dialog>
 
       {/* 일괄 SKU 매핑 모달 */}
-      <Dialog 
-        open={bulkMappingModal?.open || false} 
+      <Dialog
+        open={bulkMappingModal?.open || false}
         onOpenChange={(open) => {
           if (!open) {
             setBulkMappingModal(null);
@@ -1471,7 +1716,7 @@ export default function NaverProducts() {
               )}
             </DialogDescription>
           </DialogHeader>
-          
+
           {bulkMappingModal && (
             <div className="flex-1 flex flex-col gap-4 min-h-0">
               {/* SKU 검색 필터 */}
@@ -1486,7 +1731,7 @@ export default function NaverProducts() {
                   />
                 </div>
               </div>
-              
+
               {/* 옵션 매핑 테이블 */}
               <ScrollArea className="flex-1 border rounded-lg">
                 <Table>
@@ -1510,7 +1755,7 @@ export default function NaverProducts() {
                           p.color_kr?.toLowerCase().includes(search)
                         );
                       });
-                      
+
                       return (
                         <TableRow key={option.id} className="hover:bg-muted/50">
                           <TableCell>
@@ -1529,8 +1774,8 @@ export default function NaverProducts() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Select 
-                              value={bulkMappings[option.id] || "__none__"} 
+                            <Select
+                              value={bulkMappings[option.id] || "__none__"}
                               onValueChange={(v) => setBulkMappings(prev => ({
                                 ...prev,
                                 [option.id]: v === "__none__" ? "" : v
@@ -1576,7 +1821,7 @@ export default function NaverProducts() {
                   </TableBody>
                 </Table>
               </ScrollArea>
-              
+
               {/* 매핑 요약 */}
               <div className="flex-shrink-0 flex items-center justify-between text-sm text-muted-foreground border-t pt-4">
                 <div>
@@ -1586,8 +1831,8 @@ export default function NaverProducts() {
                   </span>
                 </div>
                 <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="sm"
                     onClick={() => {
                       // 전체 해제
@@ -1604,10 +1849,10 @@ export default function NaverProducts() {
               </div>
             </div>
           )}
-          
+
           <DialogFooter className="flex-shrink-0 border-t pt-4">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => {
                 setBulkMappingModal(null);
                 setBulkSkuSearch("");
@@ -1616,7 +1861,7 @@ export default function NaverProducts() {
             >
               취소
             </Button>
-            <Button 
+            <Button
               onClick={handleBulkMappingUpdate}
               disabled={updatingBulkMapping}
             >
@@ -1625,6 +1870,92 @@ export default function NaverProducts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 일괄 작업 바 */}
+      <NaverProductBulkBar
+        selectedCount={selectedIds.size}
+        onClearSelection={() => setSelectedIds(new Set())}
+        onStatusChange={() => setStatusDialogOpen(true)}
+        onInventoryUpdate={() => setBulkInventoryDialogOpen(true)}
+        onPriceChange={() => setBulkPriceDialogOpen(true)}
+        isLoading={processingBulkAction}
+      />
+
+      {/* 상태 변경 다이얼로그 */}
+      <StatusChangeDialog
+        open={statusDialogOpen}
+        onOpenChange={setStatusDialogOpen}
+        selectedCount={selectedIds.size}
+        onConfirm={handleStatusChange}
+      />
+
+      {/* 재고 일괄 수정 다이얼로그 */}
+      <BulkInventoryDialog
+        open={bulkInventoryDialogOpen}
+        onOpenChange={setBulkInventoryDialogOpen}
+        selectedProducts={selectedProducts.map((p: NaverProduct) => ({
+          origin_product_no: p.origin_product_no,
+          product_name: p.product_name,
+          stock_quantity: p.stock_quantity,
+          options: p.options?.map((o: NaverProductOption) => ({
+            option_combination_id: o.option_combination_id,
+            option_name1: o.option_name1,
+            option_value1: o.option_value1,
+            option_name2: o.option_name2,
+            option_value2: o.option_value2,
+            stock_quantity: o.stock_quantity,
+            internal_sku: o.internal_sku,
+            seller_management_code: o.seller_management_code,
+          })),
+        }))}
+        warehouseStockMap={warehouseStockMap}
+        onConfirm={handleBulkInventoryUpdate}
+        onConfirmOptions={handleBulkOptionInventoryUpdate}
+      />
+
+      {/* 가격 일괄 변경 다이얼로그 */}
+      <BulkPriceDialog
+        open={bulkPriceDialogOpen}
+        onOpenChange={setBulkPriceDialogOpen}
+        selectedProducts={selectedProducts.map((p: NaverProduct) => ({
+          origin_product_no: p.origin_product_no,
+          product_name: p.product_name,
+          sale_price: p.sale_price,
+        }))}
+        onConfirm={handleBulkPriceUpdate}
+      />
+
+      {/* 전체 재고 할당 다이얼로그 */}
+      <GlobalInventoryAllocDialog
+        open={globalInventoryDialogOpen}
+        onOpenChange={setGlobalInventoryDialogOpen}
+        allProducts={products.map((p: NaverProduct) => ({
+          origin_product_no: p.origin_product_no,
+          product_name: p.product_name,
+          stock_quantity: p.stock_quantity,
+          options: p.options?.map((o: NaverProductOption) => ({
+            option_combination_id: o.option_combination_id,
+            option_name1: o.option_name1,
+            option_value1: o.option_value1,
+            option_name2: o.option_name2,
+            option_value2: o.option_value2,
+            stock_quantity: o.stock_quantity,
+            internal_sku: o.internal_sku,
+            seller_management_code: o.seller_management_code,
+          })),
+        }))}
+        warehouseStockMap={warehouseStockMap}
+        onConfirmOptions={handleBulkOptionInventoryUpdate}
+      />
+
+      {/* 워크플로우 설정 다이얼로그 */}
+      <WorkflowSettingsDialog
+        open={workflowDialogOpen}
+        onOpenChange={setWorkflowDialogOpen}
+        workflows={workflows}
+        workflowLogs={workflowLogs}
+        onRefresh={loadWorkflows}
+      />
     </div>
   );
 }
