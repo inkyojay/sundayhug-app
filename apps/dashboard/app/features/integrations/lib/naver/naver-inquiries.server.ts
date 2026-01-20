@@ -12,10 +12,18 @@ import type { NaverInquiry, GetInquiriesParams, InquiryAnswerParams } from "./na
 // ============================================================================
 
 /**
+ * 날짜를 yyyy-MM-dd 형식으로 변환
+ */
+function formatDateToYYYYMMDD(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * 문의 목록 조회
- * GET /external/v1/seller/inquiries
- *
- * 참고: 실제 엔드포인트는 네이버 공식 문서에서 확인 필요
+ * GET /v1/pay-user/inquiries
  */
 export async function getInquiries(params: GetInquiriesParams = {}): Promise<{
   success: boolean;
@@ -25,36 +33,35 @@ export async function getInquiries(params: GetInquiriesParams = {}): Promise<{
 }> {
   const queryParams = new URLSearchParams();
 
-  // 기본값: 최근 30일
-  const endDate = params.endDate || new Date().toISOString();
-  const startDate =
-    params.startDate ||
-    (() => {
-      const d = new Date();
-      d.setDate(d.getDate() - 30);
-      return d.toISOString();
-    })();
+  // 기본값: 최근 30일, yyyy-MM-dd 형식
+  const now = new Date();
+  const defaultStart = new Date();
+  defaultStart.setDate(defaultStart.getDate() - 30);
 
-  queryParams.set("startDate", startDate);
-  queryParams.set("endDate", endDate);
+  const endSearchDate = params.endDate
+    ? formatDateToYYYYMMDD(new Date(params.endDate))
+    : formatDateToYYYYMMDD(now);
+  const startSearchDate = params.startDate
+    ? formatDateToYYYYMMDD(new Date(params.startDate))
+    : formatDateToYYYYMMDD(defaultStart);
 
-  if (params.inquiryStatus) {
-    queryParams.set("inquiryStatus", params.inquiryStatus);
-  }
+  // 필수 파라미터
+  queryParams.set("startSearchDate", startSearchDate);
+  queryParams.set("endSearchDate", endSearchDate);
+
+  // 선택 파라미터
   if (params.answered !== undefined) {
     queryParams.set("answered", String(params.answered));
   }
   if (params.page) {
     queryParams.set("page", String(params.page));
   }
-  if (params.size) {
-    queryParams.set("size", String(params.size || 100));
-  }
+  queryParams.set("size", String(params.size || 100));
 
-  console.log(`💬 문의 목록 조회: ${startDate} ~ ${endDate}`);
+  console.log(`💬 문의 목록 조회: ${startSearchDate} ~ ${endSearchDate}`);
 
   const result = await naverFetch<{ contents: NaverInquiry[]; totalElements: number }>(
-    `/external/v1/seller/inquiries?${queryParams.toString()}`
+    `/v1/pay-user/inquiries?${queryParams.toString()}`
   );
 
   if (!result.success) {
