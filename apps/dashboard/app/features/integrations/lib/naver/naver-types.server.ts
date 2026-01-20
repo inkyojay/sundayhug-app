@@ -297,18 +297,34 @@ export interface GetSettlementsParams {
 // 문의 관련
 // ============================================================================
 
+/**
+ * 네이버 고객 문의 응답 구조
+ * GET /v1/pay-user/inquiries 응답
+ */
 export interface NaverInquiry {
   inquiryNo: number;
-  inquiryTypeName: string;
-  inquiryStatus: "WAITING" | "ANSWERED" | "HOLDING";
+  category: string;
   title: string;
-  content: string;
-  createDate: string;
-  productNo?: number;
-  productName?: string;
-  mallId?: string;
-  buyerMemberId?: string;
+  inquiryContent: string;
+  inquiryRegistrationDateTime: string;
+  answerContentId?: number;
   answerContent?: string;
+  answerTemplateNo?: number;
+  answerRegistrationDateTime?: string;
+  answered: boolean;
+  orderId?: string;
+  productNo?: string;
+  productOrderIdList?: string;
+  productName?: string;
+  productOrderOption?: string;
+  customerId?: string;
+  customerName?: string;
+  // 호환성을 위한 별칭 (기존 코드 지원)
+  inquiryTypeName?: string;
+  inquiryStatus?: "WAITING" | "ANSWERED" | "HOLDING";
+  content?: string;
+  createDate?: string;
+  buyerMemberId?: string;
   answerDate?: string;
 }
 

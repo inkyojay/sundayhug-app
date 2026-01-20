@@ -71,9 +71,21 @@ export async function getInquiries(params: GetInquiriesParams = {}): Promise<{
 
   console.log(`✅ 문의 목록 조회 완료: ${result.data?.totalElements || 0}건`);
 
+  // API 응답을 UI에서 사용하는 형식으로 매핑
+  const inquiries = (result.data?.contents || []).map((item) => ({
+    ...item,
+    // 호환성을 위한 필드 매핑
+    inquiryTypeName: item.category,
+    inquiryStatus: item.answered ? "ANSWERED" : "WAITING",
+    content: item.inquiryContent,
+    createDate: item.inquiryRegistrationDateTime,
+    buyerMemberId: item.customerId,
+    answerDate: item.answerRegistrationDateTime,
+  })) as NaverInquiry[];
+
   return {
     success: true,
-    inquiries: result.data?.contents || [],
+    inquiries,
     totalCount: result.data?.totalElements || 0,
   };
 }
@@ -183,7 +195,7 @@ export async function getUnansweredInquiryCount(): Promise<{
   error?: string;
 }> {
   const result = await getInquiries({
-    inquiryStatus: "WAITING",
+    answered: false,
     size: 1,
   });
 
