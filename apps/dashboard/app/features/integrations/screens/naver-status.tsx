@@ -11,14 +11,15 @@ import type { Route } from "./+types/naver-status";
 import {
   AlertCircle,
   CheckCircle2,
+  CreditCard,
   ExternalLink,
+  FileWarning,
   Link2,
   Link2Off,
   MessageSquare,
   RefreshCw,
   ShoppingBag,
   ShoppingCart,
-  Store,
 } from "lucide-react";
 import { Link, data, useFetcher } from "react-router";
 
@@ -296,16 +297,30 @@ export default function NaverStatus({ loaderData, actionData }: Route.ComponentP
 
       {/* 기능 안내 카드 */}
       {isConnected && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <Card className="cursor-pointer hover:bg-muted/50 transition-colors">
-            <Link to="/dashboard/integrations/naver/manage">
+            <Link to="/dashboard/integrations/naver/claims">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  <Store className="h-5 w-5 text-green-500" />
-                  통합 관리
+                  <FileWarning className="h-5 w-5 text-orange-500" />
+                  클레임 관리
                 </CardTitle>
                 <CardDescription>
-                  클레임, 정산, 주문변경 내역을 관리합니다
+                  취소/반품/교환 요청을 처리합니다
+                </CardDescription>
+              </CardHeader>
+            </Link>
+          </Card>
+
+          <Card className="cursor-pointer hover:bg-muted/50 transition-colors">
+            <Link to="/dashboard/integrations/naver/settlements">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <CreditCard className="h-5 w-5 text-green-500" />
+                  정산 조회
+                </CardTitle>
+                <CardDescription>
+                  정산 내역을 조회하고 내보냅니다
                 </CardDescription>
               </CardHeader>
             </Link>
@@ -315,7 +330,7 @@ export default function NaverStatus({ loaderData, actionData }: Route.ComponentP
             <Link to="/dashboard/integrations/naver/inquiries">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  <MessageSquare className="h-5 w-5 text-green-500" />
+                  <MessageSquare className="h-5 w-5 text-blue-500" />
                   문의 관리
                 </CardTitle>
                 <CardDescription>
@@ -329,11 +344,11 @@ export default function NaverStatus({ loaderData, actionData }: Route.ComponentP
             <Link to="/dashboard/orders/unified">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  <ShoppingBag className="h-5 w-5 text-green-500" />
+                  <ShoppingBag className="h-5 w-5 text-purple-500" />
                   주문 동기화
                 </CardTitle>
                 <CardDescription>
-                  네이버 스마트스토어 주문을 대시보드로 가져옵니다
+                  스마트스토어 주문을 동기화합니다
                 </CardDescription>
               </CardHeader>
             </Link>
@@ -347,7 +362,7 @@ export default function NaverStatus({ loaderData, actionData }: Route.ComponentP
                   상품 관리
                 </CardTitle>
                 <CardDescription>
-                  네이버 스마트스토어 상품 정보를 관리합니다
+                  스마트스토어 상품을 관리합니다
                 </CardDescription>
               </CardHeader>
             </Link>

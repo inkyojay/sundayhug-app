@@ -285,7 +285,8 @@ export default [
         ...prefix("/integrations", [
           route("/cafe24", "features/integrations/screens/cafe24-status.tsx"),
           route("/naver", "features/integrations/screens/naver-status.tsx"),
-          route("/naver/manage", "features/integrations/screens/naver-manage.tsx"),
+          route("/naver/claims", "features/integrations/screens/naver-claims.tsx"),
+          route("/naver/settlements", "features/integrations/screens/naver-settlements.tsx"),
           route("/naver/inquiries", "features/integrations/screens/naver-inquiries.tsx"),
           route("/coupang", "features/integrations/screens/coupang-status.tsx"),
           route("/coupang/products", "features/integrations/screens/coupang-products.tsx"),

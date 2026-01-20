@@ -335,7 +335,7 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
       )}
 
       {/* 액션 결과 */}
-      {actionData?.message && (
+      {actionData && "message" in actionData && actionData.message && (
         <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
           <AlertTitle className="text-green-700 dark:text-green-400">성공</AlertTitle>
           <AlertDescription className="text-green-600 dark:text-green-300">
@@ -343,7 +343,7 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
           </AlertDescription>
         </Alert>
       )}
-      {actionData?.error && (
+      {actionData && "error" in actionData && actionData.error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>오류</AlertTitle>
