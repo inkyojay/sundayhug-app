@@ -15,6 +15,8 @@ import {
   BoxIcon,
   LayoutDashboardIcon,
   LinkIcon,
+  MessageCircleIcon,
+  MessageSquareIcon,
   Settings2Icon,
   ShieldCheckIcon,
   ShoppingCartIcon,
@@ -217,6 +219,44 @@ const data = {
         {
           title: "새 이벤트",
           url: "/dashboard/events/new",
+        },
+      ],
+    },
+
+    // ===== 문의 관리 =====
+    {
+      title: "문의 관리",
+      url: "/dashboard/inquiries/naver",
+      icon: MessageSquareIcon,
+      items: [
+        {
+          title: "네이버 문의관리",
+          url: "/dashboard/inquiries/naver",
+        },
+        {
+          title: "답변 템플릿",
+          url: "/dashboard/inquiries/templates",
+        },
+      ],
+    },
+
+    // ===== 톡톡 상담 =====
+    {
+      title: "톡톡 상담",
+      url: "/dashboard/talktalk/chats",
+      icon: MessageCircleIcon,
+      items: [
+        {
+          title: "채팅 관리",
+          url: "/dashboard/talktalk/chats",
+        },
+        {
+          title: "자동 응답",
+          url: "/dashboard/talktalk/auto-replies",
+        },
+        {
+          title: "톡톡 설정",
+          url: "/dashboard/talktalk/settings",
         },
       ],
     },

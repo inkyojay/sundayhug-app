@@ -15,3 +15,6 @@ export { InquiryTemplateSelect, type InquiryTemplate } from "./InquiryTemplateSe
 // 상품 문의 (Q&A)
 export { ProductQnaTable } from "./ProductQnaTable";
 export { ProductQnaDetailSheet } from "./ProductQnaDetailSheet";
+
+// 통합 테이블
+export { UnifiedInquiryTable } from "./UnifiedInquiryTable";

@@ -114,22 +114,22 @@ export function InquiryDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader>
-          <div className="flex items-center justify-between">
-            <SheetTitle>문의 상세</SheetTitle>
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto px-6">
+        <SheetHeader className="pb-4 border-b">
+          <div className="flex items-center justify-between gap-4">
+            <SheetTitle className="text-lg">문의 상세</SheetTitle>
             <InquiryStatusBadge status={inquiry.inquiryStatus || (inquiry.answered ? "ANSWERED" : "WAITING")} />
           </div>
-          <SheetDescription>문의번호: {inquiry.inquiryNo}</SheetDescription>
+          <SheetDescription className="text-sm">문의번호: {inquiry.inquiryNo}</SheetDescription>
         </SheetHeader>
 
-        <div className="mt-6 space-y-6">
+        <div className="py-6 space-y-6 px-1">
           {/* 문의 정보 */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-muted-foreground">
               문의 정보
             </h3>
-            <div className="grid gap-3">
+            <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
               <InfoItem
                 icon={Tag}
                 label="문의 유형"
@@ -153,8 +153,6 @@ export function InquiryDetailSheet({
             </div>
           </div>
 
-          <Separator />
-
           {/* 문의 내용 */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
@@ -162,10 +160,10 @@ export function InquiryDetailSheet({
               문의 내용
             </h3>
             {inquiry.title && (
-              <p className="font-medium">{inquiry.title}</p>
+              <p className="font-medium text-base">{inquiry.title}</p>
             )}
             <div className="p-4 bg-muted rounded-lg">
-              <p className="text-sm whitespace-pre-wrap">
+              <p className="text-sm whitespace-pre-wrap leading-relaxed">
                 {inquiry.content || "내용 없음"}
               </p>
             </div>
@@ -174,8 +172,8 @@ export function InquiryDetailSheet({
           <Separator />
 
           {/* 답변 작성/수정 */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
                 {isUpdate ? (
                   <>
@@ -189,7 +187,7 @@ export function InquiryDetailSheet({
                   </>
                 )}
               </h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 {inquiry.answerDate && (
                   <p className="text-xs text-muted-foreground">
                     답변일: {formatDate(inquiry.answerDate)}
@@ -208,14 +206,15 @@ export function InquiryDetailSheet({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="answer-content">답변 내용</Label>
+              <Label htmlFor="answer-content" className="text-sm">답변 내용</Label>
               <Textarea
                 id="answer-content"
                 placeholder="고객에게 전달할 답변을 작성하세요..."
                 value={answerContent}
                 onChange={(e) => setAnswerContent(e.target.value)}
-                rows={6}
+                rows={8}
                 disabled={isSubmitting}
+                className="resize-none text-sm"
               />
             </div>
 
@@ -223,6 +222,7 @@ export function InquiryDetailSheet({
               onClick={handleSubmit}
               disabled={isSubmitting || !answerContent.trim()}
               className="w-full"
+              size="lg"
             >
               {isSubmitting ? (
                 <>

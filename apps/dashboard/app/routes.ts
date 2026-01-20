@@ -88,6 +88,16 @@ export default [
       route("/sync-inventory", "features/integrations/api/coupang-sync-inventory.tsx"),
     ]),
 
+    // ----- 네이버 톡톡 연동 API -----
+    ...prefix("/integrations/talktalk", [
+      route("/settings", "features/integrations/api/talktalk-settings.tsx"),
+      route("/messages", "features/integrations/api/talktalk-messages.tsx"),
+      route("/sync", "features/integrations/api/talktalk-sync.tsx"),
+    ]),
+
+    // ----- 네이버 톡톡 Webhook (외부 접근) -----
+    route("/talktalk/webhook", "features/integrations/api/talktalk-webhook.tsx"),
+
     // ----- 네이버 통계 API (탐색용) -----
     ...prefix("/naver-analytics", [
       route("/explore", "features/naver-analytics/api/explore-stats.tsx"),
@@ -281,6 +291,12 @@ export default [
           route("/:id/submissions", "features/review/screens/admin/event-submissions.tsx"),
         ]),
 
+        // ===== 문의 관리 =====
+        ...prefix("/inquiries", [
+          route("/naver", "features/integrations/screens/naver-inquiries.tsx", { id: "inquiries-naver" }),
+          route("/templates", "features/integrations/screens/inquiry-templates.tsx"),
+        ]),
+
         // ===== 외부 연동 관리 =====
         ...prefix("/integrations", [
           route("/cafe24", "features/integrations/screens/cafe24-status.tsx"),
@@ -293,6 +309,13 @@ export default [
           route("/coupang/inventory", "features/integrations/screens/coupang-inventory.tsx"),
           // 쿠팡 주문은 통합 주문으로 리다이렉트
           route("/coupang/orders", "core/screens/redirect.tsx", { id: "redirect-coupang-orders" }),
+        ]),
+
+        // ===== 톡톡 상담 관리 =====
+        ...prefix("/talktalk", [
+          route("/chats", "features/integrations/screens/talktalk-chats.tsx"),
+          route("/settings", "features/integrations/screens/talktalk-settings.tsx"),
+          route("/auto-replies", "features/integrations/screens/talktalk-auto-replies.tsx"),
         ]),
 
         // ===== 네이버 스마트스토어 분석 =====

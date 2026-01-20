@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { Link } from "react-router";
 import {
   Calendar,
   Package,
@@ -13,6 +14,7 @@ import {
   Loader2,
   Send,
   Edit,
+  ExternalLink,
 } from "lucide-react";
 import {
   Sheet,
@@ -109,27 +111,39 @@ export function ProductQnaDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader>
-          <div className="flex items-center justify-between">
-            <SheetTitle>상품 문의 상세</SheetTitle>
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto px-6">
+        <SheetHeader className="space-y-1 pb-4 border-b">
+          <div className="flex items-center justify-between gap-4">
+            <SheetTitle className="text-lg">상품 문의 상세</SheetTitle>
             <InquiryStatusBadge status={qna.answered ? "ANSWERED" : "WAITING"} />
           </div>
-          <SheetDescription>문의번호: {qna.questionId}</SheetDescription>
+          <SheetDescription className="text-sm">문의번호: {qna.questionId}</SheetDescription>
         </SheetHeader>
 
-        <div className="mt-6 space-y-6">
+        <div className="py-6 space-y-6 px-1">
           {/* 문의 정보 */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             <h3 className="text-sm font-semibold text-muted-foreground">
               문의 정보
             </h3>
-            <div className="grid gap-3">
-              <InfoItem
-                icon={Package}
-                label="상품"
-                value={qna.productName || "-"}
-              />
+            <div className="grid grid-cols-2 gap-2 p-3 bg-muted/50 rounded-lg">
+              <div className="flex items-start gap-3">
+                <Package className="h-4 w-4 text-muted-foreground mt-0.5" />
+                <div>
+                  <p className="text-xs text-muted-foreground">상품</p>
+                  <p className="text-sm">{qna.productName || "-"}</p>
+                  {qna.productId && (
+                    <Link
+                      to={`/dashboard/products/naver?productId=${qna.productId}`}
+                      className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1 mt-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      상품 상세 보기
+                    </Link>
+                  )}
+                </div>
+              </div>
               <InfoItem
                 icon={User}
                 label="작성자"
@@ -140,19 +154,24 @@ export function ProductQnaDetailSheet({
                 label="문의일시"
                 value={formatDate(qna.createDate)}
               />
+              {qna.productId && (
+                <InfoItem
+                  icon={Package}
+                  label="상품ID"
+                  value={String(qna.productId)}
+                />
+              )}
             </div>
           </div>
 
-          <Separator />
-
           {/* 문의 내용 */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
               <MessageSquare className="h-4 w-4" />
               질문 내용
             </h3>
-            <div className="p-4 bg-muted rounded-lg">
-              <p className="text-sm whitespace-pre-wrap">
+            <div className="p-3 bg-muted rounded-lg">
+              <p className="text-sm whitespace-pre-wrap leading-relaxed">
                 {qna.question || "내용 없음"}
               </p>
             </div>
@@ -162,7 +181,7 @@ export function ProductQnaDetailSheet({
 
           {/* 답변 작성/수정 */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
                 {isUpdate ? (
                   <>
@@ -194,15 +213,16 @@ export function ProductQnaDetailSheet({
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="answer-content">답변 내용</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="answer-content" className="text-sm">답변 내용</Label>
               <Textarea
                 id="answer-content"
                 placeholder="고객에게 전달할 답변을 작성하세요..."
                 value={answerContent}
                 onChange={(e) => setAnswerContent(e.target.value)}
-                rows={6}
+                rows={5}
                 disabled={isSubmitting}
+                className="resize-none"
               />
             </div>
 
@@ -210,6 +230,7 @@ export function ProductQnaDetailSheet({
               onClick={handleSubmit}
               disabled={isSubmitting || !answerContent.trim()}
               className="w-full"
+              size="lg"
             >
               {isSubmitting ? (
                 <>

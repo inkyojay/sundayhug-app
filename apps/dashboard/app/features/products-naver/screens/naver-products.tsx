@@ -9,9 +9,9 @@
  */
 import type { LoaderFunctionArgs, MetaFunction, ActionFunctionArgs } from "react-router";
 
-import { 
-  StoreIcon, 
-  RefreshCwIcon, 
+import {
+  StoreIcon,
+  RefreshCwIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   PackageIcon,
@@ -27,6 +27,7 @@ import {
   LayersIcon,
   ExternalLinkIcon,
   PackageOpenIcon,
+  MessageSquareIcon,
 } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useFetcher, useRevalidator, useLoaderData } from "react-router";
@@ -107,7 +108,7 @@ interface NaverProductOption {
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const [supabase] = makeServerClient(request);
-  
+
   const url = new URL(request.url);
   const search = url.searchParams.get("search") || "";
   const statusFilter = url.searchParams.get("status") || "all";
@@ -118,6 +119,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const sizeFilter = url.searchParams.get("size") || "all";
   const sortBy = url.searchParams.get("sortBy") || "updated_at";
   const sortOrder = url.searchParams.get("sortOrder") || "desc";
+  // 상품 문의에서 연결된 productId 필터
+  const productIdFilter = url.searchParams.get("productId") || "";
 
   // 제품 목록 조회
   let query = supabase
@@ -133,6 +136,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   if (search) {
     query = query.or(`product_name.ilike.%${search}%,seller_management_code.ilike.%${search}%`);
+  }
+
+  // productId 필터 (상품 문의에서 연결)
+  if (productIdFilter) {
+    query = query.eq("origin_product_no", Number(productIdFilter));
   }
 
   const { data: products, error: productsError } = await query;
@@ -301,7 +309,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     availableColors: Array.from(colorSet).sort(),
     availableSizes: Array.from(sizeSet).sort(),
     error: productsError || optionsError,
-    filters: { search, status: statusFilter, stock: stockFilter, option: optionFilter, mapping: mappingFilter, color: colorFilter, size: sizeFilter, sortBy, sortOrder },
+    filters: { search, status: statusFilter, stock: stockFilter, option: optionFilter, mapping: mappingFilter, color: colorFilter, size: sizeFilter, sortBy, sortOrder, productId: productIdFilter },
   };
 }
 
@@ -707,10 +715,27 @@ export default function NaverProducts() {
     link.click();
   };
 
-  const hasActiveFilters = filters.search || filters.status !== "all" || filters.stock !== "all" || filters.option !== "all" || filters.mapping !== "all" || filters.color !== "all" || filters.size !== "all";
+  const hasActiveFilters = filters.search || filters.status !== "all" || filters.stock !== "all" || filters.option !== "all" || filters.mapping !== "all" || filters.color !== "all" || filters.size !== "all" || filters.productId;
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
+      {/* 상품 문의에서 연결된 경우 알림 */}
+      {filters.productId && (
+        <div className="p-4 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <MessageSquareIcon className="h-4 w-4" />
+            <span>상품 문의에서 연결된 제품입니다. (상품 ID: {filters.productId})</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.location.href = "/dashboard/products/naver"}
+          >
+            필터 해제
+          </Button>
+        </div>
+      )}
+
       {/* 동기화 결과 메시지 */}
       {syncMessage && (
         <div className={`p-4 rounded-lg ${syncMessage.startsWith("✅") ? "bg-green-500/10 text-green-500" : "bg-destructive/10 text-destructive"}`}>

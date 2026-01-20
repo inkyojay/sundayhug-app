@@ -30,7 +30,8 @@ function formatDateToYYYYMMDD(date: Date): string {
 
 /**
  * 날짜를 ISO date-time 형식으로 변환 (상품 문의용)
- * 형식: yyyy-MM-ddTHH:mm:ss (로컬 타임존)
+ * 형식: yyyy-MM-dd'T'HH:mm:ss.SSS+09:00 (KST 타임존)
+ * 네이버 API 문서: "일시(date-time). 타임존 포함."
  */
 function formatDateToISO(date: Date): string {
   const year = date.getFullYear();
@@ -39,7 +40,8 @@ function formatDateToISO(date: Date): string {
   const hours = String(date.getHours()).padStart(2, "0");
   const minutes = String(date.getMinutes()).padStart(2, "0");
   const seconds = String(date.getSeconds()).padStart(2, "0");
-  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+  // KST 타임존 (+09:00) 추가
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+09:00`;
 }
 
 // ============================================================================
@@ -48,7 +50,7 @@ function formatDateToISO(date: Date): string {
 
 /**
  * 고객 문의 목록 조회
- * GET /v1/pay-user/inquiries
+ * GET /external/v1/pay-user/inquiries
  */
 export async function getCustomerInquiries(params: GetInquiriesParams = {}): Promise<{
   success: boolean;
@@ -85,8 +87,8 @@ export async function getCustomerInquiries(params: GetInquiriesParams = {}): Pro
 
   console.log(`💬 고객 문의 목록 조회: ${startSearchDate} ~ ${endSearchDate}`);
 
-  const result = await naverFetch<{ contents: NaverInquiry[]; totalElements: number }>(
-    `/v1/pay-user/inquiries?${queryParams.toString()}`
+  const result = await naverFetch<{ content: NaverInquiry[]; totalElements: number }>(
+    `/external/v1/pay-user/inquiries?${queryParams.toString()}`
   );
 
   if (!result.success) {
@@ -96,8 +98,8 @@ export async function getCustomerInquiries(params: GetInquiriesParams = {}): Pro
 
   console.log(`✅ 고객 문의 목록 조회 완료: ${result.data?.totalElements || 0}건`);
 
-  // API 응답을 UI에서 사용하는 형식으로 매핑
-  const inquiries = (result.data?.contents || []).map((item) => ({
+  // API 응답을 UI에서 사용하는 형식으로 매핑 (응답 필드명: content)
+  const inquiries = (result.data?.content || []).map((item) => ({
     ...item,
     // 호환성을 위한 필드 매핑
     inquiryTypeName: item.category,
@@ -121,7 +123,7 @@ export async function getCustomerInquiries(params: GetInquiriesParams = {}): Pro
 
 /**
  * 고객 문의 답변
- * POST /v1/pay-merchant/inquiries/{inquiryNo}/answer
+ * POST /external/v1/pay-merchant/inquiries/{inquiryNo}/answer
  */
 export async function answerInquiry(params: InquiryAnswerParams): Promise<{
   success: boolean;
@@ -144,7 +146,7 @@ export async function answerInquiry(params: InquiryAnswerParams): Promise<{
   }
 
   const result = await naverFetch<{ answerContentId: number }>(
-    `/v1/pay-merchant/inquiries/${inquiryNo}/answer`,
+    `/external/v1/pay-merchant/inquiries/${inquiryNo}/answer`,
     {
       method: "POST",
       body,
@@ -162,7 +164,7 @@ export async function answerInquiry(params: InquiryAnswerParams): Promise<{
 
 /**
  * 고객 문의 답변 수정
- * PUT /v1/pay-merchant/inquiries/{inquiryNo}/answer/{answerContentId}
+ * PUT /external/v1/pay-merchant/inquiries/{inquiryNo}/answer/{answerContentId}
  */
 export async function updateInquiryAnswer(params: InquiryAnswerParams & { answerContentId: number }): Promise<{
   success: boolean;
@@ -188,7 +190,7 @@ export async function updateInquiryAnswer(params: InquiryAnswerParams & { answer
   }
 
   const result = await naverFetch<any>(
-    `/v1/pay-merchant/inquiries/${inquiryNo}/answer/${answerContentId}`,
+    `/external/v1/pay-merchant/inquiries/${inquiryNo}/answer/${answerContentId}`,
     {
       method: "PUT",
       body,
@@ -233,7 +235,7 @@ export async function getUnansweredCustomerInquiryCount(): Promise<{
 
 /**
  * 상품 문의 목록 조회
- * GET /v1/contents/qnas
+ * GET /external/v1/contents/qnas
  */
 export async function getProductQnas(params: GetProductQnasParams = {}): Promise<{
   success: boolean;
@@ -273,7 +275,7 @@ export async function getProductQnas(params: GetProductQnasParams = {}): Promise
   console.log(`📦 상품 문의 목록 조회: ${fromDate} ~ ${toDate}`);
 
   const result = await naverFetch<{ contents: NaverProductQna[]; totalElements: number }>(
-    `/v1/contents/qnas?${queryParams.toString()}`
+    `/external/v1/contents/qnas?${queryParams.toString()}`
   );
 
   if (!result.success) {
@@ -296,7 +298,7 @@ export async function getProductQnas(params: GetProductQnasParams = {}): Promise
 
 /**
  * 상품 문의 답변 (신규 작성 또는 수정)
- * PUT /v1/contents/qnas/{questionId}
+ * PUT /external/v1/contents/qnas/{questionId}
  *
  * 참고: 상품 문의는 PUT 메서드로 답변 등록/수정 모두 처리
  */
@@ -313,7 +315,7 @@ export async function answerProductQna(params: ProductQnaAnswerParams): Promise<
   console.log(`📦 상품 문의 답변 작성/수정: questionId=${questionId}`);
 
   const result = await naverFetch<any>(
-    `/v1/contents/qnas/${questionId}`,
+    `/external/v1/contents/qnas/${questionId}`,
     {
       method: "PUT",
       body: { commentContent },
