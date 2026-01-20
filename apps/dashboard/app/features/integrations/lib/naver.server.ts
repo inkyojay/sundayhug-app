@@ -119,9 +119,15 @@ export {
 
 // 문의 API
 export {
-  getInquiries,
-  getInquiryDetail,
+  // 고객 문의 (주문 관련)
+  getCustomerInquiries,
+  getInquiries, // deprecated alias
   answerInquiry,
   updateInquiryAnswer,
-  getUnansweredInquiryCount,
+  getUnansweredCustomerInquiryCount,
+  getUnansweredInquiryCount, // deprecated alias
+  // 상품 문의 (Q&A)
+  getProductQnas,
+  answerProductQna,
+  getUnansweredProductQnaCount,
 } from "./naver/naver-inquiries.server";

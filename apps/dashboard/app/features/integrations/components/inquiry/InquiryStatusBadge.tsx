@@ -9,10 +9,10 @@
 
 import { Badge } from "~/core/components/ui/badge";
 
-type InquiryStatus = "WAITING" | "ANSWERED" | "HOLDING";
+export type InquiryStatus = "WAITING" | "ANSWERED" | "HOLDING";
 
 interface InquiryStatusBadgeProps {
-  status: InquiryStatus;
+  status: InquiryStatus | undefined;
 }
 
 const STATUS_CONFIG: Record<
@@ -40,10 +40,15 @@ const STATUS_CONFIG: Record<
 };
 
 export function InquiryStatusBadge({ status }: InquiryStatusBadgeProps) {
-  const config = STATUS_CONFIG[status] || {
-    label: status,
-    variant: "secondary" as const,
-  };
+  const config = status ? STATUS_CONFIG[status] : null;
+
+  if (!config) {
+    return (
+      <Badge variant="secondary">
+        {status || "알수없음"}
+      </Badge>
+    );
+  }
 
   return (
     <Badge variant={config.variant} className={config.className}>

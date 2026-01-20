@@ -121,9 +121,9 @@ export function InquiryTable({
                   {truncateText(inquiry.productName || "-", 15)}
                 </TableCell>
                 <TableCell>
-                  <InquiryStatusBadge status={inquiry.inquiryStatus} />
+                  <InquiryStatusBadge status={inquiry.inquiryStatus || (inquiry.answered ? "ANSWERED" : "WAITING")} />
                 </TableCell>
-                <TableCell>{formatDate(inquiry.createDate)}</TableCell>
+                <TableCell>{formatDate(inquiry.createDate || inquiry.inquiryRegistrationDateTime || "")}</TableCell>
               </TableRow>
             ))
           )}

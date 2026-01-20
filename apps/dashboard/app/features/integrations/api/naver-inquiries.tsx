@@ -13,6 +13,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // 쿼리 파라미터 추출
   const startDate = url.searchParams.get("startDate") || undefined;
   const endDate = url.searchParams.get("endDate") || undefined;
+  const type = url.searchParams.get("type") || "customer"; // customer | product
   const inquiryStatus = url.searchParams.get("inquiryStatus") as
     | "WAITING"
     | "ANSWERED"
@@ -29,34 +30,54 @@ export async function loader({ request }: Route.LoaderArgs) {
     : undefined;
 
   try {
-    const { getInquiries } = await import("../lib/naver/naver-inquiries.server");
+    if (type === "product") {
+      // 상품 문의 조회
+      const { getProductQnas } = await import("../lib/naver/naver-inquiries.server");
 
-    const result = await getInquiries({
-      startDate,
-      endDate,
-      inquiryStatus,
-      answered,
-      page,
-      size,
-    });
+      const result = await getProductQnas({
+        fromDate: startDate,
+        toDate: endDate,
+        answered,
+        page,
+        size,
+      });
 
-    if (!result.success) {
-      return data({ success: false, error: result.error }, { status: 500 });
-    }
+      if (!result.success) {
+        return data({ success: false, error: result.error }, { status: 500 });
+      }
 
-    return data({
-      success: true,
-      inquiries: result.inquiries,
-      totalCount: result.totalCount,
-      params: {
+      return data({
+        success: true,
+        type: "product",
+        qnas: result.qnas,
+        totalCount: result.totalCount,
+        params: { startDate, endDate, answered, page, size },
+      });
+    } else {
+      // 고객 문의 조회
+      const { getCustomerInquiries } = await import("../lib/naver/naver-inquiries.server");
+
+      const result = await getCustomerInquiries({
         startDate,
         endDate,
         inquiryStatus,
         answered,
         page,
         size,
-      },
-    });
+      });
+
+      if (!result.success) {
+        return data({ success: false, error: result.error }, { status: 500 });
+      }
+
+      return data({
+        success: true,
+        type: "customer",
+        inquiries: result.inquiries,
+        totalCount: result.totalCount,
+        params: { startDate, endDate, inquiryStatus, answered, page, size },
+      });
+    }
   } catch (error) {
     console.error("❌ 문의 조회 오류:", error);
     return data(
@@ -75,25 +96,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   try {
     switch (actionType) {
-      case "get_detail": {
-        const inquiryNo = formData.get("inquiryNo");
-        if (!inquiryNo) {
-          return data({ success: false, error: "inquiryNo가 필요합니다" }, { status: 400 });
-        }
-
-        const { getInquiryDetail } = await import("../lib/naver/naver-inquiries.server");
-        const result = await getInquiryDetail(Number(inquiryNo));
-
-        if (!result.success) {
-          return data({ success: false, error: result.error }, { status: 500 });
-        }
-
-        return data({
-          success: true,
-          inquiry: result.inquiry,
-        });
-      }
-
+      // 고객 문의 답변 등록
       case "answer": {
         const inquiryNo = formData.get("inquiryNo");
         const answerContent = formData.get("answerContent") as string;
@@ -119,12 +122,15 @@ export async function action({ request }: Route.ActionArgs) {
           success: true,
           message: "답변이 등록되었습니다",
           inquiryNo: Number(inquiryNo),
+          answerContentId: result.answerContentId,
         });
       }
 
+      // 고객 문의 답변 수정
       case "update_answer": {
         const inquiryNo = formData.get("inquiryNo");
         const answerContent = formData.get("answerContent") as string;
+        const answerContentId = formData.get("answerContentId");
 
         if (!inquiryNo) {
           return data({ success: false, error: "inquiryNo가 필요합니다" }, { status: 400 });
@@ -132,11 +138,15 @@ export async function action({ request }: Route.ActionArgs) {
         if (!answerContent || answerContent.trim().length === 0) {
           return data({ success: false, error: "answerContent가 필요합니다" }, { status: 400 });
         }
+        if (!answerContentId) {
+          return data({ success: false, error: "answerContentId가 필요합니다" }, { status: 400 });
+        }
 
         const { updateInquiryAnswer } = await import("../lib/naver/naver-inquiries.server");
         const result = await updateInquiryAnswer({
           inquiryNo: Number(inquiryNo),
           answerContent,
+          answerContentId: Number(answerContentId),
         });
 
         if (!result.success) {
@@ -150,9 +160,23 @@ export async function action({ request }: Route.ActionArgs) {
         });
       }
 
-      case "get_unanswered_count": {
-        const { getUnansweredInquiryCount } = await import("../lib/naver/naver-inquiries.server");
-        const result = await getUnansweredInquiryCount();
+      // 상품 문의 답변 (등록/수정 모두)
+      case "answer_product_qna": {
+        const questionId = formData.get("questionId");
+        const commentContent = formData.get("commentContent") as string;
+
+        if (!questionId) {
+          return data({ success: false, error: "questionId가 필요합니다" }, { status: 400 });
+        }
+        if (!commentContent || commentContent.trim().length === 0) {
+          return data({ success: false, error: "commentContent가 필요합니다" }, { status: 400 });
+        }
+
+        const { answerProductQna } = await import("../lib/naver/naver-inquiries.server");
+        const result = await answerProductQna({
+          questionId: Number(questionId),
+          commentContent,
+        });
 
         if (!result.success) {
           return data({ success: false, error: result.error }, { status: 500 });
@@ -160,7 +184,28 @@ export async function action({ request }: Route.ActionArgs) {
 
         return data({
           success: true,
-          count: result.count,
+          message: "답변이 등록되었습니다",
+          questionId: Number(questionId),
+        });
+      }
+
+      // 미답변 고객 문의 개수
+      case "get_unanswered_count": {
+        const { getUnansweredCustomerInquiryCount, getUnansweredProductQnaCount } = await import("../lib/naver/naver-inquiries.server");
+
+        const [customerResult, productResult] = await Promise.all([
+          getUnansweredCustomerInquiryCount(),
+          getUnansweredProductQnaCount(),
+        ]);
+
+        const customerCount = customerResult.success ? (customerResult.count ?? 0) : 0;
+        const productQnaCount = productResult.success ? (productResult.count ?? 0) : 0;
+
+        return data({
+          success: true,
+          customerCount,
+          productQnaCount,
+          totalCount: customerCount + productQnaCount,
         });
       }
 
@@ -168,7 +213,7 @@ export async function action({ request }: Route.ActionArgs) {
         return data(
           {
             success: false,
-            error: "알 수 없는 액션입니다. 지원: get_detail, answer, update_answer, get_unanswered_count",
+            error: "알 수 없는 액션입니다. 지원: answer, update_answer, answer_product_qna, get_unanswered_count",
           },
           { status: 400 }
         );

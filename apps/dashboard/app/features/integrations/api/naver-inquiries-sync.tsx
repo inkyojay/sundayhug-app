@@ -65,7 +65,7 @@ export async function action({ request }: Route.ActionArgs) {
     if (actionType === "sync") {
       // 네이버 API에서 문의 가져오기
       const { getNaverToken } = await import("../lib/naver.server");
-      const { getInquiries } = await import("../lib/naver/naver-inquiries.server");
+      const { getCustomerInquiries } = await import("../lib/naver/naver-inquiries.server");
       const { createAdminClient } = await import("~/core/lib/supa-admin.server");
 
       const token = await getNaverToken();
@@ -77,7 +77,7 @@ export async function action({ request }: Route.ActionArgs) {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 30);
 
-      const result = await getInquiries({
+      const result = await getCustomerInquiries({
         startDate: startDate.toISOString(),
         endDate: new Date().toISOString(),
         size: 500,
@@ -96,17 +96,29 @@ export async function action({ request }: Route.ActionArgs) {
         const { error } = await adminClient.from("naver_inquiries").upsert(
           {
             inquiry_no: inquiry.inquiryNo,
-            inquiry_type_name: inquiry.inquiryTypeName,
-            inquiry_status: inquiry.inquiryStatus,
+            inquiry_type_name: inquiry.category || inquiry.inquiryTypeName,
+            inquiry_status: inquiry.answered ? "ANSWERED" : "WAITING",
             title: inquiry.title,
-            content: inquiry.content,
-            product_no: inquiry.productNo,
+            content: inquiry.inquiryContent || inquiry.content,
+            product_no: inquiry.productNo ? Number(inquiry.productNo) : null,
             product_name: inquiry.productName,
-            product_order_id: inquiry.productOrderId,
-            buyer_member_id: inquiry.buyerMemberId,
-            create_date: inquiry.createDate,
+            buyer_member_id: inquiry.customerId || inquiry.buyerMemberId,
+            create_date: inquiry.inquiryRegistrationDateTime || inquiry.createDate,
             answer_content: inquiry.answerContent,
-            answer_date: inquiry.answerDate,
+            answer_date: inquiry.answerRegistrationDateTime || inquiry.answerDate,
+            // 새 API 필드들
+            category: inquiry.category,
+            inquiry_content: inquiry.inquiryContent,
+            inquiry_registration_date_time: inquiry.inquiryRegistrationDateTime,
+            answer_content_id: inquiry.answerContentId,
+            answer_template_no: inquiry.answerTemplateNo,
+            answer_registration_date_time: inquiry.answerRegistrationDateTime,
+            answered: inquiry.answered,
+            order_id: inquiry.orderId,
+            product_order_id_list: inquiry.productOrderIdList,
+            product_order_option: inquiry.productOrderOption,
+            customer_id: inquiry.customerId,
+            customer_name: inquiry.customerName,
             synced_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           },
@@ -137,17 +149,17 @@ export async function action({ request }: Route.ActionArgs) {
       const { createAdminClient } = await import("~/core/lib/supa-admin.server");
       const adminClient = createAdminClient();
 
-      const { error } = await adminClient.rpc("increment_template_use_count", {
-        template_id: templateId,
-      });
+      // 현재 use_count 가져와서 +1
+      const { data: current } = await adminClient
+        .from("naver_inquiry_templates")
+        .select("use_count")
+        .eq("id", templateId)
+        .single();
 
-      // RPC가 없으면 직접 업데이트
-      if (error) {
-        await adminClient
-          .from("naver_inquiry_templates")
-          .update({ use_count: adminClient.sql`use_count + 1` })
-          .eq("id", templateId);
-      }
+      await adminClient
+        .from("naver_inquiry_templates")
+        .update({ use_count: (current?.use_count || 0) + 1 })
+        .eq("id", templateId);
 
       return data({ success: true });
     }

@@ -2,6 +2,8 @@
  * 네이버 스마트스토어 문의 관리 페이지
  *
  * 기능:
+ * - 고객 문의 (주문 관련) 조회 및 답변
+ * - 상품 문의 (Q&A) 조회 및 답변
  * - 문의 목록 조회 (필터: 기간, 상태, 검색)
  * - 문의 상세 보기 (슬라이드 패널)
  * - 답변 등록/수정
@@ -20,6 +22,8 @@ import {
   RefreshCw,
   Download,
   CheckCircle2,
+  Package,
+  ShoppingCart,
 } from "lucide-react";
 import { data, Link, useFetcher, useNavigate, useSearchParams } from "react-router";
 
@@ -36,6 +40,12 @@ import {
   CardHeader,
   CardTitle,
 } from "~/core/components/ui/card";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "~/core/components/ui/tabs";
 
 import {
   InquiryStatsCards,
@@ -46,7 +56,9 @@ import {
   type InquiryStatusFilter,
   type InquiryTemplate,
 } from "../components/inquiry";
-import type { NaverInquiry } from "../lib/naver/naver-types.server";
+import { ProductQnaTable } from "../components/inquiry/ProductQnaTable";
+import { ProductQnaDetailSheet } from "../components/inquiry/ProductQnaDetailSheet";
+import type { NaverInquiry, NaverProductQna } from "../lib/naver/naver-types.server";
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: "네이버 문의 관리 | Sundayhug Admin" }];
@@ -86,10 +98,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   const dateRange = url.searchParams.get("dateRange") || "30days";
   const status = (url.searchParams.get("status") || "all") as InquiryStatusFilter;
   const searchQuery = url.searchParams.get("search") || "";
+  const tab = url.searchParams.get("tab") || "customer";
 
   // 동적 import로 서버 전용 모듈 로드
   const { getNaverToken } = await import("../lib/naver.server");
-  const { getInquiries } = await import("../lib/naver/naver-inquiries.server");
+  const { getCustomerInquiries, getProductQnas } = await import("../lib/naver/naver-inquiries.server");
   const { createAdminClient } = await import("~/core/lib/supa-admin.server");
 
   // 토큰 확인
@@ -98,9 +111,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!token) {
     return data({
       isConnected: false,
-      inquiries: [],
-      stats: { total: 0, waiting: 0, answered: 0, holding: 0 },
-      filters: { dateRange, status, searchQuery },
+      customerInquiries: [],
+      productQnas: [],
+      customerStats: { total: 0, waiting: 0, answered: 0, holding: 0 },
+      productQnaStats: { total: 0, waiting: 0, answered: 0 },
+      filters: { dateRange, status, searchQuery, tab },
       templates: [],
       error: "네이버 스마트스토어가 연동되지 않았습니다.",
     });
@@ -117,52 +132,73 @@ export async function loader({ request }: Route.LoaderArgs) {
   // 기간 계산
   const { startDate, endDate } = getDateRange(dateRange);
 
-  // 문의 조회
-  const result = await getInquiries({
+  // 고객 문의 조회
+  const customerResult = await getCustomerInquiries({
     startDate,
     endDate,
-    inquiryStatus: status === "all" ? undefined : status,
+    answered: status === "WAITING" ? false : status === "ANSWERED" ? true : undefined,
   });
 
-  if (!result.success) {
-    return data({
-      isConnected: true,
-      inquiries: [],
-      stats: { total: 0, waiting: 0, answered: 0, holding: 0 },
-      filters: { dateRange, status, searchQuery },
-      templates: templates || [],
-      error: result.error || "문의 조회 중 오류가 발생했습니다.",
-    });
-  }
+  // 상품 문의 조회
+  const productQnaResult = await getProductQnas({
+    fromDate: startDate,
+    toDate: endDate,
+    answered: status === "WAITING" ? false : status === "ANSWERED" ? true : undefined,
+  });
 
-  // 검색 필터링 (클라이언트 사이드에서도 가능하지만 서버에서 처리)
-  let filteredInquiries = result.inquiries || [];
+  // 고객 문의 검색 필터링
+  let filteredCustomerInquiries = customerResult.inquiries || [];
   if (searchQuery) {
     const query = searchQuery.toLowerCase();
-    filteredInquiries = filteredInquiries.filter(
+    filteredCustomerInquiries = filteredCustomerInquiries.filter(
       (inquiry) =>
         String(inquiry.inquiryNo).includes(query) ||
         (inquiry.title?.toLowerCase().includes(query) ?? false) ||
-        (inquiry.content?.toLowerCase().includes(query) ?? false)
+        (inquiry.content?.toLowerCase().includes(query) ?? false) ||
+        (inquiry.productName?.toLowerCase().includes(query) ?? false)
     );
   }
 
-  // 통계 계산
-  const allInquiries = result.inquiries || [];
-  const stats = {
-    total: allInquiries.length,
-    waiting: allInquiries.filter((i) => i.inquiryStatus === "WAITING").length,
-    answered: allInquiries.filter((i) => i.inquiryStatus === "ANSWERED").length,
-    holding: allInquiries.filter((i) => i.inquiryStatus === "HOLDING").length,
+  // 상품 문의 검색 필터링
+  let filteredProductQnas = productQnaResult.qnas || [];
+  if (searchQuery) {
+    const query = searchQuery.toLowerCase();
+    filteredProductQnas = filteredProductQnas.filter(
+      (qna) =>
+        String(qna.questionId).includes(query) ||
+        (qna.question?.toLowerCase().includes(query) ?? false) ||
+        (qna.productName?.toLowerCase().includes(query) ?? false)
+    );
+  }
+
+  // 고객 문의 통계
+  const allCustomerInquiries = customerResult.inquiries || [];
+  const customerStats = {
+    total: allCustomerInquiries.length,
+    waiting: allCustomerInquiries.filter((i) => !i.answered).length,
+    answered: allCustomerInquiries.filter((i) => i.answered).length,
+    holding: 0, // 고객 문의는 보류 상태가 없음
+  };
+
+  // 상품 문의 통계
+  const allProductQnas = productQnaResult.qnas || [];
+  const productQnaStats = {
+    total: allProductQnas.length,
+    waiting: allProductQnas.filter((q) => !q.answered).length,
+    answered: allProductQnas.filter((q) => q.answered).length,
   };
 
   return data({
     isConnected: true,
-    inquiries: filteredInquiries,
-    stats,
-    filters: { dateRange, status, searchQuery },
+    customerInquiries: filteredCustomerInquiries,
+    productQnas: filteredProductQnas,
+    customerStats,
+    productQnaStats,
+    filters: { dateRange, status, searchQuery, tab },
     templates: templates || [],
-    error: null,
+    error: customerResult.success && productQnaResult.success
+      ? null
+      : customerResult.error || productQnaResult.error || "문의 조회 중 오류가 발생했습니다.",
   });
 }
 
@@ -171,7 +207,8 @@ export async function action({ request }: Route.ActionArgs) {
   const actionType = formData.get("actionType") as string;
 
   try {
-    if (actionType === "answer") {
+    // 고객 문의 답변
+    if (actionType === "answer_customer") {
       const inquiryNo = Number(formData.get("inquiryNo"));
       const answerContent = formData.get("answerContent") as string;
 
@@ -186,19 +223,21 @@ export async function action({ request }: Route.ActionArgs) {
         return data({ success: false, error: result.error });
       }
 
-      return data({ success: true, message: "답변이 등록되었습니다." });
+      return data({ success: true, message: "답변이 등록되었습니다.", answerContentId: result.answerContentId });
     }
 
-    if (actionType === "update_answer") {
+    // 고객 문의 답변 수정
+    if (actionType === "update_customer_answer") {
       const inquiryNo = Number(formData.get("inquiryNo"));
       const answerContent = formData.get("answerContent") as string;
+      const answerContentId = Number(formData.get("answerContentId"));
 
-      if (!inquiryNo || !answerContent?.trim()) {
+      if (!inquiryNo || !answerContent?.trim() || !answerContentId) {
         return data({ success: false, error: "필수 정보가 누락되었습니다." });
       }
 
       const { updateInquiryAnswer } = await import("../lib/naver/naver-inquiries.server");
-      const result = await updateInquiryAnswer({ inquiryNo, answerContent });
+      const result = await updateInquiryAnswer({ inquiryNo, answerContent, answerContentId });
 
       if (!result.success) {
         return data({ success: false, error: result.error });
@@ -207,10 +246,29 @@ export async function action({ request }: Route.ActionArgs) {
       return data({ success: true, message: "답변이 수정되었습니다." });
     }
 
-    if (actionType === "sync") {
-      // 네이버 API에서 문의 가져와서 DB에 동기화
+    // 상품 문의 답변 (신규 및 수정 모두)
+    if (actionType === "answer_product_qna") {
+      const questionId = Number(formData.get("questionId"));
+      const commentContent = formData.get("commentContent") as string;
+
+      if (!questionId || !commentContent?.trim()) {
+        return data({ success: false, error: "필수 정보가 누락되었습니다." });
+      }
+
+      const { answerProductQna } = await import("../lib/naver/naver-inquiries.server");
+      const result = await answerProductQna({ questionId, commentContent });
+
+      if (!result.success) {
+        return data({ success: false, error: result.error });
+      }
+
+      return data({ success: true, message: "답변이 등록되었습니다." });
+    }
+
+    // 고객 문의 동기화
+    if (actionType === "sync_customer") {
       const { getNaverToken } = await import("../lib/naver.server");
-      const { getInquiries } = await import("../lib/naver/naver-inquiries.server");
+      const { getCustomerInquiries } = await import("../lib/naver/naver-inquiries.server");
       const { createAdminClient } = await import("~/core/lib/supa-admin.server");
 
       const token = await getNaverToken();
@@ -222,7 +280,7 @@ export async function action({ request }: Route.ActionArgs) {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 30);
 
-      const result = await getInquiries({
+      const result = await getCustomerInquiries({
         startDate: startDate.toISOString(),
         endDate: new Date().toISOString(),
         size: 500,
@@ -241,17 +299,29 @@ export async function action({ request }: Route.ActionArgs) {
         const { error } = await adminClient.from("naver_inquiries").upsert(
           {
             inquiry_no: inquiry.inquiryNo,
-            inquiry_type_name: inquiry.inquiryTypeName,
-            inquiry_status: inquiry.inquiryStatus,
+            inquiry_type_name: inquiry.category || inquiry.inquiryTypeName,
+            inquiry_status: inquiry.answered ? "ANSWERED" : "WAITING",
             title: inquiry.title,
-            content: inquiry.content,
-            product_no: inquiry.productNo,
+            content: inquiry.inquiryContent || inquiry.content,
+            product_no: inquiry.productNo ? Number(inquiry.productNo) : null,
             product_name: inquiry.productName,
-            product_order_id: inquiry.productOrderId,
-            buyer_member_id: inquiry.buyerMemberId,
-            create_date: inquiry.createDate,
+            buyer_member_id: inquiry.customerId || inquiry.buyerMemberId,
+            create_date: inquiry.inquiryRegistrationDateTime || inquiry.createDate,
             answer_content: inquiry.answerContent,
-            answer_date: inquiry.answerDate,
+            answer_date: inquiry.answerRegistrationDateTime || inquiry.answerDate,
+            // 새 필드들
+            category: inquiry.category,
+            inquiry_content: inquiry.inquiryContent,
+            inquiry_registration_date_time: inquiry.inquiryRegistrationDateTime,
+            answer_content_id: inquiry.answerContentId,
+            answer_template_no: inquiry.answerTemplateNo,
+            answer_registration_date_time: inquiry.answerRegistrationDateTime,
+            answered: inquiry.answered,
+            order_id: inquiry.orderId,
+            product_order_id_list: inquiry.productOrderIdList,
+            product_order_option: inquiry.productOrderOption,
+            customer_id: inquiry.customerId,
+            customer_name: inquiry.customerName,
             synced_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           },
@@ -265,10 +335,71 @@ export async function action({ request }: Route.ActionArgs) {
 
       return data({
         success: true,
-        message: `${syncedCount}건의 문의가 동기화되었습니다.`,
+        message: `${syncedCount}건의 고객 문의가 동기화되었습니다.`,
       });
     }
 
+    // 상품 문의 동기화
+    if (actionType === "sync_product_qna") {
+      const { getNaverToken } = await import("../lib/naver.server");
+      const { getProductQnas } = await import("../lib/naver/naver-inquiries.server");
+      const { createAdminClient } = await import("~/core/lib/supa-admin.server");
+
+      const token = await getNaverToken();
+      if (!token) {
+        return data({ success: false, error: "네이버 연동이 필요합니다." });
+      }
+
+      // 최근 30일 문의 조회
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+
+      const result = await getProductQnas({
+        fromDate: startDate.toISOString(),
+        toDate: new Date().toISOString(),
+        size: 500,
+      });
+
+      if (!result.success) {
+        return data({ success: false, error: result.error });
+      }
+
+      const qnas = result.qnas || [];
+      const adminClient = createAdminClient();
+
+      // DB에 upsert
+      let syncedCount = 0;
+      for (const qna of qnas) {
+        const { error } = await adminClient.from("naver_product_qnas").upsert(
+          {
+            question_id: qna.questionId,
+            question: qna.question,
+            answer: qna.answer,
+            answered: qna.answered,
+            create_date: qna.createDate,
+            answer_date: qna.answerDate,
+            product_id: qna.productId,
+            product_name: qna.productName,
+            masked_writer_id: qna.maskedWriterId,
+            channel_no: qna.channelNo,
+            synced_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "question_id" }
+        );
+
+        if (!error) {
+          syncedCount++;
+        }
+      }
+
+      return data({
+        success: true,
+        message: `${syncedCount}건의 상품 문의가 동기화되었습니다.`,
+      });
+    }
+
+    // 템플릿 저장
     if (actionType === "save_template") {
       const name = formData.get("name") as string;
       const content = formData.get("content") as string;
@@ -292,6 +423,7 @@ export async function action({ request }: Route.ActionArgs) {
       return data({ success: true, message: "템플릿이 저장되었습니다." });
     }
 
+    // 템플릿 삭제
     if (actionType === "delete_template") {
       const templateId = formData.get("templateId") as string;
 
@@ -314,6 +446,120 @@ export async function action({ request }: Route.ActionArgs) {
       return data({ success: true, message: "템플릿이 삭제되었습니다." });
     }
 
+    // 하위 호환성: 기존 answer/update_answer 액션 지원
+    if (actionType === "answer") {
+      const inquiryNo = Number(formData.get("inquiryNo"));
+      const answerContent = formData.get("answerContent") as string;
+
+      if (!inquiryNo || !answerContent?.trim()) {
+        return data({ success: false, error: "필수 정보가 누락되었습니다." });
+      }
+
+      const { answerInquiry } = await import("../lib/naver/naver-inquiries.server");
+      const result = await answerInquiry({ inquiryNo, answerContent });
+
+      if (!result.success) {
+        return data({ success: false, error: result.error });
+      }
+
+      return data({ success: true, message: "답변이 등록되었습니다." });
+    }
+
+    if (actionType === "update_answer") {
+      const inquiryNo = Number(formData.get("inquiryNo"));
+      const answerContent = formData.get("answerContent") as string;
+      const answerContentId = Number(formData.get("answerContentId"));
+
+      if (!inquiryNo || !answerContent?.trim()) {
+        return data({ success: false, error: "필수 정보가 누락되었습니다." });
+      }
+
+      // answerContentId가 있으면 새 API 사용, 없으면 에러
+      if (!answerContentId) {
+        return data({ success: false, error: "답변 ID가 필요합니다. 문의를 다시 동기화해주세요." });
+      }
+
+      const { updateInquiryAnswer } = await import("../lib/naver/naver-inquiries.server");
+      const result = await updateInquiryAnswer({ inquiryNo, answerContent, answerContentId });
+
+      if (!result.success) {
+        return data({ success: false, error: result.error });
+      }
+
+      return data({ success: true, message: "답변이 수정되었습니다." });
+    }
+
+    if (actionType === "sync") {
+      // 기존 sync는 고객 문의 동기화로 처리
+      const { getNaverToken } = await import("../lib/naver.server");
+      const { getCustomerInquiries } = await import("../lib/naver/naver-inquiries.server");
+      const { createAdminClient } = await import("~/core/lib/supa-admin.server");
+
+      const token = await getNaverToken();
+      if (!token) {
+        return data({ success: false, error: "네이버 연동이 필요합니다." });
+      }
+
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+
+      const result = await getCustomerInquiries({
+        startDate: startDate.toISOString(),
+        endDate: new Date().toISOString(),
+        size: 500,
+      });
+
+      if (!result.success) {
+        return data({ success: false, error: result.error });
+      }
+
+      const inquiries = result.inquiries || [];
+      const adminClient = createAdminClient();
+
+      let syncedCount = 0;
+      for (const inquiry of inquiries) {
+        const { error } = await adminClient.from("naver_inquiries").upsert(
+          {
+            inquiry_no: inquiry.inquiryNo,
+            inquiry_type_name: inquiry.category || inquiry.inquiryTypeName,
+            inquiry_status: inquiry.answered ? "ANSWERED" : "WAITING",
+            title: inquiry.title,
+            content: inquiry.inquiryContent || inquiry.content,
+            product_no: inquiry.productNo ? Number(inquiry.productNo) : null,
+            product_name: inquiry.productName,
+            buyer_member_id: inquiry.customerId || inquiry.buyerMemberId,
+            create_date: inquiry.inquiryRegistrationDateTime || inquiry.createDate,
+            answer_content: inquiry.answerContent,
+            answer_date: inquiry.answerRegistrationDateTime || inquiry.answerDate,
+            category: inquiry.category,
+            inquiry_content: inquiry.inquiryContent,
+            inquiry_registration_date_time: inquiry.inquiryRegistrationDateTime,
+            answer_content_id: inquiry.answerContentId,
+            answer_template_no: inquiry.answerTemplateNo,
+            answer_registration_date_time: inquiry.answerRegistrationDateTime,
+            answered: inquiry.answered,
+            order_id: inquiry.orderId,
+            product_order_id_list: inquiry.productOrderIdList,
+            product_order_option: inquiry.productOrderOption,
+            customer_id: inquiry.customerId,
+            customer_name: inquiry.customerName,
+            synced_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "inquiry_no" }
+        );
+
+        if (!error) {
+          syncedCount++;
+        }
+      }
+
+      return data({
+        success: true,
+        message: `${syncedCount}건의 문의가 동기화되었습니다.`,
+      });
+    }
+
     return data({ success: false, error: "알 수 없는 액션입니다." });
   } catch (error) {
     console.error("❌ 문의 액션 오류:", error);
@@ -325,24 +571,50 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function NaverInquiries({ loaderData, actionData }: Route.ComponentProps) {
-  const { isConnected, inquiries, stats, filters, templates, error } = loaderData;
+  const {
+    isConnected,
+    customerInquiries,
+    productQnas,
+    customerStats,
+    productQnaStats,
+    filters,
+    templates,
+    error
+  } = loaderData;
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const fetcher = useFetcher();
   const syncFetcher = useFetcher();
 
+  // 현재 탭
+  const currentTab = filters.tab || "customer";
+
   // 선택된 문의 (상세 패널용)
   const [selectedInquiry, setSelectedInquiry] = useState<NaverInquiry | null>(null);
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [selectedProductQna, setSelectedProductQna] = useState<NaverProductQna | null>(null);
+  const [isCustomerSheetOpen, setIsCustomerSheetOpen] = useState(false);
+  const [isProductQnaSheetOpen, setIsProductQnaSheetOpen] = useState(false);
 
   // 액션 결과 처리
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success) {
       // 성공 시 패널 닫고 새로고침
-      setIsSheetOpen(false);
+      setIsCustomerSheetOpen(false);
+      setIsProductQnaSheetOpen(false);
       setSelectedInquiry(null);
+      setSelectedProductQna(null);
     }
   }, [actionData]);
+
+  // 탭 변경 핸들러
+  const handleTabChange = useCallback(
+    (tab: string) => {
+      const params = new URLSearchParams(searchParams);
+      params.set("tab", tab);
+      setSearchParams(params);
+    },
+    [searchParams, setSearchParams]
+  );
 
   // 필터 변경 핸들러
   const handleFilterChange = useCallback(
@@ -375,26 +647,54 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
     navigate(".", { replace: true });
   }, [navigate]);
 
-  // 동기화 핸들러
-  const handleSync = useCallback(() => {
+  // 동기화 핸들러 (고객 문의)
+  const handleSyncCustomer = useCallback(() => {
     const formData = new FormData();
-    formData.set("actionType", "sync");
+    formData.set("actionType", "sync_customer");
     syncFetcher.submit(formData, { method: "POST" });
   }, [syncFetcher]);
 
-  // 행 클릭 핸들러
-  const handleRowClick = useCallback((inquiry: NaverInquiry) => {
+  // 동기화 핸들러 (상품 문의)
+  const handleSyncProductQna = useCallback(() => {
+    const formData = new FormData();
+    formData.set("actionType", "sync_product_qna");
+    syncFetcher.submit(formData, { method: "POST" });
+  }, [syncFetcher]);
+
+  // 고객 문의 행 클릭 핸들러
+  const handleCustomerRowClick = useCallback((inquiry: NaverInquiry) => {
     setSelectedInquiry(inquiry);
-    setIsSheetOpen(true);
+    setIsCustomerSheetOpen(true);
   }, []);
 
-  // 답변 제출 핸들러
-  const handleAnswerSubmit = useCallback(
-    (inquiryNo: number, content: string, isUpdate: boolean) => {
+  // 상품 문의 행 클릭 핸들러
+  const handleProductQnaRowClick = useCallback((qna: NaverProductQna) => {
+    setSelectedProductQna(qna);
+    setIsProductQnaSheetOpen(true);
+  }, []);
+
+  // 고객 문의 답변 제출 핸들러
+  const handleCustomerAnswerSubmit = useCallback(
+    (inquiryNo: number, content: string, isUpdate: boolean, answerContentId?: number) => {
       const formData = new FormData();
-      formData.set("actionType", isUpdate ? "update_answer" : "answer");
+      formData.set("actionType", isUpdate ? "update_customer_answer" : "answer_customer");
       formData.set("inquiryNo", String(inquiryNo));
       formData.set("answerContent", content);
+      if (isUpdate && answerContentId) {
+        formData.set("answerContentId", String(answerContentId));
+      }
+      fetcher.submit(formData, { method: "POST" });
+    },
+    [fetcher]
+  );
+
+  // 상품 문의 답변 제출 핸들러
+  const handleProductQnaAnswerSubmit = useCallback(
+    (questionId: number, content: string) => {
+      const formData = new FormData();
+      formData.set("actionType", "answer_product_qna");
+      formData.set("questionId", String(questionId));
+      formData.set("commentContent", content);
       fetcher.submit(formData, { method: "POST" });
     },
     [fetcher]
@@ -455,6 +755,10 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
   const isLoading = fetcher.state !== "idle";
   const isSyncing = syncFetcher.state !== "idle";
 
+  // 현재 탭에 따른 통계
+  const currentStats = currentTab === "customer" ? customerStats : productQnaStats;
+  const totalUnanswered = customerStats.waiting + productQnaStats.waiting;
+
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
       {/* 헤더 */}
@@ -471,20 +775,17 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
               네이버 문의 관리
             </h1>
             <p className="text-muted-foreground">
-              고객 문의를 확인하고 답변을 작성합니다
+              고객 문의와 상품 문의를 확인하고 답변을 작성합니다
+              {totalUnanswered > 0 && (
+                <span className="ml-2 text-orange-500 font-medium">
+                  (미답변 총 {totalUnanswered}건)
+                </span>
+              )}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={handleSync}
-            disabled={isSyncing}
-          >
-            <Download className={`h-4 w-4 mr-2 ${isSyncing ? "animate-pulse" : ""}`} />
-            {isSyncing ? "동기화 중..." : "DB 동기화"}
-          </Button>
           <Button variant="outline" onClick={handleRefresh} disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
             새로고침
@@ -540,56 +841,168 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
         </Alert>
       )}
 
-      {/* 통계 카드 */}
-      <InquiryStatsCards
-        total={stats.total}
-        waiting={stats.waiting}
-        answered={stats.answered}
-        holding={stats.holding}
-        onStatusClick={handleStatusClick}
-      />
-
-      {/* 메인 카드 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>문의 목록</CardTitle>
-          <CardDescription>
-            총 {inquiries.length}건의 문의가 있습니다
-            {stats.waiting > 0 && (
-              <span className="ml-2 text-orange-500 font-medium">
-                (미답변 {stats.waiting}건)
+      {/* 탭 */}
+      <Tabs value={currentTab} onValueChange={handleTabChange}>
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="customer" className="flex items-center gap-2">
+            <ShoppingCart className="h-4 w-4" />
+            고객 문의
+            {customerStats.waiting > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">
+                {customerStats.waiting}
               </span>
             )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* 필터 */}
-          <InquiryFilters
-            filters={{
-              dateRange: filters.dateRange,
-              status: filters.status as InquiryStatusFilter,
-              searchQuery: filters.searchQuery,
-            }}
-            onFilterChange={handleFilterChange}
-            onRefresh={handleRefresh}
-            isLoading={isLoading}
+          </TabsTrigger>
+          <TabsTrigger value="product" className="flex items-center gap-2">
+            <Package className="h-4 w-4" />
+            상품 문의
+            {productQnaStats.waiting > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">
+                {productQnaStats.waiting}
+              </span>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        {/* 고객 문의 탭 */}
+        <TabsContent value="customer" className="space-y-6">
+          {/* 통계 카드 */}
+          <InquiryStatsCards
+            total={customerStats.total}
+            waiting={customerStats.waiting}
+            answered={customerStats.answered}
+            holding={customerStats.holding}
+            onStatusClick={handleStatusClick}
           />
 
-          {/* 테이블 */}
-          <InquiryTable
-            inquiries={inquiries}
-            isLoading={isLoading}
-            onRowClick={handleRowClick}
-          />
-        </CardContent>
-      </Card>
+          {/* 메인 카드 */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>고객 문의 목록</CardTitle>
+                  <CardDescription>
+                    주문 관련 고객 문의 {customerInquiries.length}건
+                    {customerStats.waiting > 0 && (
+                      <span className="ml-2 text-orange-500 font-medium">
+                        (미답변 {customerStats.waiting}건)
+                      </span>
+                    )}
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={handleSyncCustomer}
+                  disabled={isSyncing}
+                >
+                  <Download className={`h-4 w-4 mr-2 ${isSyncing ? "animate-pulse" : ""}`} />
+                  {isSyncing ? "동기화 중..." : "DB 동기화"}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* 필터 */}
+              <InquiryFilters
+                filters={{
+                  dateRange: filters.dateRange,
+                  status: filters.status as InquiryStatusFilter,
+                  searchQuery: filters.searchQuery,
+                }}
+                onFilterChange={handleFilterChange}
+                onRefresh={handleRefresh}
+                isLoading={isLoading}
+              />
 
-      {/* 상세 패널 */}
+              {/* 테이블 */}
+              <InquiryTable
+                inquiries={customerInquiries}
+                isLoading={isLoading}
+                onRowClick={handleCustomerRowClick}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* 상품 문의 탭 */}
+        <TabsContent value="product" className="space-y-6">
+          {/* 통계 카드 - 상품 문의용 */}
+          <InquiryStatsCards
+            total={productQnaStats.total}
+            waiting={productQnaStats.waiting}
+            answered={productQnaStats.answered}
+            holding={0}
+            onStatusClick={handleStatusClick}
+          />
+
+          {/* 메인 카드 */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>상품 문의 목록</CardTitle>
+                  <CardDescription>
+                    상품 페이지 Q&A {productQnas.length}건
+                    {productQnaStats.waiting > 0 && (
+                      <span className="ml-2 text-orange-500 font-medium">
+                        (미답변 {productQnaStats.waiting}건)
+                      </span>
+                    )}
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={handleSyncProductQna}
+                  disabled={isSyncing}
+                >
+                  <Download className={`h-4 w-4 mr-2 ${isSyncing ? "animate-pulse" : ""}`} />
+                  {isSyncing ? "동기화 중..." : "DB 동기화"}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* 필터 */}
+              <InquiryFilters
+                filters={{
+                  dateRange: filters.dateRange,
+                  status: filters.status as InquiryStatusFilter,
+                  searchQuery: filters.searchQuery,
+                }}
+                onFilterChange={handleFilterChange}
+                onRefresh={handleRefresh}
+                isLoading={isLoading}
+              />
+
+              {/* 테이블 */}
+              <ProductQnaTable
+                qnas={productQnas}
+                isLoading={isLoading}
+                onRowClick={handleProductQnaRowClick}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* 고객 문의 상세 패널 */}
       <InquiryDetailSheet
         inquiry={selectedInquiry}
-        open={isSheetOpen}
-        onOpenChange={setIsSheetOpen}
-        onAnswerSubmit={handleAnswerSubmit}
+        open={isCustomerSheetOpen}
+        onOpenChange={setIsCustomerSheetOpen}
+        onAnswerSubmit={(inquiryNo, content, isUpdate) =>
+          handleCustomerAnswerSubmit(inquiryNo, content, isUpdate, selectedInquiry?.answerContentId)
+        }
+        isSubmitting={fetcher.state === "submitting"}
+        templates={templates as InquiryTemplate[]}
+        onSaveTemplate={handleSaveTemplate}
+        onDeleteTemplate={handleDeleteTemplate}
+      />
+
+      {/* 상품 문의 상세 패널 */}
+      <ProductQnaDetailSheet
+        qna={selectedProductQna}
+        open={isProductQnaSheetOpen}
+        onOpenChange={setIsProductQnaSheetOpen}
+        onAnswerSubmit={handleProductQnaAnswerSubmit}
         isSubmitting={fetcher.state === "submitting"}
         templates={templates as InquiryTemplate[]}
         onSaveTemplate={handleSaveTemplate}

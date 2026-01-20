@@ -1,11 +1,7 @@
 /**
- * 문의 상세 슬라이드 패널 컴포넌트
+ * 상품 문의 상세 슬라이드 패널 컴포넌트
  *
- * Intercom 스타일의 오른쪽 슬라이드 패널
- * - 문의 정보 표시
- * - 문의 내용 읽기
- * - 답변 작성/수정 폼
- * - 답변 템플릿 선택
+ * 상품 Q&A 상세 정보 표시 및 답변 작성
  */
 
 import { useState, useEffect } from "react";
@@ -13,7 +9,6 @@ import {
   Calendar,
   Package,
   User,
-  Tag,
   MessageSquare,
   Loader2,
   Send,
@@ -32,13 +27,13 @@ import { Label } from "~/core/components/ui/label";
 import { Separator } from "~/core/components/ui/separator";
 import { InquiryStatusBadge } from "./InquiryStatusBadge";
 import { InquiryTemplateSelect, type InquiryTemplate } from "./InquiryTemplateSelect";
-import type { NaverInquiry } from "../../lib/naver/naver-types.server";
+import type { NaverProductQna } from "../../lib/naver/naver-types.server";
 
-interface InquiryDetailSheetProps {
-  inquiry: NaverInquiry | null;
+interface ProductQnaDetailSheetProps {
+  qna: NaverProductQna | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAnswerSubmit: (inquiryNo: number, content: string, isUpdate: boolean) => void;
+  onAnswerSubmit: (questionId: number, content: string) => void;
   isSubmitting: boolean;
   templates?: InquiryTemplate[];
   onSaveTemplate?: (name: string, content: string, category: string) => void;
@@ -78,8 +73,8 @@ function InfoItem({
   );
 }
 
-export function InquiryDetailSheet({
-  inquiry,
+export function ProductQnaDetailSheet({
+  qna,
   open,
   onOpenChange,
   onAnswerSubmit,
@@ -87,9 +82,9 @@ export function InquiryDetailSheet({
   templates = [],
   onSaveTemplate,
   onDeleteTemplate,
-}: InquiryDetailSheetProps) {
+}: ProductQnaDetailSheetProps) {
   const [answerContent, setAnswerContent] = useState("");
-  const isUpdate = Boolean(inquiry?.answerContent);
+  const isUpdate = Boolean(qna?.answer);
 
   // 템플릿 선택 시 내용 적용
   const handleTemplateSelect = (content: string) => {
@@ -98,29 +93,29 @@ export function InquiryDetailSheet({
 
   // 기존 답변이 있으면 불러오기
   useEffect(() => {
-    if (inquiry?.answerContent) {
-      setAnswerContent(inquiry.answerContent);
+    if (qna?.answer) {
+      setAnswerContent(qna.answer);
     } else {
       setAnswerContent("");
     }
-  }, [inquiry]);
+  }, [qna]);
 
   const handleSubmit = () => {
-    if (!inquiry || !answerContent.trim()) return;
-    onAnswerSubmit(inquiry.inquiryNo, answerContent.trim(), isUpdate);
+    if (!qna || !answerContent.trim()) return;
+    onAnswerSubmit(qna.questionId, answerContent.trim());
   };
 
-  if (!inquiry) return null;
+  if (!qna) return null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader>
           <div className="flex items-center justify-between">
-            <SheetTitle>문의 상세</SheetTitle>
-            <InquiryStatusBadge status={inquiry.inquiryStatus || (inquiry.answered ? "ANSWERED" : "WAITING")} />
+            <SheetTitle>상품 문의 상세</SheetTitle>
+            <InquiryStatusBadge status={qna.answered ? "ANSWERED" : "WAITING"} />
           </div>
-          <SheetDescription>문의번호: {inquiry.inquiryNo}</SheetDescription>
+          <SheetDescription>문의번호: {qna.questionId}</SheetDescription>
         </SheetHeader>
 
         <div className="mt-6 space-y-6">
@@ -131,24 +126,19 @@ export function InquiryDetailSheet({
             </h3>
             <div className="grid gap-3">
               <InfoItem
-                icon={Tag}
-                label="문의 유형"
-                value={inquiry.inquiryTypeName || "-"}
-              />
-              <InfoItem
                 icon={Package}
                 label="상품"
-                value={inquiry.productName || "-"}
+                value={qna.productName || "-"}
               />
               <InfoItem
                 icon={User}
-                label="회원 ID"
-                value={inquiry.buyerMemberId || inquiry.customerId || "-"}
+                label="작성자"
+                value={qna.maskedWriterId || "-"}
               />
               <InfoItem
                 icon={Calendar}
                 label="문의일시"
-                value={formatDate(inquiry.createDate || inquiry.inquiryRegistrationDateTime || "")}
+                value={formatDate(qna.createDate)}
               />
             </div>
           </div>
@@ -159,14 +149,11 @@ export function InquiryDetailSheet({
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
               <MessageSquare className="h-4 w-4" />
-              문의 내용
+              질문 내용
             </h3>
-            {inquiry.title && (
-              <p className="font-medium">{inquiry.title}</p>
-            )}
             <div className="p-4 bg-muted rounded-lg">
               <p className="text-sm whitespace-pre-wrap">
-                {inquiry.content || "내용 없음"}
+                {qna.question || "내용 없음"}
               </p>
             </div>
           </div>
@@ -190,9 +177,9 @@ export function InquiryDetailSheet({
                 )}
               </h3>
               <div className="flex items-center gap-2">
-                {inquiry.answerDate && (
+                {qna.answerDate && (
                   <p className="text-xs text-muted-foreground">
-                    답변일: {formatDate(inquiry.answerDate)}
+                    답변일: {formatDate(qna.answerDate)}
                   </p>
                 )}
                 {templates.length > 0 && (

@@ -340,6 +340,39 @@ export interface GetInquiriesParams {
 export interface InquiryAnswerParams {
   inquiryNo: number;
   answerContent: string;
+  answerTemplateId?: number;
+}
+
+/**
+ * 네이버 상품 문의 (Q&A) 응답 구조
+ * GET /v1/contents/qnas 응답
+ */
+export interface NaverProductQna {
+  questionId: number;
+  question: string;
+  answer?: string;
+  answered: boolean;
+  createDate: string;
+  answerDate?: string;
+  productId: string;
+  productName?: string;
+  maskedWriterId?: string;
+  channelNo?: number;
+  // UI 호환성을 위한 별칭
+  inquiryStatus?: "WAITING" | "ANSWERED";
+}
+
+export interface GetProductQnasParams {
+  fromDate?: string;
+  toDate?: string;
+  answered?: boolean;
+  page?: number;
+  size?: number;
+}
+
+export interface ProductQnaAnswerParams {
+  questionId: number;
+  commentContent: string;
 }
 
 // ============================================================================
