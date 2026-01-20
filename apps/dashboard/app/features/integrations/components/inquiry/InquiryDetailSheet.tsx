@@ -5,6 +5,7 @@
  * - 문의 정보 표시
  * - 문의 내용 읽기
  * - 답변 작성/수정 폼
+ * - 답변 템플릿 선택
  */
 
 import { useState, useEffect } from "react";
@@ -30,6 +31,7 @@ import { Textarea } from "~/core/components/ui/textarea";
 import { Label } from "~/core/components/ui/label";
 import { Separator } from "~/core/components/ui/separator";
 import { InquiryStatusBadge } from "./InquiryStatusBadge";
+import { InquiryTemplateSelect, type InquiryTemplate } from "./InquiryTemplateSelect";
 import type { NaverInquiry } from "../../lib/naver/naver-types.server";
 
 interface InquiryDetailSheetProps {
@@ -38,6 +40,9 @@ interface InquiryDetailSheetProps {
   onOpenChange: (open: boolean) => void;
   onAnswerSubmit: (inquiryNo: number, content: string, isUpdate: boolean) => void;
   isSubmitting: boolean;
+  templates?: InquiryTemplate[];
+  onSaveTemplate?: (name: string, content: string, category: string) => void;
+  onDeleteTemplate?: (id: string) => void;
 }
 
 function formatDate(dateString: string): string {
@@ -79,9 +84,17 @@ export function InquiryDetailSheet({
   onOpenChange,
   onAnswerSubmit,
   isSubmitting,
+  templates = [],
+  onSaveTemplate,
+  onDeleteTemplate,
 }: InquiryDetailSheetProps) {
   const [answerContent, setAnswerContent] = useState("");
   const isUpdate = Boolean(inquiry?.answerContent);
+
+  // 템플릿 선택 시 내용 적용
+  const handleTemplateSelect = (content: string) => {
+    setAnswerContent(content);
+  };
 
   // 기존 답변이 있으면 불러오기
   useEffect(() => {
@@ -176,11 +189,22 @@ export function InquiryDetailSheet({
                   </>
                 )}
               </h3>
-              {inquiry.answerDate && (
-                <p className="text-xs text-muted-foreground">
-                  답변일: {formatDate(inquiry.answerDate)}
-                </p>
-              )}
+              <div className="flex items-center gap-2">
+                {inquiry.answerDate && (
+                  <p className="text-xs text-muted-foreground">
+                    답변일: {formatDate(inquiry.answerDate)}
+                  </p>
+                )}
+                {templates.length > 0 && (
+                  <InquiryTemplateSelect
+                    templates={templates}
+                    onSelect={handleTemplateSelect}
+                    onSaveTemplate={onSaveTemplate}
+                    onDeleteTemplate={onDeleteTemplate}
+                    currentContent={answerContent}
+                  />
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">

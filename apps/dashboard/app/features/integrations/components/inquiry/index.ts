@@ -9,3 +9,4 @@ export { InquiryStatusBadge } from "./InquiryStatusBadge";
 export { InquiryFilters, type InquiryFilterValues, type InquiryStatusFilter } from "./InquiryFilters";
 export { InquiryTable } from "./InquiryTable";
 export { InquiryDetailSheet } from "./InquiryDetailSheet";
+export { InquiryTemplateSelect, type InquiryTemplate } from "./InquiryTemplateSelect";

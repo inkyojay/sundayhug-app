@@ -5,12 +5,22 @@
  * - 문의 목록 조회 (필터: 기간, 상태, 검색)
  * - 문의 상세 보기 (슬라이드 패널)
  * - 답변 등록/수정
+ * - 답변 템플릿 기능
+ * - DB 동기화
  * - 통계 카드
  */
 import type { Route } from "./+types/naver-inquiries";
 
 import { useState, useCallback, useEffect } from "react";
-import { ArrowLeft, MessageSquare, ExternalLink, AlertCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  MessageSquare,
+  ExternalLink,
+  AlertCircle,
+  RefreshCw,
+  Download,
+  CheckCircle2,
+} from "lucide-react";
 import { data, Link, useFetcher, useNavigate, useSearchParams } from "react-router";
 
 import {
@@ -34,6 +44,7 @@ import {
   InquiryDetailSheet,
   type InquiryFilterValues,
   type InquiryStatusFilter,
+  type InquiryTemplate,
 } from "../components/inquiry";
 import type { NaverInquiry } from "../lib/naver/naver-types.server";
 
@@ -79,6 +90,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // 동적 import로 서버 전용 모듈 로드
   const { getNaverToken } = await import("../lib/naver.server");
   const { getInquiries } = await import("../lib/naver/naver-inquiries.server");
+  const { createAdminClient } = await import("~/core/lib/supa-admin.server");
 
   // 토큰 확인
   const token = await getNaverToken();
@@ -89,9 +101,18 @@ export async function loader({ request }: Route.LoaderArgs) {
       inquiries: [],
       stats: { total: 0, waiting: 0, answered: 0, holding: 0 },
       filters: { dateRange, status, searchQuery },
+      templates: [],
       error: "네이버 스마트스토어가 연동되지 않았습니다.",
     });
   }
+
+  // 템플릿 조회
+  const adminClient = createAdminClient();
+  const { data: templates } = await adminClient
+    .from("naver_inquiry_templates")
+    .select("*")
+    .eq("is_active", true)
+    .order("use_count", { ascending: false });
 
   // 기간 계산
   const { startDate, endDate } = getDateRange(dateRange);
@@ -109,6 +130,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       inquiries: [],
       stats: { total: 0, waiting: 0, answered: 0, holding: 0 },
       filters: { dateRange, status, searchQuery },
+      templates: templates || [],
       error: result.error || "문의 조회 중 오류가 발생했습니다.",
     });
   }
@@ -139,6 +161,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     inquiries: filteredInquiries,
     stats,
     filters: { dateRange, status, searchQuery },
+    templates: templates || [],
     error: null,
   });
 }
@@ -184,6 +207,113 @@ export async function action({ request }: Route.ActionArgs) {
       return data({ success: true, message: "답변이 수정되었습니다." });
     }
 
+    if (actionType === "sync") {
+      // 네이버 API에서 문의 가져와서 DB에 동기화
+      const { getNaverToken } = await import("../lib/naver.server");
+      const { getInquiries } = await import("../lib/naver/naver-inquiries.server");
+      const { createAdminClient } = await import("~/core/lib/supa-admin.server");
+
+      const token = await getNaverToken();
+      if (!token) {
+        return data({ success: false, error: "네이버 연동이 필요합니다." });
+      }
+
+      // 최근 30일 문의 조회
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+
+      const result = await getInquiries({
+        startDate: startDate.toISOString(),
+        endDate: new Date().toISOString(),
+        size: 500,
+      });
+
+      if (!result.success) {
+        return data({ success: false, error: result.error });
+      }
+
+      const inquiries = result.inquiries || [];
+      const adminClient = createAdminClient();
+
+      // DB에 upsert
+      let syncedCount = 0;
+      for (const inquiry of inquiries) {
+        const { error } = await adminClient.from("naver_inquiries").upsert(
+          {
+            inquiry_no: inquiry.inquiryNo,
+            inquiry_type_name: inquiry.inquiryTypeName,
+            inquiry_status: inquiry.inquiryStatus,
+            title: inquiry.title,
+            content: inquiry.content,
+            product_no: inquiry.productNo,
+            product_name: inquiry.productName,
+            product_order_id: inquiry.productOrderId,
+            buyer_member_id: inquiry.buyerMemberId,
+            create_date: inquiry.createDate,
+            answer_content: inquiry.answerContent,
+            answer_date: inquiry.answerDate,
+            synced_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "inquiry_no" }
+        );
+
+        if (!error) {
+          syncedCount++;
+        }
+      }
+
+      return data({
+        success: true,
+        message: `${syncedCount}건의 문의가 동기화되었습니다.`,
+      });
+    }
+
+    if (actionType === "save_template") {
+      const name = formData.get("name") as string;
+      const content = formData.get("content") as string;
+      const category = (formData.get("category") as string) || "general";
+
+      if (!name || !content) {
+        return data({ success: false, error: "이름과 내용을 입력해주세요." });
+      }
+
+      const { createAdminClient } = await import("~/core/lib/supa-admin.server");
+      const adminClient = createAdminClient();
+
+      const { error } = await adminClient
+        .from("naver_inquiry_templates")
+        .insert({ name, content, category });
+
+      if (error) {
+        return data({ success: false, error: error.message });
+      }
+
+      return data({ success: true, message: "템플릿이 저장되었습니다." });
+    }
+
+    if (actionType === "delete_template") {
+      const templateId = formData.get("templateId") as string;
+
+      if (!templateId) {
+        return data({ success: false, error: "템플릿 ID가 필요합니다." });
+      }
+
+      const { createAdminClient } = await import("~/core/lib/supa-admin.server");
+      const adminClient = createAdminClient();
+
+      const { error } = await adminClient
+        .from("naver_inquiry_templates")
+        .delete()
+        .eq("id", templateId);
+
+      if (error) {
+        return data({ success: false, error: error.message });
+      }
+
+      return data({ success: true, message: "템플릿이 삭제되었습니다." });
+    }
+
     return data({ success: false, error: "알 수 없는 액션입니다." });
   } catch (error) {
     console.error("❌ 문의 액션 오류:", error);
@@ -195,10 +325,11 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function NaverInquiries({ loaderData, actionData }: Route.ComponentProps) {
-  const { isConnected, inquiries, stats, filters, error } = loaderData;
+  const { isConnected, inquiries, stats, filters, templates, error } = loaderData;
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const fetcher = useFetcher();
+  const syncFetcher = useFetcher();
 
   // 선택된 문의 (상세 패널용)
   const [selectedInquiry, setSelectedInquiry] = useState<NaverInquiry | null>(null);
@@ -206,7 +337,7 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
 
   // 액션 결과 처리
   useEffect(() => {
-    if (actionData?.success) {
+    if (actionData && "success" in actionData && actionData.success) {
       // 성공 시 패널 닫고 새로고침
       setIsSheetOpen(false);
       setSelectedInquiry(null);
@@ -244,6 +375,13 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
     navigate(".", { replace: true });
   }, [navigate]);
 
+  // 동기화 핸들러
+  const handleSync = useCallback(() => {
+    const formData = new FormData();
+    formData.set("actionType", "sync");
+    syncFetcher.submit(formData, { method: "POST" });
+  }, [syncFetcher]);
+
   // 행 클릭 핸들러
   const handleRowClick = useCallback((inquiry: NaverInquiry) => {
     setSelectedInquiry(inquiry);
@@ -257,6 +395,30 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
       formData.set("actionType", isUpdate ? "update_answer" : "answer");
       formData.set("inquiryNo", String(inquiryNo));
       formData.set("answerContent", content);
+      fetcher.submit(formData, { method: "POST" });
+    },
+    [fetcher]
+  );
+
+  // 템플릿 저장 핸들러
+  const handleSaveTemplate = useCallback(
+    (name: string, content: string, category: string) => {
+      const formData = new FormData();
+      formData.set("actionType", "save_template");
+      formData.set("name", name);
+      formData.set("content", content);
+      formData.set("category", category);
+      fetcher.submit(formData, { method: "POST" });
+    },
+    [fetcher]
+  );
+
+  // 템플릿 삭제 핸들러
+  const handleDeleteTemplate = useCallback(
+    (templateId: string) => {
+      const formData = new FormData();
+      formData.set("actionType", "delete_template");
+      formData.set("templateId", templateId);
       fetcher.submit(formData, { method: "POST" });
     },
     [fetcher]
@@ -291,6 +453,7 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
   }
 
   const isLoading = fetcher.state !== "idle";
+  const isSyncing = syncFetcher.state !== "idle";
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -304,7 +467,7 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
           </Button>
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
-              <MessageSquare className="h-6 w-6 text-green-600" />
+              <MessageSquare className="h-6 w-6 text-blue-500" />
               네이버 문의 관리
             </h1>
             <p className="text-muted-foreground">
@@ -313,16 +476,30 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
           </div>
         </div>
 
-        <Button variant="outline" asChild>
-          <a
-            href="https://sell.smartstore.naver.com"
-            target="_blank"
-            rel="noopener noreferrer"
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleSync}
+            disabled={isSyncing}
           >
-            <ExternalLink className="h-4 w-4 mr-2" />
-            스마트스토어 센터
-          </a>
-        </Button>
+            <Download className={`h-4 w-4 mr-2 ${isSyncing ? "animate-pulse" : ""}`} />
+            {isSyncing ? "동기화 중..." : "DB 동기화"}
+          </Button>
+          <Button variant="outline" onClick={handleRefresh} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+            새로고침
+          </Button>
+          <Button variant="outline" asChild>
+            <a
+              href="https://sell.smartstore.naver.com"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              스마트스토어
+            </a>
+          </Button>
+        </div>
       </div>
 
       {/* 에러 메시지 */}
@@ -337,6 +514,7 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
       {/* 액션 결과 */}
       {actionData && "message" in actionData && actionData.message && (
         <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
           <AlertTitle className="text-green-700 dark:text-green-400">성공</AlertTitle>
           <AlertDescription className="text-green-600 dark:text-green-300">
             {actionData.message}
@@ -348,6 +526,17 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>오류</AlertTitle>
           <AlertDescription>{actionData.error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* 동기화 결과 */}
+      {syncFetcher.data && "message" in syncFetcher.data && (
+        <Alert className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+          <Download className="h-4 w-4 text-blue-600" />
+          <AlertTitle className="text-blue-700 dark:text-blue-400">동기화 완료</AlertTitle>
+          <AlertDescription className="text-blue-600 dark:text-blue-300">
+            {syncFetcher.data.message}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -366,6 +555,11 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
           <CardTitle>문의 목록</CardTitle>
           <CardDescription>
             총 {inquiries.length}건의 문의가 있습니다
+            {stats.waiting > 0 && (
+              <span className="ml-2 text-orange-500 font-medium">
+                (미답변 {stats.waiting}건)
+              </span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -397,6 +591,9 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
         onOpenChange={setIsSheetOpen}
         onAnswerSubmit={handleAnswerSubmit}
         isSubmitting={fetcher.state === "submitting"}
+        templates={templates as InquiryTemplate[]}
+        onSaveTemplate={handleSaveTemplate}
+        onDeleteTemplate={handleDeleteTemplate}
       />
     </div>
   );
