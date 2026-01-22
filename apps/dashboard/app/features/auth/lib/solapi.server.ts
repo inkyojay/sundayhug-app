@@ -98,8 +98,9 @@ export async function sendAlimtalkOTP(
   };
 
   try {
-    console.log("📤 알림톡 발송 요청:", JSON.stringify(requestBody, null, 2));
-    
+    // 민감한 정보(전화번호, OTP)는 로깅하지 않음
+    console.log("📤 알림톡 발송 요청 시작");
+
     const response = await fetch("https://api.solapi.com/messages/v4/send-many", {
       method: "POST",
       headers: {
@@ -110,10 +111,9 @@ export async function sendAlimtalkOTP(
     });
 
     const result = await response.json();
-    console.log("📥 알림톡 응답:", JSON.stringify(result, null, 2));
 
     if (!response.ok) {
-      console.error("❌ Solapi API Error:", result);
+      console.error("❌ Solapi API Error:", result.errorCode || "unknown");
       return {
         success: false,
         error: result.errorMessage || "알림톡 발송에 실패했습니다.",
@@ -122,7 +122,7 @@ export async function sendAlimtalkOTP(
 
     // 성공 응답 처리
     if (result.groupId) {
-      console.log("✅ 알림톡 발송 성공:", result.groupId);
+      console.log("✅ 알림톡 발송 성공");
       return {
         success: true,
         messageId: result.groupId,
@@ -195,8 +195,8 @@ export async function sendWarrantyApprovalAlimtalk(
   };
 
   try {
-    console.log("📤 보증서 승인 알림톡 발송 요청:", JSON.stringify(requestBody, null, 2));
-    
+    console.log("📤 보증서 승인 알림톡 발송 요청 시작");
+
     const response = await fetch("https://api.solapi.com/messages/v4/send", {
       method: "POST",
       headers: {
@@ -207,10 +207,9 @@ export async function sendWarrantyApprovalAlimtalk(
     });
 
     const result = await response.json();
-    console.log("📥 알림톡 응답:", JSON.stringify(result, null, 2));
 
     if (!response.ok) {
-      console.error("❌ Solapi 알림톡 Error:", result);
+      console.error("❌ Solapi 알림톡 Error:", result.errorCode || "unknown");
       return {
         success: false,
         error: result.errorMessage || result.message || "알림톡 발송에 실패했습니다.",
@@ -219,7 +218,7 @@ export async function sendWarrantyApprovalAlimtalk(
 
     // 성공 응답 확인
     if (result.groupId || result.messageId) {
-      console.log("✅ 보증서 승인 알림톡 발송 성공:", result.groupId || result.messageId);
+      console.log("✅ 보증서 승인 알림톡 발송 성공");
       return {
         success: true,
         messageId: result.groupId || result.messageId,
@@ -231,7 +230,7 @@ export async function sendWarrantyApprovalAlimtalk(
       error: "알림톡 발송 응답이 올바르지 않습니다.",
     };
   } catch (error) {
-    console.error("❌ Solapi 알림톡 request error:", error);
+    console.error("❌ Solapi 알림톡 request error");
     return {
       success: false,
       error: error instanceof Error ? error.message : "알림톡 발송 중 오류가 발생했습니다.",
@@ -282,8 +281,8 @@ export async function sendWarrantyRejectionAlimtalk(
   };
 
   try {
-    console.log("📤 보증서 거절 알림톡 발송 요청:", JSON.stringify(requestBody, null, 2));
-    
+    console.log("📤 보증서 거절 알림톡 발송 요청 시작");
+
     const response = await fetch("https://api.solapi.com/messages/v4/send", {
       method: "POST",
       headers: {
@@ -294,10 +293,9 @@ export async function sendWarrantyRejectionAlimtalk(
     });
 
     const result = await response.json();
-    console.log("📥 알림톡 응답:", JSON.stringify(result, null, 2));
 
     if (!response.ok) {
-      console.error("❌ Solapi 알림톡 Error:", result);
+      console.error("❌ Solapi 알림톡 Error:", result.errorCode || "unknown");
       return {
         success: false,
         error: result.errorMessage || result.message || "알림톡 발송에 실패했습니다.",
@@ -306,7 +304,7 @@ export async function sendWarrantyRejectionAlimtalk(
 
     // 성공 응답 확인
     if (result.groupId || result.messageId) {
-      console.log("✅ 보증서 거절 알림톡 발송 성공:", result.groupId || result.messageId);
+      console.log("✅ 보증서 거절 알림톡 발송 성공");
       return {
         success: true,
         messageId: result.groupId || result.messageId,
@@ -318,7 +316,7 @@ export async function sendWarrantyRejectionAlimtalk(
       error: "알림톡 발송 응답이 올바르지 않습니다.",
     };
   } catch (error) {
-    console.error("❌ Solapi 알림톡 request error:", error);
+    console.error("❌ Solapi 알림톡 request error");
     return {
       success: false,
       error: error instanceof Error ? error.message : "알림톡 발송 중 오류가 발생했습니다.",
@@ -355,10 +353,9 @@ export async function sendSmsOTP(
   };
 
   try {
-    console.log("📤 SMS 발송 요청:", JSON.stringify(requestBody, null, 2));
-    console.log("📤 발신번호:", config.senderNumber);
-    console.log("📤 수신번호:", formattedPhone);
-    
+    // 민감한 정보(전화번호, OTP)는 로깅하지 않음
+    console.log("📤 SMS 발송 요청 시작");
+
     const response = await fetch("https://api.solapi.com/messages/v4/send", {
       method: "POST",
       headers: {
@@ -369,10 +366,9 @@ export async function sendSmsOTP(
     });
 
     const result = await response.json();
-    console.log("📥 SMS 응답:", JSON.stringify(result, null, 2));
 
     if (!response.ok) {
-      console.error("❌ Solapi SMS Error:", result);
+      console.error("❌ Solapi SMS Error:", result.errorCode || "unknown");
       return {
         success: false,
         error: result.errorMessage || result.message || "SMS 발송에 실패했습니다.",
@@ -381,7 +377,7 @@ export async function sendSmsOTP(
 
     // 성공 응답 확인
     if (result.groupId || result.messageId) {
-      console.log("✅ SMS 발송 성공:", result.groupId || result.messageId);
+      console.log("✅ SMS 발송 성공");
       return {
         success: true,
         messageId: result.groupId || result.messageId,
@@ -393,7 +389,7 @@ export async function sendSmsOTP(
       error: "SMS 발송 응답이 올바르지 않습니다.",
     };
   } catch (error) {
-    console.error("❌ Solapi SMS request error:", error);
+    console.error("❌ Solapi SMS request error");
     return {
       success: false,
       error: error instanceof Error ? error.message : "SMS 발송 중 오류가 발생했습니다.",

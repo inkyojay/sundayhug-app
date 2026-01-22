@@ -5,6 +5,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Channel, UnifiedOrder, OrderStats, OrderItem } from "./orders-unified.shared";
+import { parseOrderKey } from "./orders-unified.shared";
+import { deductInventoryForOrders, rollbackInventoryDeduction } from "./inventory-deduction.server";
 
 // ===== 쿼리 파라미터 =====
 export interface UnifiedOrderQueryParams {
@@ -243,18 +245,65 @@ export async function updateInvoice(
 
 /**
  * 상태 일괄 변경
+ * - "배송중"으로 변경 시 재고 자동 차감
+ * - 취소 상태로 변경 시 재고 자동 복원
  */
 export async function bulkUpdateStatus(
   adminClient: SupabaseClient,
   orderKeys: string[],
   newStatus: string
-): Promise<{ success: boolean; count: number }> {
+): Promise<{ success: boolean; count: number; deductionErrors?: string[] }> {
   let successCount = 0;
+  const deductionErrors: string[] = [];
+
+  // 취소 관련 상태 목록
+  const cancelStatuses = ["취소", "환불", "반품완료", "주문취소"];
+  const isShippingStatus = newStatus === "배송중";
+  const isCancelStatus = cancelStatuses.includes(newStatus);
 
   for (const key of orderKeys) {
-    const [channel, ...orderNoParts] = key.split("_");
-    const orderNo = orderNoParts.join("_"); // 주문번호에 _ 포함될 수 있음
+    const parsed = parseOrderKey(key);
+    if (!parsed) {
+      continue; // 유효하지 않은 key는 건너뛰기
+    }
+    const { channel, orderNo } = parsed;
 
+    // 1. 해당 주문의 uniq 값들 조회
+    const { data: orderRows } = await adminClient
+      .from("orders")
+      .select("uniq, inventory_deducted")
+      .eq("shop_cd", channel)
+      .eq("shop_ord_no", orderNo);
+
+    if (!orderRows || orderRows.length === 0) {
+      continue;
+    }
+
+    // 중복 제거된 uniq 목록
+    const orderUniqs = [...new Set(orderRows.map((row: any) => row.uniq))];
+    const alreadyDeducted = orderRows.some((row: any) => row.inventory_deducted === true);
+
+    // 2. "배송중" 상태로 변경 시 재고 차감
+    if (isShippingStatus && !alreadyDeducted) {
+      const deductionResult = await deductInventoryForOrders(adminClient, orderUniqs);
+
+      if (!deductionResult.success) {
+        // 재고 차감 실패 시 해당 주문은 상태 변경하지 않음
+        deductionErrors.push(
+          `${orderNo}: ${deductionResult.errors.join(", ") || "재고 차감 실패"}`
+        );
+        continue;
+      }
+    }
+
+    // 3. 취소 상태로 변경 시 재고 복원
+    if (isCancelStatus && alreadyDeducted) {
+      for (const uniq of orderUniqs) {
+        await rollbackInventoryDeduction(adminClient, uniq);
+      }
+    }
+
+    // 4. 상태 업데이트
     const { error } = await adminClient
       .from("orders")
       .update({ ord_status: newStatus })
@@ -264,7 +313,11 @@ export async function bulkUpdateStatus(
     if (!error) successCount++;
   }
 
-  return { success: true, count: successCount };
+  return {
+    success: true,
+    count: successCount,
+    deductionErrors: deductionErrors.length > 0 ? deductionErrors : undefined
+  };
 }
 
 /**
@@ -277,8 +330,11 @@ export async function bulkDeleteOrders(
   let successCount = 0;
 
   for (const key of orderKeys) {
-    const [channel, ...orderNoParts] = key.split("_");
-    const orderNo = orderNoParts.join("_");
+    const parsed = parseOrderKey(key);
+    if (!parsed) {
+      continue; // 유효하지 않은 key는 건너뛰기
+    }
+    const { channel, orderNo } = parsed;
 
     const { error } = await adminClient
       .from("orders")

@@ -78,6 +78,7 @@ import {
 } from "~/core/components/ui/collapsible";
 
 import makeServerClient from "~/core/lib/supa-client.server";
+import { parseFormDataJson } from "~/core/lib/safe-parse";
 
 // 색상명 → 실제 색상 코드 매핑
 const colorMap: Record<string, string> = {
@@ -211,7 +212,7 @@ export async function action({ request }: Route.ActionArgs) {
   // 단일 제품 분류 업데이트
   if (intent === "update") {
     const id = formData.get("id") as string;
-    const changes = JSON.parse(formData.get("changes") as string);
+    const changes = parseFormDataJson<Record<string, any>>(formData, "changes", {});
 
     // 기존 데이터 조회
     const { data: oldData } = await supabase
@@ -232,10 +233,20 @@ export async function action({ request }: Route.ActionArgs) {
       return { success: false, error: error.message };
     }
 
-    // 변경 로그 기록
+    // 변경 로그 기록 (배치 INSERT)
+    const changeLogs: Array<{
+      table_name: string;
+      record_id: string;
+      field_name: string;
+      old_value: string | null;
+      new_value: string | null;
+      changed_by: string | undefined;
+      change_type: string;
+    }> = [];
+
     for (const [field, newValue] of Object.entries(changes)) {
       if (oldData && oldData[field] !== newValue) {
-        await supabase.from("product_change_logs").insert({
+        changeLogs.push({
           table_name: "parent_products",
           record_id: id,
           field_name: field,
@@ -247,13 +258,17 @@ export async function action({ request }: Route.ActionArgs) {
       }
     }
 
+    if (changeLogs.length > 0) {
+      await supabase.from("product_change_logs").insert(changeLogs);
+    }
+
     return { success: true, message: "제품 분류가 업데이트되었습니다." };
   }
 
   // 일괄 업데이트
   if (intent === "bulk_update") {
-    const ids = JSON.parse(formData.get("ids") as string) as string[];
-    const changes = JSON.parse(formData.get("changes") as string);
+    const ids = parseFormDataJson<string[]>(formData, "ids", []);
+    const changes = parseFormDataJson<Record<string, any>>(formData, "changes", {});
 
     const { data: oldDataList } = await supabase
       .from("parent_products")
@@ -272,11 +287,21 @@ export async function action({ request }: Route.ActionArgs) {
       return { success: false, error: error.message };
     }
 
-    // 변경 로그 기록
+    // 변경 로그 기록 (배치 INSERT로 N+1 최적화)
+    const changeLogs: Array<{
+      table_name: string;
+      record_id: string;
+      field_name: string;
+      old_value: string | null;
+      new_value: string | null;
+      changed_by: string | undefined;
+      change_type: string;
+    }> = [];
+
     for (const oldData of oldDataList || []) {
       for (const [field, newValue] of Object.entries(changes)) {
         if (oldData[field] !== newValue) {
-          await supabase.from("product_change_logs").insert({
+          changeLogs.push({
             table_name: "parent_products",
             record_id: oldData.id,
             field_name: field,
@@ -287,6 +312,11 @@ export async function action({ request }: Route.ActionArgs) {
           });
         }
       }
+    }
+
+    // 단일 배치 INSERT (기존: 100개 제품 × 5개 필드 = 500회 쿼리 → 최적화 후: 1회)
+    if (changeLogs.length > 0) {
+      await supabase.from("product_change_logs").insert(changeLogs);
     }
 
     return { success: true, message: `${ids.length}개 분류가 업데이트되었습니다.` };
@@ -334,7 +364,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // CSV 업로드 (Upsert)
   if (intent === "csv_upload") {
-    const csvData = JSON.parse(formData.get("csvData") as string) as any[];
+    const csvData = parseFormDataJson<any[]>(formData, "csvData", []);
 
     let successCount = 0;
     let errorCount = 0;

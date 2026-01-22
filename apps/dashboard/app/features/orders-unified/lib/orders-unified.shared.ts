@@ -213,3 +213,66 @@ export function formatDateTime(dateString: string): string {
   if (!dateString) return "-";
   return new Date(dateString).toLocaleString("ko-KR");
 }
+
+// ===== 주문 Key 파싱 유틸리티 =====
+
+/**
+ * 주문 key 파싱 결과
+ */
+export interface ParsedOrderKey {
+  channel: Channel;
+  orderNo: string;
+}
+
+/**
+ * 주문 key 파싱 (channel_orderNo 형식)
+ * 유효하지 않은 key는 null 반환
+ *
+ * @param key - "cafe24_1234567890" 형식의 주문 key
+ * @returns ParsedOrderKey 또는 null
+ */
+export function parseOrderKey(key: string | null | undefined): ParsedOrderKey | null {
+  if (!key || typeof key !== "string") {
+    return null;
+  }
+
+  const trimmedKey = key.trim();
+  if (!trimmedKey) {
+    return null;
+  }
+
+  const parts = trimmedKey.split("_");
+  if (parts.length < 2) {
+    console.warn(`[parseOrderKey] Invalid order key format: ${key}`);
+    return null;
+  }
+
+  const channel = parts[0] as Channel;
+  const orderNo = parts.slice(1).join("_"); // 주문번호에 _ 포함될 수 있음
+
+  // 지원하는 채널인지 확인
+  if (!["cafe24", "naver", "coupang"].includes(channel)) {
+    console.warn(`[parseOrderKey] Unsupported channel: ${channel}`);
+    return null;
+  }
+
+  if (!orderNo) {
+    console.warn(`[parseOrderKey] Empty order number: ${key}`);
+    return null;
+  }
+
+  return { channel, orderNo };
+}
+
+/**
+ * 여러 주문 key 일괄 파싱
+ * 유효하지 않은 key는 건너뛰고 유효한 것만 반환
+ *
+ * @param keys - 주문 key 배열
+ * @returns ParsedOrderKey 배열 (유효한 것만)
+ */
+export function parseOrderKeys(keys: string[]): ParsedOrderKey[] {
+  return keys
+    .map(parseOrderKey)
+    .filter((result): result is ParsedOrderKey => result !== null);
+}

@@ -37,12 +37,14 @@ import {
   buildOrderUrl,
   exportOrdersToCSV,
   getDatePreset,
+  parseOrderKey,
   type UnifiedOrder,
   type Channel,
 } from "../lib/orders-unified.shared";
 import { deductInventoryForOrders, rollbackInventoryDeduction } from "../lib/inventory-deduction.server";
 import { sendInvoicesBulk } from "../lib/invoice-sender.server";
 import { getCarrierByValue } from "../lib/carriers";
+import { parseFormDataJson } from "~/core/lib/safe-parse";
 
 export const meta: MetaFunction = () => {
   return [{ title: "통합 주문 관리 | Sundayhug Admin" }];
@@ -95,7 +97,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   // 일괄 상태 변경
   if (actionType === "bulkUpdateStatus") {
-    const orderKeys = JSON.parse(formData.get("orderKeys") as string);
+    const orderKeys = parseFormDataJson<string[]>(formData, "orderKeys", []);
     const newStatus = formData.get("newStatus") as string;
     const result = await bulkUpdateStatus(adminClient, orderKeys, newStatus);
     return { success: true, message: `${result.count}개 주문의 상태가 변경되었습니다.` };
@@ -103,21 +105,20 @@ export async function action({ request }: ActionFunctionArgs) {
 
   // 일괄 삭제
   if (actionType === "bulkDelete") {
-    const orderKeys = JSON.parse(formData.get("orderKeys") as string);
+    const orderKeys = parseFormDataJson<string[]>(formData, "orderKeys", []);
     const result = await bulkDeleteOrders(adminClient, orderKeys);
     return { success: true, message: `${result.count}개 주문이 삭제되었습니다.` };
   }
 
   // 일괄 송장 입력 (재고 차감 포함)
   if (actionType === "bulkUpdateInvoice") {
-    const invoiceDataRaw = formData.get("invoiceData") as string;
-    const invoiceData: Array<{
+    const invoiceData = parseFormDataJson<Array<{
       orderKey: string;
       orderNo: string;
       channel: Channel;
       carrName: string;
       invoiceNo: string;
-    }> = JSON.parse(invoiceDataRaw);
+    }>>(formData, "invoiceData", []);
 
     const successResults: string[] = [];
     const errorResults: string[] = [];
@@ -188,15 +189,17 @@ export async function action({ request }: ActionFunctionArgs) {
 
   // 일괄 송장 전송 (채널 API로 전송)
   if (actionType === "bulkSendInvoice") {
-    const orderKeysRaw = formData.get("orderKeys") as string;
-    const orderKeys: string[] = JSON.parse(orderKeysRaw);
+    const orderKeys = parseFormDataJson<string[]>(formData, "orderKeys", []);
 
     // 주문 정보 조회하여 송장 정보 수집
     const invoicesToSend: Array<{ orderUniq: string; carrierCode: string; trackingNo: string }> = [];
 
     for (const key of orderKeys) {
-      const [channel, ...orderNoParts] = key.split("_");
-      const orderNo = orderNoParts.join("_");
+      const parsed = parseOrderKey(key);
+      if (!parsed) {
+        continue; // 유효하지 않은 key는 건너뛰기
+      }
+      const { channel, orderNo } = parsed;
 
       const { data: orderRows } = await adminClient
         .from("orders")

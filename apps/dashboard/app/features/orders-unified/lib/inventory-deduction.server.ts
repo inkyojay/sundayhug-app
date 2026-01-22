@@ -141,27 +141,109 @@ export async function getWarehouseById(
 // ===== 재고 부족 검사 =====
 
 /**
- * 재고 부족 검사
+ * 재고 부족 검사 (N+1 쿼리 최적화)
  * 지정된 창고(없으면 우선출고창고)에서 해당 SKU들의 재고가 충분한지 확인
+ *
+ * 최적화: SKU마다 개별 쿼리 대신 일괄 조회
+ * - 100개 SKU = 기존 200회 쿼리 → 최적화 후 3~4회 쿼리
  */
 export async function checkInventoryAvailability(
   supabase: SupabaseClient,
   items: { sku: string; quantity: number }[],
   warehouseId?: string
 ): Promise<AvailabilityResult> {
+  if (items.length === 0) {
+    return { allAvailable: true, items: [], insufficientItems: [] };
+  }
+
+  const skus = items.map((item) => item.sku);
+
+  // 1. 지정 창고가 있는 경우 단일 조회
+  let fixedWarehouse: Warehouse | null = null;
+  if (warehouseId) {
+    fixedWarehouse = await getWarehouseById(supabase, warehouseId);
+  }
+
+  // 2. SKU별 우선출고창고 일괄 조회 (지정 창고가 없는 경우)
+  let productWarehouseMap: Map<string, string> = new Map();
+  if (!warehouseId) {
+    const { data: products } = await supabase
+      .from("products")
+      .select("sku, priority_warehouse_id")
+      .in("sku", skus);
+
+    if (products) {
+      for (const product of products) {
+        if (product.priority_warehouse_id) {
+          productWarehouseMap.set(product.sku, product.priority_warehouse_id);
+        }
+      }
+    }
+  }
+
+  // 3. 기본 창고 조회 (우선출고창고가 없는 SKU들을 위해)
+  let defaultWarehouse: Warehouse | null = null;
+  if (!warehouseId) {
+    defaultWarehouse = await getDefaultWarehouse(supabase);
+  }
+
+  // 4. 필요한 창고 ID 목록 수집
+  const warehouseIds = new Set<string>();
+  if (warehouseId && fixedWarehouse) {
+    warehouseIds.add(warehouseId);
+  } else {
+    productWarehouseMap.forEach((wid) => warehouseIds.add(wid));
+    if (defaultWarehouse) {
+      warehouseIds.add(defaultWarehouse.id);
+    }
+  }
+
+  // 5. 창고 정보 일괄 조회
+  const warehouseMap = new Map<string, Warehouse>();
+  if (warehouseIds.size > 0) {
+    const { data: warehouses } = await supabase
+      .from("warehouses")
+      .select("id, warehouse_code, warehouse_name, warehouse_type, is_default")
+      .in("id", Array.from(warehouseIds))
+      .eq("is_active", true);
+
+    if (warehouses) {
+      for (const wh of warehouses) {
+        warehouseMap.set(wh.id, wh);
+      }
+    }
+  }
+
+  // 6. 재고 정보 일괄 조회
+  const inventoryMap = new Map<string, { quantity: number; reserved_quantity: number }>();
+  const { data: inventoryLocs } = await supabase
+    .from("inventory_locations")
+    .select("sku, warehouse_id, quantity, reserved_quantity")
+    .in("sku", skus)
+    .in("warehouse_id", Array.from(warehouseIds));
+
+  if (inventoryLocs) {
+    for (const loc of inventoryLocs) {
+      // key: "warehouseId_sku"
+      const key = `${loc.warehouse_id}_${loc.sku}`;
+      inventoryMap.set(key, {
+        quantity: loc.quantity || 0,
+        reserved_quantity: loc.reserved_quantity || 0,
+      });
+    }
+  }
+
+  // 7. 결과 생성
   const availabilityItems: AvailabilityItem[] = [];
 
   for (const item of items) {
-    // 창고 결정: 지정된 창고 또는 우선출고창고
+    // 창고 결정
     let targetWarehouseId = warehouseId;
-    let warehouse: Warehouse | null = null;
-
-    if (targetWarehouseId) {
-      warehouse = await getWarehouseById(supabase, targetWarehouseId);
-    } else {
-      warehouse = await getPriorityWarehouse(supabase, item.sku);
-      targetWarehouseId = warehouse?.id;
+    if (!targetWarehouseId) {
+      targetWarehouseId = productWarehouseMap.get(item.sku) || defaultWarehouse?.id;
     }
+
+    const warehouse = targetWarehouseId ? warehouseMap.get(targetWarehouseId) : null;
 
     if (!targetWarehouseId || !warehouse) {
       availabilityItems.push({
@@ -175,14 +257,9 @@ export async function checkInventoryAvailability(
       continue;
     }
 
-    // 해당 창고의 재고 조회
-    const { data: inventoryLoc } = await supabase
-      .from("inventory_locations")
-      .select("quantity, reserved_quantity")
-      .eq("warehouse_id", targetWarehouseId)
-      .eq("sku", item.sku)
-      .single();
-
+    // 재고 확인
+    const inventoryKey = `${targetWarehouseId}_${item.sku}`;
+    const inventoryLoc = inventoryMap.get(inventoryKey);
     const currentQty = inventoryLoc?.quantity || 0;
     const reservedQty = inventoryLoc?.reserved_quantity || 0;
     const availableQty = currentQty - reservedQty;
@@ -411,24 +488,27 @@ export async function deductInventoryForOrder(
       };
     }
 
-    // 4. 재고 차감 실행
+    // 4. 재고 차감 실행 (availability 결과 재사용으로 N+1 최적화)
     const deductionItems: DeductionItem[] = [];
     let totalDeducted = 0;
     let failedCount = 0;
 
+    // availability 결과를 Map으로 변환하여 빠른 조회
+    const availabilityMap = new Map<string, AvailabilityItem>();
+    for (const item of availability.items) {
+      availabilityMap.set(item.sku, item);
+    }
+
+    // 주문의 첫 번째 행 ID를 reference로 사용
+    const referenceId = (orderRows as any[])[0].id;
+
     for (const [sku, { quantity }] of skuQuantityMap.entries()) {
-      // 창고 결정
-      let targetWarehouseId = warehouseId;
-      let warehouse: Warehouse | null = null;
+      // availability 결과에서 창고 정보 가져오기 (추가 쿼리 없음)
+      const availItem = availabilityMap.get(sku);
+      const targetWarehouseId = availItem?.warehouseId;
+      const warehouseName = availItem?.warehouseName;
 
-      if (targetWarehouseId) {
-        warehouse = await getWarehouseById(supabase, targetWarehouseId);
-      } else {
-        warehouse = await getPriorityWarehouse(supabase, sku);
-        targetWarehouseId = warehouse?.id;
-      }
-
-      if (!targetWarehouseId || !warehouse) {
+      if (!targetWarehouseId) {
         deductionItems.push({
           sku,
           quantity,
@@ -441,9 +521,6 @@ export async function deductInventoryForOrder(
         failedCount++;
         continue;
       }
-
-      // 주문의 첫 번째 행 ID를 reference로 사용
-      const referenceId = (orderRows as any[])[0].id;
 
       const result = await executeDeduction(
         supabase,
@@ -458,7 +535,7 @@ export async function deductInventoryForOrder(
         sku,
         quantity,
         warehouseId: targetWarehouseId,
-        warehouseName: warehouse.warehouse_name,
+        warehouseName,
         stockBefore: result.stockBefore,
         stockAfter: result.stockAfter,
         success: result.success,

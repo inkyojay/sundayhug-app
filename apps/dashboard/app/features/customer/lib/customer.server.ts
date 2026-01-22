@@ -36,10 +36,20 @@ export async function getLayoutUserInfo(supabase: SupabaseClient) {
       user.user_metadata?.name ||
       user.user_metadata?.full_name ||
       user.email?.split("@")[0];
+
+    // VIP 여부 체크: 승인된 보증서가 1개 이상이면 VIP
+    const { count: warrantyCount } = await supabase
+      .from("warranties")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("status", "approved");
+
+    const isVip = (warrantyCount || 0) >= 1;
+
     return {
       isLoggedIn: true,
       userName: name || "회원",
-      isVip: true, // TODO: 실제 VIP 여부 체크
+      isVip,
     };
   }
 

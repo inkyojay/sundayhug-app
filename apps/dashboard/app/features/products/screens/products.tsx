@@ -68,6 +68,7 @@ import { Label } from "~/core/components/ui/label";
 import { Textarea } from "~/core/components/ui/textarea";
 
 import makeServerClient from "~/core/lib/supa-client.server";
+import { parseFormDataJson } from "~/core/lib/safe-parse";
 
 // lib imports
 import { downloadCSV, parseCSV } from "../lib/products.shared";
@@ -143,7 +144,7 @@ export async function action({ request }: Route.ActionArgs) {
   // 단일 제품 업데이트
   if (intent === "update") {
     const id = formData.get("id") as string;
-    const changes = JSON.parse(formData.get("changes") as string);
+    const changes = parseFormDataJson<Record<string, any>>(formData, "changes", {});
     const result = await updateProduct(supabase, id, changes, user?.id);
     if (!result.success) return result;
     return { success: true, message: "제품이 업데이트되었습니다." };
@@ -151,8 +152,8 @@ export async function action({ request }: Route.ActionArgs) {
 
   // 일괄 업데이트
   if (intent === "bulk_update") {
-    const ids = JSON.parse(formData.get("ids") as string) as string[];
-    const changes = JSON.parse(formData.get("changes") as string);
+    const ids = parseFormDataJson<string[]>(formData, "ids", []);
+    const changes = parseFormDataJson<Record<string, any>>(formData, "changes", {});
     const result = await bulkUpdateProducts(supabase, ids, changes, user?.id);
     if (!result.success) return result;
     return { success: true, message: `${ids.length}개 제품이 업데이트되었습니다.` };
@@ -182,7 +183,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // CSV 업로드 (Upsert)
   if (intent === "csv_upload") {
-    const csvData = JSON.parse(formData.get("csvData") as string) as any[];
+    const csvData = parseFormDataJson<any[]>(formData, "csvData", []);
     const result = await uploadCSV(supabase, csvData, user?.id);
     return {
       success: true,
