@@ -100,6 +100,23 @@ export async function action({ request }: ActionFunctionArgs) {
     const orderKeys = parseFormDataJson<string[]>(formData, "orderKeys", []);
     const newStatus = formData.get("newStatus") as string;
     const result = await bulkUpdateStatus(adminClient, orderKeys, newStatus);
+
+    // 오류 메시지 조합
+    const errors: string[] = [];
+    if (result.deductionErrors?.length) {
+      errors.push(...result.deductionErrors);
+    }
+    if (result.apiErrors?.length) {
+      errors.push(...result.apiErrors);
+    }
+
+    if (errors.length > 0) {
+      return {
+        success: true,
+        message: `${result.count}개 주문 상태 변경 완료. 일부 오류: ${errors.slice(0, 3).join("; ")}${errors.length > 3 ? "..." : ""}`,
+      };
+    }
+
     return { success: true, message: `${result.count}개 주문의 상태가 변경되었습니다.` };
   }
 

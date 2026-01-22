@@ -8,3 +8,4 @@ export { OrdersTable } from "./OrdersTable";
 export { BulkActionBar } from "./BulkActionBar";
 export { InvoiceInputModal } from "./InvoiceInputModal";
 export { InvoiceUploadModal } from "./InvoiceUploadModal";
+export { DownloadOptionsModal } from "./DownloadOptionsModal";

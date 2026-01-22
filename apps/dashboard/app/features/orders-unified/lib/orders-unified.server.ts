@@ -245,6 +245,7 @@ export async function updateInvoice(
 
 /**
  * 상태 일괄 변경
+ * - "상품준비중"으로 변경 시 네이버 발주 확인 API 호출
  * - "배송중"으로 변경 시 재고 자동 차감
  * - 취소 상태로 변경 시 재고 자동 복원
  */
@@ -252,14 +253,19 @@ export async function bulkUpdateStatus(
   adminClient: SupabaseClient,
   orderKeys: string[],
   newStatus: string
-): Promise<{ success: boolean; count: number; deductionErrors?: string[] }> {
+): Promise<{ success: boolean; count: number; deductionErrors?: string[]; apiErrors?: string[] }> {
   let successCount = 0;
   const deductionErrors: string[] = [];
+  const apiErrors: string[] = [];
 
   // 취소 관련 상태 목록
   const cancelStatuses = ["취소", "환불", "반품완료", "주문취소"];
   const isShippingStatus = newStatus === "배송중";
+  const isPrepareStatus = newStatus === "상품준비중";
   const isCancelStatus = cancelStatuses.includes(newStatus);
+
+  // 네이버 주문의 productOrderId 수집 (발주 확인용)
+  const naverProductOrderIds: string[] = [];
 
   for (const key of orderKeys) {
     const parsed = parseOrderKey(key);
@@ -268,10 +274,10 @@ export async function bulkUpdateStatus(
     }
     const { channel, orderNo } = parsed;
 
-    // 1. 해당 주문의 uniq 값들 조회
+    // 1. 해당 주문의 uniq, shop_ord_no_real (productOrderId) 조회
     const { data: orderRows } = await adminClient
       .from("orders")
-      .select("uniq, inventory_deducted")
+      .select("uniq, inventory_deducted, shop_ord_no_real")
       .eq("shop_cd", channel)
       .eq("shop_ord_no", orderNo);
 
@@ -283,7 +289,15 @@ export async function bulkUpdateStatus(
     const orderUniqs = [...new Set(orderRows.map((row: any) => row.uniq))];
     const alreadyDeducted = orderRows.some((row: any) => row.inventory_deducted === true);
 
-    // 2. "배송중" 상태로 변경 시 재고 차감
+    // 2. 네이버 주문이고 "상품준비중"으로 변경 시 productOrderId 수집
+    if (channel === "naver" && isPrepareStatus) {
+      const productOrderIds = orderRows
+        .map((row: any) => row.shop_ord_no_real)
+        .filter((id: string | null) => id && id.length > 0);
+      naverProductOrderIds.push(...productOrderIds);
+    }
+
+    // 3. "배송중" 상태로 변경 시 재고 차감
     if (isShippingStatus && !alreadyDeducted) {
       const deductionResult = await deductInventoryForOrders(adminClient, orderUniqs);
 
@@ -296,14 +310,14 @@ export async function bulkUpdateStatus(
       }
     }
 
-    // 3. 취소 상태로 변경 시 재고 복원
+    // 4. 취소 상태로 변경 시 재고 복원
     if (isCancelStatus && alreadyDeducted) {
       for (const uniq of orderUniqs) {
         await rollbackInventoryDeduction(adminClient, uniq);
       }
     }
 
-    // 4. 상태 업데이트
+    // 5. 상태 업데이트
     const { error } = await adminClient
       .from("orders")
       .update({ ord_status: newStatus })
@@ -313,10 +327,34 @@ export async function bulkUpdateStatus(
     if (!error) successCount++;
   }
 
+  // 6. 네이버 발주 확인 API 일괄 호출 (상품준비중으로 변경 시)
+  if (isPrepareStatus && naverProductOrderIds.length > 0) {
+    try {
+      const { placeOrdersBulk } = await import("~/features/integrations/lib/naver/naver-orders.server");
+      const uniqueProductOrderIds = [...new Set(naverProductOrderIds)];
+
+      console.log(`📤 [bulkUpdateStatus] 네이버 발주 확인 API 호출: ${uniqueProductOrderIds.length}건`);
+
+      const result = await placeOrdersBulk(uniqueProductOrderIds);
+
+      if (result.failCount > 0) {
+        apiErrors.push(
+          ...result.errors.map((e) => `네이버 발주확인 실패: ${e.productOrderId} - ${e.error}`)
+        );
+      }
+
+      console.log(`✅ [bulkUpdateStatus] 네이버 발주 확인 완료: 성공 ${result.successCount}건, 실패 ${result.failCount}건`);
+    } catch (error) {
+      console.error(`❌ [bulkUpdateStatus] 네이버 발주 확인 API 호출 오류:`, error);
+      apiErrors.push(`네이버 API 호출 오류: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
+    }
+  }
+
   return {
     success: true,
     count: successCount,
-    deductionErrors: deductionErrors.length > 0 ? deductionErrors : undefined
+    deductionErrors: deductionErrors.length > 0 ? deductionErrors : undefined,
+    apiErrors: apiErrors.length > 0 ? apiErrors : undefined,
   };
 }
 

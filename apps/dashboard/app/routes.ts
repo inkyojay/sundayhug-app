@@ -224,6 +224,8 @@ export default [
         // ===== 주문 관리 =====
         // 통합 주문 관리 (Cafe24 + 네이버 + 쿠팡) - 기본 주문 화면
         route("/orders/unified", "features/orders-unified/screens/orders-unified.tsx"),
+        // 주문확인서 (패킹슬립) PDF 페이지
+        route("/orders/packing-slip", "features/orders-unified/screens/packing-slip.tsx"),
         // 기존 B2C 주문 화면은 /dashboard/orders에서 리다이렉트 처리 (상단 리다이렉트 섹션 참조)
         // B2B 주문 관리
         ...prefix("/b2b", [
