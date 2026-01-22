@@ -1,7 +1,7 @@
 /**
  * Cafe24 토큰 조회 API
  * GET /api/integrations/cafe24/token
- * 
+ *
  * Supabase에서 토큰 조회 (자동 갱신 옵션)
  */
 import type { Route } from "./+types/cafe24-token";
@@ -9,10 +9,12 @@ import type { Route } from "./+types/cafe24-token";
 import { data } from "react-router";
 import makeServerClient from "~/core/lib/supa-client.server";
 import {
-  refreshAccessToken,
-  calculateExpiresAt,
+  getCafe24Token,
+  getValidToken,
   isTokenExpired,
-  CAFE24_CONFIG,
+  isRefreshTokenExpiring,
+  isRefreshTokenExpired,
+  type Cafe24Token,
 } from "../lib/cafe24.server";
 
 interface TokenResponse {
@@ -29,6 +31,11 @@ interface TokenResponse {
     remaining_seconds: number;
     authorization_header: string;
     scope: string | null;
+    // refresh_token 관련 정보 추가
+    refresh_token_expires_at: string | null;
+    refresh_token_remaining_days: number | null;
+    refresh_token_expiring_soon: boolean;
+    refresh_token_expired: boolean;
   };
   error?: string;
   refreshed?: boolean;
@@ -39,7 +46,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // 인증 확인
   const { data: { user } } = await supabase.auth.getUser();
-  
+
   if (!user) {
     return data<TokenResponse>({
       success: false,
@@ -51,18 +58,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   const autoRefresh = url.searchParams.get("auto_refresh") === "true";
 
   try {
-    // Supabase에서 토큰 조회
-    const { data: tokenData, error: fetchError } = await supabase
-      .from("cafe24_tokens")
-      .select("*")
-      .eq("mall_id", CAFE24_CONFIG.mallId)
-      .single();
+    let tokenData: Cafe24Token | null;
+    let refreshed = false;
 
-    if (fetchError && fetchError.code !== "PGRST116") {
-      return data<TokenResponse>({
-        success: false,
-        error: fetchError.message,
-      }, { status: 500, headers });
+    // 자동 갱신 옵션이 켜져 있으면 getValidToken 사용 (자동 갱신 포함)
+    if (autoRefresh) {
+      const originalToken = await getCafe24Token();
+      tokenData = await getValidToken();
+      // 토큰이 갱신되었는지 확인 (access_token이 다르면 갱신된 것)
+      refreshed = !!(originalToken && tokenData && originalToken.access_token !== tokenData.access_token);
+    } else {
+      tokenData = await getCafe24Token();
     }
 
     if (!tokenData) {
@@ -75,57 +81,18 @@ export async function loader({ request }: Route.LoaderArgs) {
     // 토큰 상태 계산
     const now = new Date();
     const expiresAt = tokenData.expires_at ? new Date(tokenData.expires_at) : null;
-    let remainingSeconds = expiresAt 
-      ? Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000)) 
+    const remainingSeconds = expiresAt
+      ? Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000))
       : 0;
-    let expired = isTokenExpired(tokenData.expires_at);
-    let refreshed = false;
+    const expired = isTokenExpired(tokenData);
 
-    // 자동 갱신 옵션이 켜져 있고, 토큰이 만료되었거나 5분 이내 만료 예정이면 갱신
-    if (autoRefresh && (expired || remainingSeconds < 300) && tokenData.refresh_token) {
-      try {
-        console.log("Cafe24 토큰 자동 갱신 시작");
-        
-        const newTokenData = await refreshAccessToken(tokenData.refresh_token);
-        
-        const expiresIn = newTokenData.expires_in || 3600;
-        const newExpiresAt = calculateExpiresAt(expiresIn);
-        const issuedAt = new Date().toISOString();
-
-        // 새 토큰 저장
-        await supabase
-          .from("cafe24_tokens")
-          .upsert({
-            mall_id: CAFE24_CONFIG.mallId,
-            access_token: newTokenData.access_token,
-            refresh_token: newTokenData.refresh_token || tokenData.refresh_token,
-            token_type: newTokenData.token_type || "Bearer",
-            expires_in: expiresIn,
-            scope: newTokenData.scope || tokenData.scope,
-            issued_at: issuedAt,
-            expires_at: newExpiresAt,
-            updated_at: issuedAt,
-          }, {
-            onConflict: "mall_id",
-          });
-
-        // 응답 데이터 업데이트
-        tokenData.access_token = newTokenData.access_token;
-        tokenData.refresh_token = newTokenData.refresh_token || tokenData.refresh_token;
-        tokenData.expires_at = newExpiresAt;
-        tokenData.issued_at = issuedAt;
-        tokenData.expires_in = expiresIn;
-        
-        remainingSeconds = expiresIn;
-        expired = false;
-        refreshed = true;
-
-        console.log("Cafe24 토큰 자동 갱신 완료");
-      } catch (refreshErr) {
-        console.error("자동 토큰 갱신 실패:", refreshErr);
-        // 갱신 실패해도 기존 토큰 반환 (만료되었을 수 있음)
-      }
-    }
+    // refresh_token 만료 정보 계산
+    const refreshTokenExpiresAt = tokenData.refresh_token_expires_at
+      ? new Date(tokenData.refresh_token_expires_at)
+      : null;
+    const refreshTokenRemainingDays = refreshTokenExpiresAt
+      ? Math.max(0, Math.floor((refreshTokenExpiresAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
+      : null;
 
     return data<TokenResponse>({
       success: true,
@@ -142,6 +109,11 @@ export async function loader({ request }: Route.LoaderArgs) {
         remaining_seconds: remainingSeconds,
         authorization_header: `Bearer ${tokenData.access_token}`,
         scope: tokenData.scope,
+        // refresh_token 관련 정보
+        refresh_token_expires_at: tokenData.refresh_token_expires_at,
+        refresh_token_remaining_days: refreshTokenRemainingDays,
+        refresh_token_expiring_soon: isRefreshTokenExpiring(tokenData),
+        refresh_token_expired: isRefreshTokenExpired(tokenData),
       },
     }, { headers });
 

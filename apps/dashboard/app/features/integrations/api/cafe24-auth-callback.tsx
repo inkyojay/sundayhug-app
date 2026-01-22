@@ -111,6 +111,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         scope: tokenData.scopes.join(","),
         issued_at: tokenData.issued_at,
         expires_at: tokenData.expires_at,
+        refresh_token_expires_at: tokenData.refresh_token_expires_at,  // refresh_token 만료 시간 저장
         updated_at: new Date().toISOString(),
       }, {
         onConflict: "mall_id",

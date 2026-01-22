@@ -1,7 +1,7 @@
 /**
  * Cafe24 토큰 갱신 API
  * POST /api/integrations/cafe24/refresh
- * 
+ *
  * Refresh Token으로 Access Token 갱신
  */
 import type { Route } from "./+types/cafe24-refresh";
@@ -9,9 +9,9 @@ import type { Route } from "./+types/cafe24-refresh";
 import { data } from "react-router";
 import makeServerClient from "~/core/lib/supa-client.server";
 import {
-  refreshAccessToken,
-  calculateExpiresAt,
-  CAFE24_CONFIG,
+  getCafe24Token,
+  refreshCafe24Token,
+  isRefreshTokenExpired,
 } from "../lib/cafe24.server";
 
 interface RefreshResponse {
@@ -30,7 +30,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // 인증 확인
   const { data: { user } } = await supabase.auth.getUser();
-  
+
   if (!user) {
     return data<RefreshResponse>({
       success: false,
@@ -40,13 +40,9 @@ export async function action({ request }: Route.ActionArgs) {
 
   try {
     // 기존 토큰 조회
-    const { data: tokenData, error: fetchError } = await supabase
-      .from("cafe24_tokens")
-      .select("*")
-      .eq("mall_id", CAFE24_CONFIG.mallId)
-      .single();
+    const tokenData = await getCafe24Token();
 
-    if (fetchError || !tokenData) {
+    if (!tokenData) {
       return data<RefreshResponse>({
         success: false,
         error: "저장된 토큰이 없습니다. 먼저 인증을 진행해주세요.",
@@ -60,53 +56,35 @@ export async function action({ request }: Route.ActionArgs) {
       }, { status: 400, headers });
     }
 
+    // refresh_token이 만료되었는지 확인
+    if (isRefreshTokenExpired(tokenData)) {
+      return data<RefreshResponse>({
+        success: false,
+        error: "Refresh Token이 만료되었습니다. 카페24 재인증이 필요합니다.",
+      }, { status: 400, headers });
+    }
+
     console.log("Cafe24 토큰 갱신 시작");
 
     // 토큰 갱신 요청
-    const newTokenData = await refreshAccessToken(tokenData.refresh_token);
+    const newTokenData = await refreshCafe24Token(tokenData);
 
-    console.log("Cafe24 토큰 갱신 성공:", {
-      tokenType: newTokenData.token_type,
-      expiresIn: newTokenData.expires_in,
-    });
-
-    // 만료 시간 계산
-    const expiresIn = newTokenData.expires_in || 3600;
-    const expiresAt = calculateExpiresAt(expiresIn);
-    const issuedAt = new Date().toISOString();
-
-    // Supabase에 새 토큰 저장
-    const { error: upsertError } = await supabase
-      .from("cafe24_tokens")
-      .upsert({
-        mall_id: CAFE24_CONFIG.mallId,
-        access_token: newTokenData.access_token,
-        refresh_token: newTokenData.refresh_token || tokenData.refresh_token, // 새 refresh_token이 없으면 기존 것 유지
-        token_type: newTokenData.token_type || "Bearer",
-        expires_in: expiresIn,
-        scope: newTokenData.scope || tokenData.scope,
-        issued_at: issuedAt,
-        expires_at: expiresAt,
-        updated_at: issuedAt,
-      }, {
-        onConflict: "mall_id",
-      });
-
-    if (upsertError) {
-      console.error("토큰 저장 실패:", upsertError);
+    if (!newTokenData) {
       return data<RefreshResponse>({
         success: false,
-        error: "토큰 저장에 실패했습니다.",
+        error: "토큰 갱신에 실패했습니다.",
       }, { status: 500, headers });
     }
+
+    console.log("Cafe24 토큰 갱신 성공");
 
     return data<RefreshResponse>({
       success: true,
       message: "토큰이 성공적으로 갱신되었습니다.",
       data: {
         access_token: newTokenData.access_token,
-        expires_at: expiresAt,
-        issued_at: issuedAt,
+        expires_at: newTokenData.expires_at,
+        issued_at: newTokenData.issued_at,
       },
     }, { headers });
 

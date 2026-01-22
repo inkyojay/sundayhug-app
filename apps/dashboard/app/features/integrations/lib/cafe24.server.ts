@@ -19,6 +19,7 @@ export interface Cafe24Token {
   scope: string;
   issued_at: string;
   expires_at: string;
+  refresh_token_expires_at: string | null;  // refresh_token 만료 시간
   created_at: string;
   updated_at: string;
 }
@@ -162,6 +163,32 @@ export function isTokenExpired(token: Cafe24Token): boolean {
 }
 
 /**
+ * Refresh Token 만료 임박 여부 확인 (3일 여유)
+ * refresh_token은 보통 2주 유효하므로, 3일 전부터 미리 갱신
+ */
+export function isRefreshTokenExpiring(token: Cafe24Token): boolean {
+  if (!token.refresh_token_expires_at) {
+    return false; // 만료 시간 정보 없으면 일단 false
+  }
+  const expiresAt = new Date(token.refresh_token_expires_at);
+  const now = new Date();
+  const buffer = 3 * 24 * 60 * 60 * 1000; // 3일
+  return expiresAt.getTime() - buffer < now.getTime();
+}
+
+/**
+ * Refresh Token 완전 만료 여부 확인
+ */
+export function isRefreshTokenExpired(token: Cafe24Token): boolean {
+  if (!token.refresh_token_expires_at) {
+    return false; // 만료 시간 정보 없으면 일단 false
+  }
+  const expiresAt = new Date(token.refresh_token_expires_at);
+  const now = new Date();
+  return expiresAt.getTime() < now.getTime();
+}
+
+/**
  * Cafe24 토큰 갱신
  */
 export async function refreshCafe24Token(token: Cafe24Token): Promise<Cafe24Token | null> {
@@ -197,10 +224,17 @@ export async function refreshCafe24Token(token: Cafe24Token): Promise<Cafe24Toke
 
     const tokenData = await response.json();
     console.log("✅ Cafe24 토큰 갱신 성공");
+    console.log("📋 토큰 응답 데이터:", JSON.stringify(tokenData, null, 2));
 
     // DB 업데이트
     const { createAdminClient } = await import("~/core/lib/supa-admin.server");
     const adminClient = createAdminClient();
+
+    // refresh_token_expires_at 계산
+    // API 응답에 있으면 사용, 없으면 issued_at + 14일로 계산
+    const issuedAt = tokenData.issued_at ? new Date(tokenData.issued_at) : new Date();
+    const refreshTokenExpiresAt = tokenData.refresh_token_expires_at
+      || new Date(issuedAt.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
 
     const { data: updatedToken, error: updateError } = await adminClient
       .from("cafe24_tokens")
@@ -211,6 +245,7 @@ export async function refreshCafe24Token(token: Cafe24Token): Promise<Cafe24Toke
         scope: Array.isArray(tokenData.scopes) ? tokenData.scopes.join(",") : tokenData.scope,
         issued_at: tokenData.issued_at,
         expires_at: tokenData.expires_at,
+        refresh_token_expires_at: refreshTokenExpiresAt,
         updated_at: new Date().toISOString(),
       })
       .eq("mall_id", token.mall_id)
@@ -231,16 +266,33 @@ export async function refreshCafe24Token(token: Cafe24Token): Promise<Cafe24Toke
 
 /**
  * 유효한 토큰 가져오기 (자동 갱신)
+ *
+ * 갱신 조건:
+ * 1. access_token 만료 (5분 전부터)
+ * 2. refresh_token 만료 임박 (3일 전부터) - 미리 갱신하여 재인증 방지
  */
 export async function getValidToken(mallId?: string): Promise<Cafe24Token | null> {
   let token = await getCafe24Token(mallId);
-  
+
   if (!token) {
     return null;
   }
 
-  if (isTokenExpired(token)) {
-    console.log("🔄 토큰 만료됨, 갱신 시도...");
+  // refresh_token이 완전 만료된 경우 - 재인증 필요
+  if (isRefreshTokenExpired(token)) {
+    console.error("❌ Refresh Token이 만료되었습니다. 카페24 재인증이 필요합니다.");
+    return null;
+  }
+
+  // access_token 만료 또는 refresh_token 만료 임박 시 갱신
+  const needsRefresh = isTokenExpired(token) || isRefreshTokenExpiring(token);
+
+  if (needsRefresh) {
+    if (isRefreshTokenExpiring(token)) {
+      console.log("🔄 Refresh Token 만료 임박, 사전 갱신 시도...");
+    } else {
+      console.log("🔄 Access Token 만료됨, 갱신 시도...");
+    }
     token = await refreshCafe24Token(token);
   }
 
