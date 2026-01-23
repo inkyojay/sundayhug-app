@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/core/components/ui/select";
+import { Badge } from "~/core/components/ui/badge";
 
 import { ChannelBadge } from "./ChannelBadge";
 import { OrderStatusBadge } from "./OrderStatusBadge";
@@ -38,6 +39,40 @@ import { OrderDetailRow } from "./OrderDetailRow";
 import { CARRIERS } from "../lib/carriers";
 import type { UnifiedOrder } from "../lib/orders-unified.shared";
 import { formatCurrency, formatDate } from "../lib/orders-unified.shared";
+
+/**
+ * 주문 경로명으로 배지 색상 결정
+ */
+function getOrderSourceBadgeVariant(orderPlaceName: string | null): "orange" | "green" | "red" | "outline" {
+  if (!orderPlaceName) return "outline";
+
+  const name = orderPlaceName.toLowerCase();
+
+  if (name.includes("11") || name.includes("11번가") || name.includes("11st")) {
+    return "orange";
+  }
+  if (name.includes("g마켓") || name.includes("gmarket")) {
+    return "green";
+  }
+  if (name.includes("옥션") || name.includes("auction")) {
+    return "red";
+  }
+
+  return "outline";
+}
+
+/**
+ * 주문 경로 표시 텍스트 결정
+ */
+function getOrderSourceText(order: UnifiedOrder): string {
+  // marketId가 "self"이거나 null이면 자사몰
+  if (!order.marketId || order.marketId === "self") {
+    return "자사몰";
+  }
+
+  // 외부몰이면 orderPlaceName 표시
+  return order.orderPlaceName || "-";
+}
 
 interface OrdersTableProps {
   orders: UnifiedOrder[];
@@ -109,6 +144,7 @@ export function OrdersTable({
               </span>
             </TableHead>
             <TableHead>상태</TableHead>
+            <TableHead>주문 경로</TableHead>
             <TableHead>주문자</TableHead>
             <TableHead>연락처</TableHead>
             <TableHead className="text-right">금액</TableHead>
@@ -127,7 +163,7 @@ export function OrdersTable({
         <TableBody>
           {orders.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={11} className="text-center py-12 text-muted-foreground">
+              <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
                 주문이 없습니다. 동기화 버튼을 눌러 주문을 가져오세요.
               </TableCell>
             </TableRow>
@@ -168,6 +204,15 @@ export function OrdersTable({
                   <TableCell className="font-mono text-xs">{order.orderNo}</TableCell>
                   <TableCell>
                     <OrderStatusBadge status={order.ordStatus} />
+                  </TableCell>
+                  <TableCell>
+                    {order.marketId && order.marketId !== "self" ? (
+                      <Badge variant={getOrderSourceBadgeVariant(order.orderPlaceName)}>
+                        {order.orderPlaceName || "-"}
+                      </Badge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">자사몰</span>
+                    )}
                   </TableCell>
                   <TableCell className="font-medium">{order.toName || "-"}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">
@@ -244,7 +289,7 @@ export function OrdersTable({
                   </TableCell>
                 </TableRow>
                 {expandedOrders.has(order.key) && (
-                  <OrderDetailRow order={order} colSpan={11} />
+                  <OrderDetailRow order={order} colSpan={12} />
                 )}
               </>
             ))
