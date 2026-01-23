@@ -55,13 +55,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   const url = new URL(request.url);
-  const autoRefresh = url.searchParams.get("auto_refresh") === "true";
+  // 기본값을 true로 변경 - 토큰 상태 조회 시 항상 자동 갱신
+  const autoRefresh = url.searchParams.get("auto_refresh") !== "false";
 
   try {
     let tokenData: Cafe24Token | null;
     let refreshed = false;
 
-    // 자동 갱신 옵션이 켜져 있으면 getValidToken 사용 (자동 갱신 포함)
+    // 자동 갱신 (기본 활성화) - 토큰 만료 시 자동으로 refresh_token 사용
     if (autoRefresh) {
       const originalToken = await getCafe24Token();
       tokenData = await getValidToken();

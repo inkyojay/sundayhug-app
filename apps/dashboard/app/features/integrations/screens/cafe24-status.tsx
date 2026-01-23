@@ -37,9 +37,10 @@ import {
 
 import {
   type Cafe24Token,
-  getCafe24Token,
+  getValidToken,
   getStoreInfo,
   disconnectCafe24,
+  isRefreshTokenExpired,
 } from "../lib/cafe24.server";
 
 export const meta: Route.MetaFunction = () => {
@@ -51,16 +52,20 @@ export async function loader({ request }: Route.LoaderArgs) {
   const success = url.searchParams.get("success");
   const error = url.searchParams.get("error");
 
-  // 토큰 조회
-  const token = await getCafe24Token();
-  
+  // 토큰 조회 (자동 갱신 포함 - access_token 만료 시 refresh_token으로 자동 갱신)
+  const token = await getValidToken();
+
   let storeInfo = null;
+  let needsReauth = false;
+
   if (token) {
     // 토큰이 있으면 쇼핑몰 정보 조회
     const storeResult = await getStoreInfo();
     if (storeResult.success) {
       storeInfo = storeResult.store;
     }
+    // refresh_token이 만료된 경우에만 재인증 필요
+    needsReauth = isRefreshTokenExpired(token);
   }
 
   return {
@@ -69,9 +74,11 @@ export async function loader({ request }: Route.LoaderArgs) {
       mall_id: token.mall_id,
       scope: token.scope,
       expires_at: token.expires_at,
+      refresh_token_expires_at: token.refresh_token_expires_at,
       updated_at: token.updated_at,
     } : null,
     storeInfo,
+    needsReauth, // refresh_token 만료 시에만 true
     message: success === "true" ? "연동이 완료되었습니다!" : null,
     error: error || null,
   };
@@ -96,14 +103,12 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Cafe24Status({ loaderData, actionData }: Route.ComponentProps) {
-  const { isConnected, token, storeInfo, message, error } = loaderData;
+  const { isConnected, token, storeInfo, needsReauth, message, error } = loaderData;
   const fetcher = useFetcher();
   const isSubmitting = fetcher.state === "submitting";
 
-  // 토큰 만료 여부 확인
-  const isTokenExpired = token?.expires_at 
-    ? new Date(token.expires_at) < new Date() 
-    : false;
+  // refresh_token 만료 시에만 재인증 필요 (access_token은 자동 갱신됨)
+  const isTokenExpired = needsReauth;
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -184,21 +189,23 @@ export default function Cafe24Status({ loaderData, actionData }: Route.Component
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">토큰 만료</p>
-                  <p className={`font-medium ${isTokenExpired ? "text-red-500" : ""}`}>
-                    {new Date(token.expires_at).toLocaleString("ko-KR")}
-                    {isTokenExpired && " (만료됨)"}
+                  <p className="text-sm text-muted-foreground">연동 유지 기한</p>
+                  <p className={`font-medium ${isTokenExpired ? "text-red-500" : "text-green-600"}`}>
+                    {token.refresh_token_expires_at
+                      ? new Date(token.refresh_token_expires_at).toLocaleString("ko-KR")
+                      : new Date(token.expires_at).toLocaleString("ko-KR")}
+                    {isTokenExpired ? " (만료됨 - 재인증 필요)" : " (자동 갱신됨)"}
                   </p>
                 </div>
               </div>
 
-              {/* 토큰 만료 경고 */}
+              {/* 토큰 만료 경고 - refresh_token이 만료된 경우에만 표시 */}
               {isTokenExpired && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>토큰 만료</AlertTitle>
+                  <AlertTitle>재인증 필요</AlertTitle>
                   <AlertDescription>
-                    토큰이 만료되었습니다. 연동을 다시 해주세요.
+                    연동 유지 기한이 만료되었습니다. 카페24 연동을 다시 해주세요.
                   </AlertDescription>
                 </Alert>
               )}
