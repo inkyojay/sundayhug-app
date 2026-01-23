@@ -71,6 +71,10 @@ export interface UnifiedOrder {
   totalAmount: number;    // 총 금액
   totalQty: number;       // 총 수량
   items: OrderItem[];     // 주문 상품 목록
+  // 외부몰 정보 (Cafe24 연동)
+  marketId: string | null;       // "self" = 자사몰, 그 외 = 외부몰 ID
+  marketOrderNo: string | null;  // 외부몰 주문번호
+  orderPlaceName: string | null; // 주문 경로명
 }
 
 // ===== 주문 통계 =====

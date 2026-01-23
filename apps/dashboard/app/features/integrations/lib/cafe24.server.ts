@@ -42,6 +42,10 @@ export interface Cafe24Order {
   order_status: string;
   items: Cafe24OrderItem[];
   receiver: Cafe24Receiver;
+  // 외부몰 정보
+  market_id?: string;        // "self" = 자사몰, 그 외 = 외부몰 ID
+  market_order_no?: string;  // 외부몰 주문번호
+  order_place_name?: string; // 주문 경로명 (예: "PC쇼핑몰", "11번가" 등)
 }
 
 export interface Cafe24OrderItem {
@@ -755,6 +759,132 @@ export async function sendInvoiceToCafe24WithAuth(
     shippingCompanyCode,
     trackingNo
   );
+}
+
+// ============================================================================
+// Order Status Update API
+// ============================================================================
+
+/**
+ * Cafe24 process_status 매핑
+ * 참고: https://developers.cafe24.com/docs/api/admin/
+ *
+ * PUT /api/v2/admin/orders 에서 사용하는 process_status 값:
+ * - prepare: 배송준비중
+ * - prepareproduct: 상품준비중
+ * - hold: 배송보류
+ * - unhold: 배송보류해제
+ *
+ * 내부 "상품준비중" → Cafe24 "배송준비중"(prepare)으로 매핑
+ */
+const CAFE24_PROCESS_STATUS_MAP: Record<string, string> = {
+  "상품준비중": "prepare",  // 내부 상품준비중 → Cafe24 배송준비중
+  "배송준비중": "prepare",
+  "배송보류": "hold",
+};
+
+export interface UpdateOrderStatusResult {
+  success: boolean;
+  successCount?: number;
+  failCount?: number;
+  errors?: { orderId: string; error: string }[];
+}
+
+/**
+ * Cafe24 주문 상태 일괄 업데이트
+ * PUT /api/v2/admin/orders
+ *
+ * @param orders - 주문 정보 목록 (orderId + orderItemCodes)
+ * @param newStatus - 변경할 상태 (한글 상태명)
+ */
+export async function updateOrderStatusBulk(
+  orders: Array<{ orderId: string; orderItemCodes: string[] }>,
+  newStatus: string
+): Promise<UpdateOrderStatusResult> {
+  const processStatus = CAFE24_PROCESS_STATUS_MAP[newStatus];
+
+  if (!processStatus) {
+    return {
+      success: false,
+      errors: [{ orderId: "all", error: `Cafe24에서 지원하지 않는 상태입니다: ${newStatus}` }],
+    };
+  }
+
+  const token = await getValidToken();
+  if (!token) {
+    return {
+      success: false,
+      errors: [{ orderId: "all", error: "유효한 Cafe24 토큰이 없습니다. 연동을 다시 해주세요." }],
+    };
+  }
+
+  if (orders.length === 0) {
+    return { success: true, successCount: 0, failCount: 0 };
+  }
+
+  const apiUrl = `https://${token.mall_id}.cafe24api.com/api/v2/admin/orders`;
+
+  try {
+    // requests 배열 구성
+    const requests = orders.map((order) => ({
+      order_id: order.orderId,
+      process_status: processStatus,
+      order_item_code: order.orderItemCodes,
+    }));
+
+    console.log(`📤 Cafe24 상태 변경: ${orders.length}건, 상태=${processStatus}`);
+    console.log(`📤 요청 데이터:`, JSON.stringify(requests, null, 2));
+
+    const response = await fetch(apiUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token.access_token}`,
+        "X-Cafe24-Api-Version": "2024-09-01",
+      },
+      body: JSON.stringify({
+        shop_no: 1,
+        requests,
+      }),
+    });
+
+    const responseText = await response.text();
+    console.log(`📥 Cafe24 상태 변경 응답 (${response.status}):`, responseText.slice(0, 1000));
+
+    if (!response.ok) {
+      let errorMsg = `API 호출 실패 (${response.status})`;
+      try {
+        const responseData = JSON.parse(responseText);
+        errorMsg = responseData.error?.message || errorMsg;
+      } catch {
+        // JSON 파싱 실패 시 기본 메시지 사용
+      }
+      return {
+        success: false,
+        successCount: 0,
+        failCount: orders.length,
+        errors: [{ orderId: "all", error: errorMsg }],
+      };
+    }
+
+    console.log(`✅ Cafe24 상태 변경 성공: ${orders.length}건 → ${newStatus}`);
+    return {
+      success: true,
+      successCount: orders.length,
+      failCount: 0,
+    };
+  } catch (error) {
+    console.error(`❌ Cafe24 상태 변경 중 오류:`, error);
+    return {
+      success: false,
+      successCount: 0,
+      failCount: orders.length,
+      errors: [{
+        orderId: "all",
+        error: error instanceof Error ? error.message : "알 수 없는 오류",
+      }],
+    };
+  }
 }
 
 // ============================================================================

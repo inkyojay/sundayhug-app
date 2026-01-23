@@ -159,7 +159,11 @@ export function OrdersTable({
                     </Button>
                   </TableCell>
                   <TableCell>
-                    <ChannelBadge channel={order.channel} />
+                    <ChannelBadge
+                      channel={order.channel}
+                      marketId={order.marketId}
+                      orderPlaceName={order.orderPlaceName}
+                    />
                   </TableCell>
                   <TableCell className="font-mono text-xs">{order.orderNo}</TableCell>
                   <TableCell>
@@ -217,11 +221,16 @@ export function OrdersTable({
                       </div>
                     ) : (
                       <div className="flex items-center gap-1">
-                        <span className="text-xs text-muted-foreground">
-                          {order.invoiceNo
-                            ? `${order.carrName || ""} ${order.invoiceNo}`
-                            : "-"}
-                        </span>
+                        {order.invoiceNo ? (
+                          <div className="flex flex-col text-xs">
+                            {order.carrName && (
+                              <span className="text-muted-foreground">{order.carrName}</span>
+                            )}
+                            <span className="font-mono">{order.invoiceNo}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
                         <Button
                           size="sm"
                           variant="ghost"

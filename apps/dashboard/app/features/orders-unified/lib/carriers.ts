@@ -35,7 +35,7 @@ export const CARRIERS: Carrier[] = [
   {
     label: "한진택배",
     value: "hanjin",
-    cafe24Code: "0001",
+    cafe24Code: "0018",  // Cafe24에서 0018로 반환됨 (이전: 0001)
     naverCode: "HANJIN",
     coupangCode: "HANJIN",
   },
@@ -119,12 +119,25 @@ export function getCarrierByValue(value: string): Carrier | undefined {
 }
 
 /**
+ * Cafe24 추가 코드 매핑 (일부 Cafe24에서 다른 코드 사용)
+ */
+const CAFE24_EXTRA_CODES: Record<string, string> = {
+  "0001": "hanjin",   // 한진택배 (구버전 코드)
+  "0018": "hanjin",   // 한진택배 (신버전 코드)
+};
+
+/**
  * 채널별 코드로 택배사 정보 조회
  */
 export function getCarrierByChannelCode(
   channel: "cafe24" | "naver" | "coupang",
   code: string
 ): Carrier | undefined {
+  // Cafe24 추가 코드 매핑 확인
+  if (channel === "cafe24" && CAFE24_EXTRA_CODES[code]) {
+    return CARRIERS.find((c) => c.value === CAFE24_EXTRA_CODES[code]);
+  }
+
   const codeKey = `${channel}Code` as keyof Carrier;
   return CARRIERS.find((c) => c[codeKey] === code);
 }

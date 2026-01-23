@@ -284,6 +284,7 @@ export default function OrdersUnifiedPage() {
   const cafe24Fetcher = useFetcher();
   const naverFetcher = useFetcher();
   const coupangFetcher = useFetcher();
+  const allSyncFetcher = useFetcher();
 
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
@@ -299,6 +300,7 @@ export default function OrdersUnifiedPage() {
   const isSyncingCafe24 = cafe24Fetcher.state === "submitting";
   const isSyncingNaver = naverFetcher.state === "submitting";
   const isSyncingCoupang = coupangFetcher.state === "submitting";
+  const isSyncingAll = isSyncingCafe24 || isSyncingNaver || isSyncingCoupang;
   const isProcessing = fetcher.state === "submitting";
 
   // 현재 URL 파라미터
@@ -404,6 +406,13 @@ export default function OrdersUnifiedPage() {
     coupangFetcher.submit(formData, { method: "POST", action: "/api/integrations/coupang/sync-orders" });
   };
 
+  // 전체 동기화 (Cafe24 + 네이버 + 쿠팡 동시)
+  const handleSyncAll = () => {
+    handleSyncCafe24();
+    handleSyncNaver();
+    handleSyncCoupang();
+  };
+
   const handleSort = (column: string) => {
     const newOrder = loaderData.sortBy === column && loaderData.sortOrder === "asc" ? "desc" : "asc";
     window.location.href = buildUrl({ sortBy: column, sortOrder: newOrder });
@@ -441,17 +450,18 @@ export default function OrdersUnifiedPage() {
             <CalendarIcon className="h-4 w-4 mr-2" />
             {syncStartDate} ~ {syncEndDate}
           </Button>
-          <Button variant="outline" size="sm" onClick={handleSyncCafe24} disabled={isSyncingCafe24}>
-            {isSyncingCafe24 ? <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" /> : <StoreIcon className="h-4 w-4 mr-2" />}
-            Cafe24
+          <Button onClick={handleSyncAll} disabled={isSyncingAll}>
+            {isSyncingAll ? <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCwIcon className="h-4 w-4 mr-2" />}
+            전체 동기화
           </Button>
-          <Button variant="outline" size="sm" onClick={handleSyncNaver} disabled={isSyncingNaver}>
-            {isSyncingNaver ? <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" /> : <StoreIcon className="h-4 w-4 mr-2" />}
-            네이버
+          <Button variant="ghost" size="sm" onClick={handleSyncCafe24} disabled={isSyncingCafe24}>
+            {isSyncingCafe24 ? <RefreshCwIcon className="h-4 w-4 animate-spin" /> : <StoreIcon className="h-4 w-4" />}
           </Button>
-          <Button variant="outline" size="sm" onClick={handleSyncCoupang} disabled={isSyncingCoupang}>
-            {isSyncingCoupang ? <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" /> : <StoreIcon className="h-4 w-4 mr-2" />}
-            쿠팡
+          <Button variant="ghost" size="sm" onClick={handleSyncNaver} disabled={isSyncingNaver}>
+            {isSyncingNaver ? <RefreshCwIcon className="h-4 w-4 animate-spin" /> : <StoreIcon className="h-4 w-4" />}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={handleSyncCoupang} disabled={isSyncingCoupang}>
+            {isSyncingCoupang ? <RefreshCwIcon className="h-4 w-4 animate-spin" /> : <StoreIcon className="h-4 w-4" />}
           </Button>
         </div>
       </div>

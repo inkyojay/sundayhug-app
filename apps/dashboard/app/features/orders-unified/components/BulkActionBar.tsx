@@ -4,6 +4,7 @@
  * 선택된 주문에 대한 일괄 처리 버튼들
  * - 선택된 주문 개수 표시
  * - 일괄 상태 변경 (선택 후 확인)
+ * - 한진택배 엑셀 다운로드 버튼
  * - 일괄 송장 입력 버튼
  * - 일괄 송장 전송 버튼
  * - 일괄 삭제 버튼
@@ -12,12 +13,15 @@ import { useFetcher } from "react-router";
 import { useState } from "react";
 import {
   CheckIcon,
+  CheckCircleIcon,
   ChevronDownIcon,
+  FileSpreadsheetIcon,
   PackageIcon,
   SendIcon,
   Trash2Icon,
   UploadIcon,
   XIcon,
+  XCircleIcon,
 } from "lucide-react";
 
 import { Button } from "~/core/components/ui/button";
@@ -41,9 +45,12 @@ import {
 } from "~/core/components/ui/alert-dialog";
 
 import { ORDER_STATUSES, type UnifiedOrder } from "../lib/orders-unified.shared";
+
+// 선택 가능한 상태 옵션 (모든 상태 선택 가능)
+const SELECTABLE_STATUSES = ORDER_STATUSES;
 import { InvoiceInputModal } from "./InvoiceInputModal";
 import { InvoiceUploadModal } from "./InvoiceUploadModal";
-import { DownloadOptionsModal } from "./DownloadOptionsModal";
+import { exportHanjinInvoiceExcel } from "../lib/hanjin-invoice";
 
 interface BulkActionBarProps {
   selectedOrders: Set<string>;
@@ -63,17 +70,21 @@ export function BulkActionBar({
   const [showStatusConfirmDialog, setShowStatusConfirmDialog] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
 
   // 선택된 상태 (아직 실행 안 됨)
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
-  const [lastChangedStatus, setLastChangedStatus] = useState<string>("");
 
   const isProcessing = fetcher.state === "submitting";
   const selectedCount = selectedOrders.size;
 
   // 선택된 주문들만 필터링
   const selectedOrderList = orders.filter((o) => selectedOrders.has(o.key));
+
+  // 결과 메시지 (fetcher 완료 후)
+  const fetcherData = fetcher.data as { success?: boolean; message?: string; error?: string } | undefined;
+  const resultMessage = fetcherData?.message || fetcherData?.error;
+  const isSuccess = fetcherData?.success;
 
   if (selectedCount === 0) {
     return null;
@@ -103,18 +114,23 @@ export function BulkActionBar({
       { method: "POST" }
     );
 
-    setLastChangedStatus(selectedStatus);
     setShowStatusConfirmDialog(false);
-
-    // "상품준비중"으로 변경 시 다운로드 모달 표시
-    if (selectedStatus === "상품준비중") {
-      setTimeout(() => {
-        setShowDownloadModal(true);
-      }, 500);
-    }
-
     setSelectedStatus(null);
     onActionComplete?.();
+  };
+
+  // 한진택배 엑셀 다운로드
+  const handleDownloadHanjinExcel = async () => {
+    if (selectedOrderList.length === 0) return;
+
+    setIsDownloadingExcel(true);
+    try {
+      await exportHanjinInvoiceExcel(selectedOrderList);
+    } catch (error) {
+      console.error("엑셀 생성 오류:", error);
+    } finally {
+      setIsDownloadingExcel(false);
+    }
   };
 
   const handleBulkDelete = () => {
@@ -148,6 +164,22 @@ export function BulkActionBar({
 
   return (
     <>
+      {/* 결과 메시지 */}
+      {resultMessage && (
+        <div
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm ${
+            isSuccess ? "bg-green-50 text-green-800 border border-green-200" : "bg-red-50 text-red-800 border border-red-200"
+          }`}
+        >
+          {isSuccess ? (
+            <CheckCircleIcon className="h-4 w-4 flex-shrink-0" />
+          ) : (
+            <XCircleIcon className="h-4 w-4 flex-shrink-0" />
+          )}
+          {resultMessage}
+        </div>
+      )}
+
       <div className="flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg">
         {/* 선택된 주문 개수 */}
         <div className="flex items-center gap-2">
@@ -184,7 +216,7 @@ export function BulkActionBar({
             <DropdownMenuContent align="start">
               <DropdownMenuLabel>변경할 상태 선택</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {ORDER_STATUSES.map((status) => (
+              {SELECTABLE_STATUSES.map((status) => (
                 <DropdownMenuItem
                   key={status.value}
                   onClick={() => handleSelectStatus(status.value)}
@@ -209,6 +241,19 @@ export function BulkActionBar({
             변경
           </Button>
         </div>
+
+        <div className="h-4 w-px bg-blue-200" />
+
+        {/* 한진택배 엑셀 다운로드 */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleDownloadHanjinExcel}
+          disabled={isProcessing || isDownloadingExcel}
+        >
+          <FileSpreadsheetIcon className="h-4 w-4 mr-1" />
+          {isDownloadingExcel ? "다운로드 중..." : "한진택배 엑셀"}
+        </Button>
 
         <div className="h-4 w-px bg-blue-200" />
 
@@ -332,14 +377,6 @@ export function BulkActionBar({
           setShowUploadModal(false);
           onActionComplete?.();
         }}
-      />
-
-      {/* 다운로드 옵션 모달 (상품준비중 상태 변경 후) */}
-      <DownloadOptionsModal
-        open={showDownloadModal}
-        onOpenChange={setShowDownloadModal}
-        orders={selectedOrderList}
-        statusChanged={lastChangedStatus}
       />
     </>
   );

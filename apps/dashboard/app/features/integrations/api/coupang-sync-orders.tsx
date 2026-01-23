@@ -94,13 +94,31 @@ export async function action({ request }: Route.ActionArgs) {
   let dateFrom: Date;
   let dateTo: Date;
 
+  // yyyyMMdd 형식 파싱 헬퍼
+  const parseYyyyMmDd = (str: string): Date => {
+    if (str.length === 8) {
+      // yyyyMMdd 형식
+      const year = parseInt(str.slice(0, 4));
+      const month = parseInt(str.slice(4, 6)) - 1; // 0-indexed
+      const day = parseInt(str.slice(6, 8));
+      return new Date(year, month, day);
+    }
+    // yyyy-MM-dd 또는 다른 형식
+    return new Date(str);
+  };
+
   if (dateFromStr && dateToStr) {
-    dateFrom = new Date(dateFromStr);
-    dateTo = new Date(dateToStr);
+    dateFrom = parseYyyyMmDd(dateFromStr);
+    dateTo = parseYyyyMmDd(dateToStr);
   } else {
     dateTo = now;
     dateFrom = new Date(now);
     dateFrom.setDate(dateFrom.getDate() - 7);
+  }
+
+  // 날짜 유효성 검사
+  if (isNaN(dateFrom.getTime()) || isNaN(dateTo.getTime())) {
+    return { error: `유효하지 않은 날짜 형식입니다. (from: ${dateFromStr}, to: ${dateToStr})` };
   }
 
   // 최대 30일 제한 확인

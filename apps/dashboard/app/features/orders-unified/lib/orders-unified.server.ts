@@ -83,7 +83,10 @@ export async function getUnifiedOrders(
       ord_time,
       invoice_no,
       carr_name,
-      customer_id
+      customer_id,
+      market_id,
+      market_order_no,
+      order_place_name
     `, { count: "exact" })
     .in("shop_cd", channels);
 
@@ -196,6 +199,10 @@ function groupOrdersByOrderNo(rawOrders: any[]): UnifiedOrder[] {
         totalAmount: 0,
         totalQty: 0,
         items: [],
+        // 외부몰 정보
+        marketId: row.market_id,
+        marketOrderNo: row.market_order_no,
+        orderPlaceName: row.order_place_name,
       });
     }
 
@@ -254,6 +261,9 @@ export async function bulkUpdateStatus(
   orderKeys: string[],
   newStatus: string
 ): Promise<{ success: boolean; count: number; deductionErrors?: string[]; apiErrors?: string[] }> {
+  console.log(`📋 [bulkUpdateStatus] 시작: ${orderKeys.length}개 주문, 상태="${newStatus}"`);
+  console.log(`📋 [bulkUpdateStatus] orderKeys:`, orderKeys);
+
   let successCount = 0;
   const deductionErrors: string[] = [];
   const apiErrors: string[] = [];
@@ -267,21 +277,30 @@ export async function bulkUpdateStatus(
   // 네이버 주문의 productOrderId 수집 (발주 확인용)
   const naverProductOrderIds: string[] = [];
 
+  // Cafe24 주문 아이템 수집 (상태 동기화용) - orderId별로 그룹핑
+  const cafe24OrdersMap = new Map<string, string[]>();
+
   for (const key of orderKeys) {
+    console.log(`📋 [bulkUpdateStatus] 처리 중: key="${key}"`);
     const parsed = parseOrderKey(key);
     if (!parsed) {
+      console.log(`📋 [bulkUpdateStatus] ❌ 파싱 실패: key="${key}"`);
       continue; // 유효하지 않은 key는 건너뛰기
     }
     const { channel, orderNo } = parsed;
+    console.log(`📋 [bulkUpdateStatus] 파싱 결과: channel="${channel}", orderNo="${orderNo}"`);
 
     // 1. 해당 주문의 uniq, shop_ord_no_real (productOrderId) 조회
-    const { data: orderRows } = await adminClient
+    const { data: orderRows, error: queryError } = await adminClient
       .from("orders")
       .select("uniq, inventory_deducted, shop_ord_no_real")
       .eq("shop_cd", channel)
       .eq("shop_ord_no", orderNo);
 
+    console.log(`📋 [bulkUpdateStatus] DB 조회: ${orderRows?.length || 0}건, error=${queryError?.message || 'none'}`);
+
     if (!orderRows || orderRows.length === 0) {
+      console.log(`📋 [bulkUpdateStatus] ❌ 주문 없음: channel="${channel}", orderNo="${orderNo}"`);
       continue;
     }
 
@@ -295,6 +314,23 @@ export async function bulkUpdateStatus(
         .map((row: any) => row.shop_ord_no_real)
         .filter((id: string | null) => id && id.length > 0);
       naverProductOrderIds.push(...productOrderIds);
+    }
+
+    // 2-1. Cafe24 주문이고 "상품준비중"으로 변경 시 order_item_code 수집
+    if (channel === "cafe24" && isPrepareStatus) {
+      // Cafe24 uniq 형식: cafe24_{order_id}_{order_item_code}
+      for (const uniq of orderUniqs) {
+        const parts = uniq.split("_");
+        if (parts.length >= 3 && parts[0] === "cafe24") {
+          const orderId = parts[1];
+          const orderItemCode = parts.slice(2).join("_");
+          // orderId별로 orderItemCodes 그룹핑
+          if (!cafe24OrdersMap.has(orderId)) {
+            cafe24OrdersMap.set(orderId, []);
+          }
+          cafe24OrdersMap.get(orderId)!.push(orderItemCode);
+        }
+      }
     }
 
     // 3. "배송중" 상태로 변경 시 재고 차감
@@ -347,6 +383,34 @@ export async function bulkUpdateStatus(
     } catch (error) {
       console.error(`❌ [bulkUpdateStatus] 네이버 발주 확인 API 호출 오류:`, error);
       apiErrors.push(`네이버 API 호출 오류: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
+    }
+  }
+
+  // 7. Cafe24 상태 동기화 API 일괄 호출 (상품준비중으로 변경 시)
+  if (isPrepareStatus && cafe24OrdersMap.size > 0) {
+    try {
+      const { updateOrderStatusBulk } = await import("~/features/integrations/lib/cafe24.server");
+
+      // Map을 배열로 변환
+      const cafe24Orders = Array.from(cafe24OrdersMap.entries()).map(([orderId, orderItemCodes]) => ({
+        orderId,
+        orderItemCodes,
+      }));
+
+      console.log(`📤 [bulkUpdateStatus] Cafe24 상태 동기화 API 호출: ${cafe24Orders.length}건`);
+
+      const result = await updateOrderStatusBulk(cafe24Orders, newStatus);
+
+      if (result.failCount && result.failCount > 0 && result.errors) {
+        apiErrors.push(
+          ...result.errors.map((e) => `Cafe24 상태변경 실패: ${e.orderId} - ${e.error}`)
+        );
+      }
+
+      console.log(`✅ [bulkUpdateStatus] Cafe24 상태 동기화 완료: 성공 ${result.successCount}건, 실패 ${result.failCount || 0}건`);
+    } catch (error) {
+      console.error(`❌ [bulkUpdateStatus] Cafe24 상태 동기화 API 호출 오류:`, error);
+      apiErrors.push(`Cafe24 API 호출 오류: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
     }
   }
 

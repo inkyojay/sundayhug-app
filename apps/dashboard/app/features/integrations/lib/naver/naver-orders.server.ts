@@ -301,8 +301,10 @@ export async function getLastChangedOrders(params: GetLastChangedOrdersParams): 
 // ============================================================================
 
 /**
- * 발주 확인
- * POST /external/v1/pay-order/seller/product-orders/{productOrderId}/place-order
+ * 발주 확인 (단건)
+ * POST /external/v1/pay-order/seller/product-orders/confirm
+ *
+ * 참고: 실제로는 일괄 API를 사용하는 것이 효율적
  */
 export async function placeOrder(params: PlaceOrderParams): Promise<{
   success: boolean;
@@ -312,14 +314,13 @@ export async function placeOrder(params: PlaceOrderParams): Promise<{
 
   console.log(`📝 발주 확인 요청: productOrderId=${productOrderId}`);
 
-  const result = await naverFetch<any>(
-    `/external/v1/pay-order/seller/product-orders/${productOrderId}/place-order`,
-    { method: "POST" }
-  );
+  // 일괄 API를 단건으로 호출
+  const result = await placeOrdersBulk([productOrderId]);
 
-  if (!result.success) {
-    console.error(`❌ 발주 확인 실패: ${result.error}`);
-    return { success: false, error: result.error };
+  if (!result.success || result.failCount > 0) {
+    const errorMsg = result.errors[0]?.error || "발주 확인 실패";
+    console.error(`❌ 발주 확인 실패: ${errorMsg}`);
+    return { success: false, error: errorMsg };
   }
 
   console.log(`✅ 발주 확인 완료: productOrderId=${productOrderId}`);
@@ -328,7 +329,10 @@ export async function placeOrder(params: PlaceOrderParams): Promise<{
 
 /**
  * 일괄 발주 확인
- * POST /external/v1/pay-order/seller/product-orders/place-order
+ * POST /external/v1/pay-order/seller/product-orders/confirm
+ *
+ * 참고: https://apicenter.commerce.naver.com/docs/commerce-api/current/place-order
+ * 요청 가능한 상품 주문 번호는 최대 30개
  */
 export async function placeOrdersBulk(productOrderIds: string[]): Promise<{
   success: boolean;
@@ -337,13 +341,14 @@ export async function placeOrdersBulk(productOrderIds: string[]): Promise<{
   errors: { productOrderId: string; error: string }[];
 }> {
   console.log(`📝 일괄 발주 확인 요청: ${productOrderIds.length}건`);
+  console.log(`📝 productOrderIds:`, productOrderIds);
 
   const result = await naverFetch<{
     data: {
-      successProductOrderIds: string[];
-      failProductOrderInfos: { productOrderId: string; message: string }[];
+      successProductOrderInfos: { productOrderId: string }[];
+      failProductOrderInfos: { productOrderId: string; code: string; message: string }[];
     };
-  }>(`/external/v1/pay-order/seller/product-orders/place-order`, {
+  }>(`/external/v1/pay-order/seller/product-orders/confirm`, {
     method: "POST",
     body: {
       productOrderIds,
@@ -360,18 +365,18 @@ export async function placeOrdersBulk(productOrderIds: string[]): Promise<{
     };
   }
 
-  const successIds = result.data?.data?.successProductOrderIds || [];
+  const successItems = result.data?.data?.successProductOrderInfos || [];
   const failedItems = result.data?.data?.failProductOrderInfos || [];
 
-  console.log(`✅ 일괄 발주 확인 완료: 성공 ${successIds.length}건, 실패 ${failedItems.length}건`);
+  console.log(`✅ 일괄 발주 확인 완료: 성공 ${successItems.length}건, 실패 ${failedItems.length}건`);
 
   return {
     success: failedItems.length === 0,
-    successCount: successIds.length,
+    successCount: successItems.length,
     failCount: failedItems.length,
     errors: failedItems.map((f) => ({
       productOrderId: f.productOrderId,
-      error: f.message || "발주 확인 실패",
+      error: f.message || f.code || "발주 확인 실패",
     })),
   };
 }

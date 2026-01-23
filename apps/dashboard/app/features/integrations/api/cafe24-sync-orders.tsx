@@ -8,6 +8,7 @@ import { data } from "react-router";
 import type { Route } from "./+types/cafe24-sync-orders";
 
 import { getOrders, type Cafe24Order } from "../lib/cafe24.server";
+import { getCarrierByChannelCode } from "~/features/orders-unified/lib/carriers";
 
 interface SyncResult {
   success: boolean;
@@ -225,20 +226,45 @@ function mapCafe24OrderToDb(order: Cafe24Order, item: Cafe24Order["items"][0]) {
     "E10": "교환완료",
   };
 
-  const receiver = order.receiver || {};
+  // receiver 처리: 단일 객체 또는 배열 모두 지원
+  // Cafe24 API는 embed=receivers 시 receivers 배열로 반환할 수 있음
+  let receiver: any = {};
+  if (order.receiver) {
+    receiver = order.receiver;
+  } else if ((order as any).receivers && Array.isArray((order as any).receivers)) {
+    receiver = (order as any).receivers[0] || {};
+  }
+
+  // 택배사 코드를 이름으로 변환
+  let carrierName: string | null = null;
+  if (item.shipping_company_code) {
+    const carrier = getCarrierByChannelCode("cafe24", item.shipping_company_code);
+    carrierName = carrier?.label || item.shipping_company_code;
+  }
+
+  // 상품별 실 결제 금액 계산
+  // - product_price: 상품 단가
+  // - quantity: 수량
+  // - additional_discount_price: 추가 할인 금액
+  //
+  // 주의: actual_payment_amount는 주문 전체 금액이므로 사용하지 않음
+  //       (여러 상품이 있으면 중복 합산되는 문제 발생)
+  const productAmount = parseFloat(item.product_price || "0") * item.quantity;
+  const discountAmount = parseFloat(item.additional_discount_price || "0");
+  const itemPaymentAmount = productAmount - discountAmount;
 
   return {
     // 고유 식별자: Cafe24 주문번호 + 주문상품코드
     uniq: `cafe24_${order.order_id}_${item.order_item_code}`,
-    
+
     // PlayAuto 호환 필드
     sol_no: 0, // Cafe24는 sol_no 없음
     ori_uniq: null,
     bundle_no: null,
-    
+
     // 주문 상태
     ord_status: statusMap[item.order_status] || item.order_status || "신규주문",
-    
+
     // 쇼핑몰 정보
     shop_cd: "cafe24",
     shop_name: "카페24",
@@ -249,24 +275,24 @@ function mapCafe24OrderToDb(order: Cafe24Order, item: Cafe24Order["items"][0]) {
     shop_sale_name: item.product_name,
     shop_sku_cd: item.product_code,
     shop_opt_name: item.option_value || null,
-    
+
     // 주문 수량
     sale_cnt: item.quantity,
-    
+
     // 시간 정보
     ord_time: order.order_date,
     pay_time: order.order_date,
-    
-    // 금액 정보
-    pay_amt: parseFloat(item.product_price) * item.quantity,
-    sales: parseFloat(item.product_price) * item.quantity,
-    discount_amt: parseFloat(item.additional_discount_price || "0"),
-    
+
+    // 금액 정보 (상품별 실 결제 금액)
+    pay_amt: itemPaymentAmount,
+    sales: productAmount,
+    discount_amt: discountAmount,
+
     // 주문자 정보
     order_name: order.order_name || order.buyer_name,
     order_tel: order.order_phone || order.buyer_phone,
     order_email: order.order_email || order.buyer_email,
-    
+
     // 수령자 정보
     to_name: receiver.name || order.billing_name,
     to_tel: receiver.phone || "",
@@ -274,14 +300,19 @@ function mapCafe24OrderToDb(order: Cafe24Order, item: Cafe24Order["items"][0]) {
     to_addr1: receiver.address1 || "",
     to_addr2: receiver.address2 || "",
     to_zipcd: receiver.zipcode || "",
-    
+
     // 배송 메시지
     ship_msg: receiver.shipping_message || null,
-    
-    // 송장 정보
+
+    // 송장 정보 (택배사 코드 → 이름 변환)
     invoice_no: item.tracking_no || null,
-    carr_name: item.shipping_company_code || null,
-    
+    carr_name: carrierName,
+
+    // 외부몰 정보
+    market_id: (order as any).market_id || null,
+    market_order_no: (order as any).market_order_no || null,
+    order_place_name: (order as any).order_place_name || null,
+
     // 타임스탬프
     synced_at: new Date().toISOString(),
   };
