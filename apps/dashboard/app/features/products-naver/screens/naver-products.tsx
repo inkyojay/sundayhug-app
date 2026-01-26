@@ -1254,6 +1254,7 @@ export default function NaverProducts() {
                   <TableHead className="w-[90px]">상태</TableHead>
                   <TableHead className="w-[70px]">옵션 수</TableHead>
                   <TableHead className="w-[80px]">품절</TableHead>
+                  <TableHead className="w-[80px]">문의</TableHead>
                   <TableHead className="w-[100px]">액션</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1376,6 +1377,36 @@ export default function NaverProducts() {
                           )}
                         </TableCell>
                         <TableCell>
+                          {(() => {
+                            const inquiryData = inquiryCountMap[product.origin_product_no];
+                            const total = inquiryData?.total || 0;
+                            const waiting = inquiryData?.waiting || 0;
+
+                            if (total === 0) {
+                              return <span className="text-muted-foreground">0</span>;
+                            }
+
+                            return (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.location.href = `/dashboard/inquiries/naver?productId=${product.origin_product_no}`;
+                                }}
+                                className="cursor-pointer hover:opacity-70 transition-opacity"
+                                title={`총 ${total}건 (대기: ${waiting}건)`}
+                              >
+                                <Badge
+                                  variant={waiting > 0 ? "destructive" : "secondary"}
+                                  className="cursor-pointer"
+                                >
+                                  {total}건
+                                </Badge>
+                              </button>
+                            );
+                          })()}
+                        </TableCell>
+                        <TableCell>
                           <div className="flex gap-1">
                             <Button
                               variant="ghost"
@@ -1407,7 +1438,7 @@ export default function NaverProducts() {
                       {/* 옵션 아코디언 */}
                       {expandedProducts.has(product.origin_product_no) && product.options && product.options.length > 0 && (
                         <TableRow>
-                          <TableCell colSpan={14} className="bg-muted/30 p-0">
+                          <TableCell colSpan={15} className="bg-muted/30 p-0">
                             <div className="p-4">
                               <Table>
                                 <TableHeader>
@@ -1585,7 +1616,7 @@ export default function NaverProducts() {
                 })}
                 {products.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={15} className="text-center py-8 text-muted-foreground">
                       {hasActiveFilters
                         ? "검색 결과가 없습니다"
                         : "제품이 없습니다. \"제품 동기화\" 버튼을 클릭해 스마트스토어에서 제품을 가져오세요."}
