@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigation } from "react-router";
 
 import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
@@ -39,6 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/core/components/ui/select";
+import { LoadingTable } from "~/core/components/ui/loading";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
@@ -118,7 +120,10 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function ASList({ loaderData }: Route.ComponentProps) {
   const { t } = useTranslation(["warranty", "common"]);
+  const navigation = useNavigation();
   const { asRequests, stats, totalCount, currentPage, totalPages, statusFilter, typeFilter } = loaderData;
+
+  const isLoading = navigation.state === "loading";
 
   const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
     received: { label: t("warranty:admin.asManagement.status.received"), variant: "outline" },
@@ -255,57 +260,61 @@ export default function ASList({ loaderData }: Route.ComponentProps) {
           <CardDescription>{t("warranty:admin.asManagement.totalItems", { count: totalCount })}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("warranty:admin.asManagement.table.warrantyNumber")}</TableHead>
-                <TableHead>{t("warranty:admin.asManagement.table.customer")}</TableHead>
-                <TableHead>{t("warranty:admin.asManagement.table.product")}</TableHead>
-                <TableHead>{t("warranty:admin.asManagement.table.type")}</TableHead>
-                <TableHead>{t("warranty:admin.asManagement.table.content")}</TableHead>
-                <TableHead>{t("warranty:admin.asManagement.table.status")}</TableHead>
-                <TableHead>{t("warranty:admin.asManagement.table.requestDate")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {asRequests.map((item: any) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-mono text-xs">
-                    {item.warranties?.warranty_number || "-"}
-                  </TableCell>
-                  <TableCell>
-                    {item.contact_name || item.warranties?.customers?.name || "-"}
-                  </TableCell>
-                  <TableCell className="max-w-[150px] truncate">
-                    {item.warranties?.product_name || "-"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {typeConfig[item.request_type] || item.request_type}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="max-w-[200px] truncate text-sm">
-                    {item.issue_description}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={statusConfig[item.status]?.variant || "outline"}>
-                      {statusConfig[item.status]?.label || item.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {new Date(item.created_at).toLocaleDateString("ko-KR")}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {asRequests.length === 0 && (
+          {isLoading ? (
+            <LoadingTable columns={7} rows={10} />
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    {t("warranty:admin.asManagement.noRequests")}
-                  </TableCell>
+                  <TableHead>{t("warranty:admin.asManagement.table.warrantyNumber")}</TableHead>
+                  <TableHead>{t("warranty:admin.asManagement.table.customer")}</TableHead>
+                  <TableHead>{t("warranty:admin.asManagement.table.product")}</TableHead>
+                  <TableHead>{t("warranty:admin.asManagement.table.type")}</TableHead>
+                  <TableHead>{t("warranty:admin.asManagement.table.content")}</TableHead>
+                  <TableHead>{t("warranty:admin.asManagement.table.status")}</TableHead>
+                  <TableHead>{t("warranty:admin.asManagement.table.requestDate")}</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {asRequests.map((item: any) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-mono text-xs">
+                      {item.warranties?.warranty_number || "-"}
+                    </TableCell>
+                    <TableCell>
+                      {item.contact_name || item.warranties?.customers?.name || "-"}
+                    </TableCell>
+                    <TableCell className="max-w-[150px] truncate">
+                      {item.warranties?.product_name || "-"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {typeConfig[item.request_type] || item.request_type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="max-w-[200px] truncate text-sm">
+                      {item.issue_description}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={statusConfig[item.status]?.variant || "outline"}>
+                        {statusConfig[item.status]?.label || item.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {new Date(item.created_at).toLocaleDateString("ko-KR")}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {asRequests.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      {t("warranty:admin.asManagement.noRequests")}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
 
           {/* 페이지네이션 */}
           {totalPages > 1 && (
