@@ -190,6 +190,286 @@ export async function generateMultiSheetExcel(
 }
 
 /**
+ * Excel 셀 스타일 옵션
+ */
+export interface ExcelCellStyle {
+  font?: Partial<ExcelJS.Font>;
+  fill?: ExcelJS.Fill;
+  alignment?: Partial<ExcelJS.Alignment>;
+  border?: Partial<ExcelJS.Borders>;
+  numFmt?: string;
+}
+
+/**
+ * Excel 헤더 스타일 적용
+ *
+ * @param worksheet - 워크시트 객체
+ * @param rowNumber - 행 번호 (기본값: 1)
+ * @param style - 커스텀 스타일 (선택사항)
+ *
+ * @example
+ * ```ts
+ * applyHeaderStyle(worksheet);
+ * // 또는 커스텀 스타일로
+ * applyHeaderStyle(worksheet, 1, {
+ *   font: { bold: true, color: { argb: 'FFFFFFFF' } },
+ *   fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } },
+ * });
+ * ```
+ */
+export function applyHeaderStyle(
+  worksheet: ExcelJS.Worksheet,
+  rowNumber: number = 1,
+  style?: Partial<ExcelCellStyle>
+): void {
+  const row = worksheet.getRow(rowNumber);
+  row.font = style?.font ?? { bold: true };
+  row.fill = style?.fill ?? {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFE0E0E0" },
+  };
+  row.alignment = style?.alignment ?? { vertical: "middle", horizontal: "center" };
+  if (style?.border) {
+    row.border = style.border;
+  }
+}
+
+/**
+ * Excel 셀 스타일 적용
+ *
+ * @param cell - 셀 객체
+ * @param style - 스타일 옵션
+ *
+ * @example
+ * ```ts
+ * const cell = worksheet.getCell('A1');
+ * applyCellStyle(cell, {
+ *   font: { bold: true, color: { argb: 'FFFF0000' } },
+ *   fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } },
+ *   alignment: { horizontal: 'center' },
+ * });
+ * ```
+ */
+export function applyCellStyle(cell: ExcelJS.Cell, style: ExcelCellStyle): void {
+  if (style.font) {
+    cell.font = style.font;
+  }
+  if (style.fill) {
+    cell.fill = style.fill;
+  }
+  if (style.alignment) {
+    cell.alignment = style.alignment;
+  }
+  if (style.border) {
+    cell.border = style.border;
+  }
+  if (style.numFmt) {
+    cell.numFmt = style.numFmt;
+  }
+}
+
+/**
+ * Excel 통화 형식 적용
+ *
+ * @param cell - 셀 객체
+ * @param symbol - 통화 기호 (기본값: '₩')
+ *
+ * @example
+ * ```ts
+ * const cell = worksheet.getCell('B2');
+ * cell.value = 10000;
+ * applyCurrencyFormat(cell); // ₩10,000
+ * ```
+ */
+export function applyCurrencyFormat(cell: ExcelJS.Cell, symbol: string = "₩"): void {
+  cell.numFmt = `${symbol}#,##0`;
+}
+
+/**
+ * Excel 백분율 형식 적용
+ *
+ * @param cell - 셀 객체
+ * @param decimals - 소수점 자릿수 (기본값: 2)
+ *
+ * @example
+ * ```ts
+ * const cell = worksheet.getCell('C2');
+ * cell.value = 0.15;
+ * applyPercentageFormat(cell); // 15.00%
+ * ```
+ */
+export function applyPercentageFormat(cell: ExcelJS.Cell, decimals: number = 2): void {
+  const decimalStr = decimals > 0 ? "." + "0".repeat(decimals) : "";
+  cell.numFmt = `0${decimalStr}%`;
+}
+
+/**
+ * Excel 날짜 형식 적용
+ *
+ * @param cell - 셀 객체
+ * @param format - 날짜 형식 (기본값: 'yyyy-mm-dd')
+ *
+ * @example
+ * ```ts
+ * const cell = worksheet.getCell('D2');
+ * cell.value = new Date();
+ * applyDateFormat(cell); // 2024-01-26
+ * applyDateFormat(cell, 'yyyy-mm-dd hh:mm:ss'); // 2024-01-26 14:30:00
+ * ```
+ */
+export function applyDateFormat(cell: ExcelJS.Cell, format: string = "yyyy-mm-dd"): void {
+  cell.numFmt = format;
+}
+
+/**
+ * Excel 셀 테두리 적용
+ *
+ * @param cell - 셀 객체
+ * @param style - 테두리 스타일 (기본값: 'thin')
+ * @param color - 테두리 색상 (기본값: '000000')
+ *
+ * @example
+ * ```ts
+ * const cell = worksheet.getCell('A1');
+ * applyCellBorder(cell); // 기본 테두리
+ * applyCellBorder(cell, 'medium', 'FF0000'); // 빨간색 중간 테두리
+ * ```
+ */
+export function applyCellBorder(
+  cell: ExcelJS.Cell,
+  style: "thin" | "medium" | "thick" | "dotted" | "dashed" = "thin",
+  color: string = "000000"
+): void {
+  const borderStyle = { style, color: { argb: color } };
+  cell.border = {
+    top: borderStyle,
+    left: borderStyle,
+    bottom: borderStyle,
+    right: borderStyle,
+  };
+}
+
+/**
+ * Excel 범위에 테두리 적용
+ *
+ * @param worksheet - 워크시트 객체
+ * @param startRow - 시작 행
+ * @param startCol - 시작 컬럼
+ * @param endRow - 종료 행
+ * @param endCol - 종료 컬럼
+ * @param style - 테두리 스타일 (기본값: 'thin')
+ *
+ * @example
+ * ```ts
+ * // A1:D10 범위에 테두리 적용
+ * applyRangeBorder(worksheet, 1, 1, 10, 4);
+ * ```
+ */
+export function applyRangeBorder(
+  worksheet: ExcelJS.Worksheet,
+  startRow: number,
+  startCol: number,
+  endRow: number,
+  endCol: number,
+  style: "thin" | "medium" | "thick" | "dotted" | "dashed" = "thin"
+): void {
+  for (let row = startRow; row <= endRow; row++) {
+    for (let col = startCol; col <= endCol; col++) {
+      const cell = worksheet.getCell(row, col);
+      applyCellBorder(cell, style);
+    }
+  }
+}
+
+/**
+ * Excel 셀 병합
+ *
+ * @param worksheet - 워크시트 객체
+ * @param startRow - 시작 행
+ * @param startCol - 시작 컬럼
+ * @param endRow - 종료 행
+ * @param endCol - 종료 컬럼
+ *
+ * @example
+ * ```ts
+ * // A1:D1 셀 병합
+ * mergeCells(worksheet, 1, 1, 1, 4);
+ * ```
+ */
+export function mergeCells(
+  worksheet: ExcelJS.Worksheet,
+  startRow: number,
+  startCol: number,
+  endRow: number,
+  endCol: number
+): void {
+  worksheet.mergeCells(startRow, startCol, endRow, endCol);
+}
+
+/**
+ * Excel 열 너비 자동 조정
+ *
+ * @param worksheet - 워크시트 객체
+ * @param minWidth - 최소 너비 (기본값: 10)
+ * @param maxWidth - 최대 너비 (기본값: 50)
+ *
+ * @example
+ * ```ts
+ * autoFitColumns(worksheet);
+ * autoFitColumns(worksheet, 15, 40);
+ * ```
+ */
+export function autoFitColumns(
+  worksheet: ExcelJS.Worksheet,
+  minWidth: number = 10,
+  maxWidth: number = 50
+): void {
+  worksheet.columns.forEach((column) => {
+    if (!column.eachCell) return;
+
+    let maxLength = 0;
+    column.eachCell({ includeEmpty: true }, (cell) => {
+      const cellValue = cell.value ? cell.value.toString() : "";
+      maxLength = Math.max(maxLength, cellValue.length);
+    });
+
+    column.width = Math.min(Math.max(maxLength + 2, minWidth), maxWidth);
+  });
+}
+
+/**
+ * Excel 조건부 서식 - 값 기반 색상
+ *
+ * @param cell - 셀 객체
+ * @param value - 셀 값
+ * @param threshold - 임계값
+ * @param aboveColor - 임계값 이상일 때 색상 (기본값: 초록색)
+ * @param belowColor - 임계값 미만일 때 색상 (기본값: 빨간색)
+ *
+ * @example
+ * ```ts
+ * const cell = worksheet.getCell('E2');
+ * cell.value = 85;
+ * applyConditionalColor(cell, 85, 80); // 임계값 80 이상이면 초록색
+ * ```
+ */
+export function applyConditionalColor(
+  cell: ExcelJS.Cell,
+  value: number,
+  threshold: number,
+  aboveColor: string = "FF90EE90",
+  belowColor: string = "FFFFC0CB"
+): void {
+  const color = value >= threshold ? aboveColor : belowColor;
+  cell.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: color },
+  };
+}
+
+/**
  * CSV 문자열 생성
  *
  * @param headers - 컬럼 헤더 배열
