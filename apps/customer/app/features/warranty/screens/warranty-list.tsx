@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { useFetcher, useRevalidator } from "react-router";
+import { useFetcher, useRevalidator, useNavigation } from "react-router";
 
 import { Badge } from "~/core/components/ui/badge";
 import { Button } from "~/core/components/ui/button";
@@ -55,6 +55,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/core/components/ui/dialog";
+import { LoadingTable } from "~/core/components/ui/loading";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 import adminClient from "~/core/lib/supa-admin-client.server";
@@ -174,6 +175,8 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
   const { t } = useTranslation(["warranty", "common"]);
   const { warranties, stats, totalCount, currentPage, totalPages, search, statusFilter } = loaderData;
   const [searchInput, setSearchInput] = useState(search);
+  const navigation = useNavigation();
+  const isLoading = navigation.state === "loading";
 
   // 상태별 배지 스타일
   const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -430,29 +433,32 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[50px]">
-                  <Checkbox
-                    checked={isAllSelected}
-                    onCheckedChange={handleSelectAll}
-                    aria-label={t("warranty:admin.warrantyManagement.selectAll")}
-                    className={isSomeSelected ? "opacity-50" : ""}
-                  />
-                </TableHead>
-                <TableHead className="w-[180px]">{t("warranty:admin.warrantyManagement.table.warrantyNumber")}</TableHead>
-                <TableHead>{t("warranty:admin.warrantyManagement.table.buyerName")}</TableHead>
-                <TableHead>{t("warranty:admin.warrantyManagement.table.product")}</TableHead>
-                <TableHead>{t("warranty:admin.warrantyManagement.table.trackingNumber")}</TableHead>
-                <TableHead>{t("warranty:admin.warrantyManagement.table.warrantyPeriod")}</TableHead>
-                <TableHead>{t("warranty:admin.warrantyManagement.table.status")}</TableHead>
-                <TableHead>{t("warranty:admin.warrantyManagement.table.registrationDate")}</TableHead>
-                <TableHead className="w-[80px]">{t("warranty:admin.warrantyManagement.table.detail")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {warranties.map((item: any) => (
+          {isLoading ? (
+            <LoadingTable columns={9} rows={10} />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[50px]">
+                    <Checkbox
+                      checked={isAllSelected}
+                      onCheckedChange={handleSelectAll}
+                      aria-label={t("warranty:admin.warrantyManagement.selectAll")}
+                      className={isSomeSelected ? "opacity-50" : ""}
+                    />
+                  </TableHead>
+                  <TableHead className="w-[180px]">{t("warranty:admin.warrantyManagement.table.warrantyNumber")}</TableHead>
+                  <TableHead>{t("warranty:admin.warrantyManagement.table.buyerName")}</TableHead>
+                  <TableHead>{t("warranty:admin.warrantyManagement.table.product")}</TableHead>
+                  <TableHead>{t("warranty:admin.warrantyManagement.table.trackingNumber")}</TableHead>
+                  <TableHead>{t("warranty:admin.warrantyManagement.table.warrantyPeriod")}</TableHead>
+                  <TableHead>{t("warranty:admin.warrantyManagement.table.status")}</TableHead>
+                  <TableHead>{t("warranty:admin.warrantyManagement.table.registrationDate")}</TableHead>
+                  <TableHead className="w-[80px]">{t("warranty:admin.warrantyManagement.table.detail")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {warranties.map((item: any) => (
                 <TableRow 
                   key={item.id}
                   className={selectedIds.has(item.id) ? "bg-muted/50" : ""}
@@ -510,18 +516,19 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
                   </TableCell>
                 </TableRow>
               ))}
-              {warranties.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                    {search || statusFilter !== "all" ? t("warranty:admin.warrantyManagement.noSearchResults") : t("warranty:admin.warrantyManagement.noWarranties")}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                {warranties.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      {search || statusFilter !== "all" ? t("warranty:admin.warrantyManagement.noSearchResults") : t("warranty:admin.warrantyManagement.noWarranties")}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
 
           {/* 페이지네이션 */}
-          {totalPages > 1 && (
+          {!isLoading && totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
               <p className="text-sm text-muted-foreground">
                 {t("warranty:admin.asManagement.pagination.page", { current: currentPage, total: totalPages })}
