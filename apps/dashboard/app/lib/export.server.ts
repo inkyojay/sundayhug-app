@@ -84,6 +84,33 @@ export async function generateExcel<T extends Record<string, any>>(
 }
 
 /**
+ * 객체 배열에서 Excel 파일 생성 (간편 버전)
+ *
+ * @param columns - 컬럼 정의 배열
+ * @param data - 데이터 객체 배열
+ * @param sheetName - 시트 이름 (기본값: 'Sheet1')
+ * @returns Excel 파일 Buffer
+ *
+ * @example
+ * ```ts
+ * const buffer = await generateExcelFromObjects(
+ *   [
+ *     { header: '주문번호', accessor: 'orderNo', width: 15 },
+ *     { header: '금액', accessor: (row) => row.amount.toLocaleString(), width: 12 },
+ *   ],
+ *   orders
+ * );
+ * ```
+ */
+export async function generateExcelFromObjects<T extends Record<string, any>>(
+  columns: ExcelColumnDef<T>[],
+  data: T[],
+  sheetName: string = "Sheet1"
+): Promise<Buffer> {
+  return generateExcel(columns, data, sheetName);
+}
+
+/**
  * CSV 문자열 생성
  *
  * @param headers - 컬럼 헤더 배열
