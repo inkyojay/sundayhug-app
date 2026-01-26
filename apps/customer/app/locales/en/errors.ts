@@ -86,6 +86,12 @@ export default {
     ],
   },
 
+  // Generic error page
+  error: {
+    title: "Error",
+    errorCode: "Error code",
+  },
+
   // 500 page
   serverError: {
     title: "Server Error",

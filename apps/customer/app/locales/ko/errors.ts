@@ -86,6 +86,12 @@ export default {
     ],
   },
 
+  // 일반 에러 페이지
+  error: {
+    title: "오류",
+    errorCode: "오류 코드",
+  },
+
   // 500 페이지
   serverError: {
     title: "서버 오류가 발생했습니다",
