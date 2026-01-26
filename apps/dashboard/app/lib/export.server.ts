@@ -4,6 +4,8 @@
  * 데이터를 CSV 형식으로 변환하고 다운로드 응답을 생성하는 헬퍼 함수들
  */
 
+import ExcelJS from "exceljs";
+
 /**
  * CSV 컬럼 헤더 정의
  */
@@ -19,6 +21,66 @@ export interface ExcelColumnDef<T> {
   header: string;
   accessor: keyof T | ((row: T) => string | number | null | undefined);
   width?: number; // 컬럼 너비 (선택사항)
+}
+
+/**
+ * Excel 파일 생성 (단일 시트)
+ *
+ * @param columns - 컬럼 정의 배열
+ * @param data - 데이터 객체 배열
+ * @param sheetName - 시트 이름
+ * @returns Excel 파일 Buffer
+ *
+ * @example
+ * ```ts
+ * const buffer = await generateExcel(
+ *   [
+ *     { header: '주문번호', accessor: 'orderNo', width: 15 },
+ *     { header: '금액', accessor: (row) => row.amount.toLocaleString(), width: 12 },
+ *   ],
+ *   orders,
+ *   '주문 목록'
+ * );
+ * ```
+ */
+export async function generateExcel<T extends Record<string, any>>(
+  columns: ExcelColumnDef<T>[],
+  data: T[],
+  sheetName: string
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
+
+  // 컬럼 정의 설정
+  worksheet.columns = columns.map((col) => ({
+    header: col.header,
+    key: col.header,
+    width: col.width ?? 15, // 기본 너비 15
+  }));
+
+  // 헤더 스타일 설정
+  worksheet.getRow(1).font = { bold: true };
+  worksheet.getRow(1).fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFE0E0E0" },
+  };
+  worksheet.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
+
+  // 데이터 추가
+  data.forEach((row) => {
+    const rowData = columns.map((col) => {
+      if (typeof col.accessor === "function") {
+        return col.accessor(row) ?? "";
+      }
+      return row[col.accessor] ?? "";
+    });
+    worksheet.addRow(rowData);
+  });
+
+  // Buffer로 변환
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
 }
 
 /**
