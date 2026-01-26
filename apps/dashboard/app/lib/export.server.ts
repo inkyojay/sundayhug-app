@@ -661,6 +661,16 @@ export function createCSVResponseFromObjects<T extends Record<string, any>>(
 
 /**
  * 날짜 형식 포매터 (CSV 출력용)
+ *
+ * @param dateString - 날짜 문자열 (ISO 형식 또는 Date 생성자가 파싱 가능한 형식)
+ * @returns 포맷된 날짜 문자열 (yyyy.mm.dd 형식)
+ *
+ * @example
+ * ```ts
+ * formatDateForCSV('2024-01-26'); // '2024.01.26'
+ * formatDateForCSV(null); // ''
+ * formatDateForCSV('invalid'); // ''
+ * ```
  */
 export function formatDateForCSV(dateString: string | null | undefined): string {
   if (!dateString) return "";
@@ -675,6 +685,16 @@ export function formatDateForCSV(dateString: string | null | undefined): string 
 
 /**
  * 날짜시간 형식 포매터 (CSV 출력용)
+ *
+ * @param dateString - 날짜시간 문자열 (ISO 형식 또는 Date 생성자가 파싱 가능한 형식)
+ * @returns 포맷된 날짜시간 문자열 (yyyy.mm.dd hh:mm 형식)
+ *
+ * @example
+ * ```ts
+ * formatDateTimeForCSV('2024-01-26T14:30:00'); // '2024.01.26 14:30'
+ * formatDateTimeForCSV(null); // ''
+ * formatDateTimeForCSV('invalid'); // ''
+ * ```
  */
 export function formatDateTimeForCSV(dateString: string | null | undefined): string {
   if (!dateString) return "";
@@ -691,6 +711,17 @@ export function formatDateTimeForCSV(dateString: string | null | undefined): str
 
 /**
  * 금액 형식 포매터 (CSV 출력용)
+ *
+ * @param amount - 금액 숫자
+ * @returns 천 단위 쉼표가 포함된 금액 문자열
+ *
+ * @example
+ * ```ts
+ * formatCurrencyForCSV(10000); // '10,000'
+ * formatCurrencyForCSV(1234567); // '1,234,567'
+ * formatCurrencyForCSV(null); // ''
+ * formatCurrencyForCSV(undefined); // ''
+ * ```
  */
 export function formatCurrencyForCSV(amount: number | null | undefined): string {
   if (amount === null || amount === undefined) return "";
