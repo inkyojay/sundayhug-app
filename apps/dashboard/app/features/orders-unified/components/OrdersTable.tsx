@@ -100,6 +100,7 @@ export function OrdersTable({
             </TableHead>
             <TableHead className="w-[40px]"></TableHead>
             <TableHead className="w-[80px]">채널</TableHead>
+            <TableHead>주문 경로</TableHead>
             <TableHead
               className="cursor-pointer hover:bg-muted"
               onClick={() => onSort("shop_ord_no")}
@@ -127,7 +128,7 @@ export function OrdersTable({
         <TableBody>
           {orders.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={11} className="text-center py-12 text-muted-foreground">
+              <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
                 주문이 없습니다. 동기화 버튼을 눌러 주문을 가져오세요.
               </TableCell>
             </TableRow>
@@ -244,7 +245,7 @@ export function OrdersTable({
                   </TableCell>
                 </TableRow>
                 {expandedOrders.has(order.key) && (
-                  <OrderDetailRow order={order} colSpan={11} />
+                  <OrderDetailRow order={order} colSpan={12} />
                 )}
               </>
             ))
