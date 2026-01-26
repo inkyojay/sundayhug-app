@@ -32,6 +32,8 @@ import {
   SelectValue,
 } from "~/core/components/ui/select";
 
+import { Badge } from "@sundayhug/ui";
+
 import { ChannelBadge } from "./ChannelBadge";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { OrderDetailRow } from "./OrderDetailRow";
@@ -49,6 +51,34 @@ interface OrdersTableProps {
   onSort: (column: string) => void;
   onSaveInvoice: (order: UnifiedOrder, invoiceNo: string, carrName: string) => void;
   isProcessing: boolean;
+}
+
+// 외부몰 ID -> 배지 색상 매핑
+const MARKET_BADGE_CONFIG: Record<string, { variant: "orange" | "green" | "red" | "default"; label: string }> = {
+  "11st": { variant: "orange", label: "11번가" },
+  "gmarket": { variant: "green", label: "G마켓" },
+  "auction": { variant: "red", label: "옥션" },
+};
+
+/**
+ * 주문 경로 배지 렌더링 헬퍼 함수
+ */
+function renderOrderChannelBadge(marketId: string | null, orderPlaceName: string | null) {
+  // 자사몰 (marketId가 없거나 "self"인 경우)
+  if (!marketId || marketId === "self") {
+    return <span className="text-xs text-muted-foreground">자사몰</span>;
+  }
+
+  // 외부몰 배지 설정 조회
+  const badgeConfig = MARKET_BADGE_CONFIG[marketId];
+
+  if (badgeConfig) {
+    return <Badge variant={badgeConfig.variant}>{badgeConfig.label}</Badge>;
+  }
+
+  // 알 수 없는 마켓플레이스 - orderPlaceName 또는 marketId를 기본 배지로 표시
+  const displayName = orderPlaceName || marketId;
+  return <Badge variant="default">{displayName}</Badge>;
 }
 
 export function OrdersTable({
@@ -166,7 +196,7 @@ export function OrdersTable({
                       orderPlaceName={order.orderPlaceName}
                     />
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{order.orderNo}</TableCell>
+                  <TableCell>{renderOrderChannelBadge(order.marketId, order.orderPlaceName)}</TableCell>
                   <TableCell>
                     <OrderStatusBadge status={order.ordStatus} />
                   </TableCell>
