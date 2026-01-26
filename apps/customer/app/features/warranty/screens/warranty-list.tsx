@@ -325,7 +325,18 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
 
       {/* 통계 카드 */}
       <div className="grid gap-4 md:grid-cols-5">
-        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => handleStatusChange("all")}>
+        <Card
+          className="cursor-pointer hover:bg-muted/50 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+          onClick={() => handleStatusChange("all")}
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleStatusChange("all");
+            }
+          }}
+          aria-label={`${t("warranty:admin.warrantyManagement.stats.total")} ${stats.total_warranties}개, 클릭하여 전체 보증서 보기`}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">{t("warranty:admin.warrantyManagement.stats.total")}</CardTitle>
           </CardHeader>
@@ -333,7 +344,18 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
             <div className="text-2xl font-bold">{stats.total_warranties}</div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => handleStatusChange("pending")}>
+        <Card
+          className="cursor-pointer hover:bg-muted/50 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+          onClick={() => handleStatusChange("pending")}
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleStatusChange("pending");
+            }
+          }}
+          aria-label={`${t("warranty:admin.warrantyManagement.stats.pending")} ${stats.pending_count}개, 클릭하여 승인 대기 보증서 보기`}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               <ClockIcon className="h-4 w-4 text-yellow-500" />
@@ -344,7 +366,18 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
             <div className="text-2xl font-bold text-yellow-500">{stats.pending_count}</div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => handleStatusChange("approved")}>
+        <Card
+          className="cursor-pointer hover:bg-muted/50 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+          onClick={() => handleStatusChange("approved")}
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleStatusChange("approved");
+            }
+          }}
+          aria-label={`${t("warranty:admin.warrantyManagement.stats.approved")} ${stats.approved_count}개, 클릭하여 승인된 보증서 보기`}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               <CheckCircleIcon className="h-4 w-4 text-green-500" />
@@ -355,7 +388,18 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
             <div className="text-2xl font-bold text-green-500">{stats.approved_count}</div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => handleStatusChange("rejected")}>
+        <Card
+          className="cursor-pointer hover:bg-muted/50 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+          onClick={() => handleStatusChange("rejected")}
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleStatusChange("rejected");
+            }
+          }}
+          aria-label={`${t("warranty:admin.warrantyManagement.stats.rejected")} ${stats.rejected_count}개, 클릭하여 거부된 보증서 보기`}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               <XCircleIcon className="h-4 w-4 text-destructive" />
