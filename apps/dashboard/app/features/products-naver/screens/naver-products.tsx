@@ -134,6 +134,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // 상품 문의에서 연결된 productId 필터
   const productIdFilter = url.searchParams.get("productId") || "";
 
+  // 동적 import로 문의 조회 함수 로드
+  const { getCustomerInquiries, getProductQnas } = await import("~/features/integrations/lib/naver/naver-inquiries.server");
+
   // 제품 목록 조회
   let query = supabase
     .from("naver_products")
@@ -173,6 +176,42 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const { data: inventorySummary } = await supabase
     .from("inventory_summary")
     .select("sku, current_stock");
+
+  // 문의 데이터 조회 (고객 문의 + 상품 문의)
+  const customerInquiriesResult = await getCustomerInquiries({});
+  const productQnasResult = await getProductQnas({});
+
+  const customerInquiries = customerInquiriesResult.inquiries || [];
+  const productQnas = productQnasResult.qnas || [];
+
+  // 제품별 문의 개수 집계 (originProductNo 기준)
+  const inquiryCountMap: Record<number, { total: number; waiting: number }> = {};
+
+  // 고객 문의 집계 (productNo 사용)
+  customerInquiries.forEach((inquiry: any) => {
+    if (inquiry.productNo) {
+      if (!inquiryCountMap[inquiry.productNo]) {
+        inquiryCountMap[inquiry.productNo] = { total: 0, waiting: 0 };
+      }
+      inquiryCountMap[inquiry.productNo].total += 1;
+      if (!inquiry.answered) {
+        inquiryCountMap[inquiry.productNo].waiting += 1;
+      }
+    }
+  });
+
+  // 상품 문의 집계 (productId 사용)
+  productQnas.forEach((qna: any) => {
+    if (qna.productId) {
+      if (!inquiryCountMap[qna.productId]) {
+        inquiryCountMap[qna.productId] = { total: 0, waiting: 0 };
+      }
+      inquiryCountMap[qna.productId].total += 1;
+      if (!qna.answered) {
+        inquiryCountMap[qna.productId].waiting += 1;
+      }
+    }
+  });
 
   // 제품별로 옵션 그룹핑
   let productsWithOptions = (products || []).map((product: NaverProduct) => ({
@@ -330,6 +369,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     stats,
     internalProducts: internalProducts || [],
     warehouseStockMap,
+    inquiryCountMap,
     availableColors: Array.from(colorSet).sort(),
     availableSizes: Array.from(sizeSet).sort(),
     error: productsError || optionsError,
@@ -399,7 +439,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function NaverProducts() {
-  const { products, stats, internalProducts, warehouseStockMap, availableColors, availableSizes, error, filters } = useLoaderData<typeof loader>();
+  const { products, stats, internalProducts, warehouseStockMap, inquiryCountMap, availableColors, availableSizes, error, filters } = useLoaderData<typeof loader>();
   
   // 내부 제품을 SKU 기준 Map으로 변환 (O(1) 조회)
   const internalProductsMap = useMemo(() => {
