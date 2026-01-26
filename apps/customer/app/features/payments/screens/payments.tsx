@@ -15,7 +15,7 @@
 
 import type { Route } from "./+types/payments";
 
-import { Link } from "react-router";
+import { Link, useNavigation } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
 import { Card } from "~/core/components/ui/card";
@@ -28,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/core/components/ui/table";
+import { LoadingTable } from "~/core/components/ui/loading";
 import { requireAuthentication } from "~/core/lib/guards.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 
@@ -104,13 +105,20 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function Payments({ loaderData }: Route.ComponentProps) {
   // Extract payment history from loader data
   const { payments } = loaderData;
-  
+
+  // Check if the page is loading
+  const navigation = useNavigation();
+  const isLoading = navigation.state === "loading";
+
   return (
     <div className="flex w-full flex-col items-center gap-10 pt-0 pb-8">
       {/* Card container for payment history */}
       <Card className="w-full max-w-screen-xl p-8">
-        {/* Handle empty state when no payments exist */}
-        {payments.length === 0 ? (
+        {/* Show loading state while fetching data */}
+        {isLoading ? (
+          <LoadingTable columns={6} rows={10} />
+        ) : /* Handle empty state when no payments exist */
+        payments.length === 0 ? (
           <div className="flex flex-col items-center gap-4">
             <p className="text-muted-foreground text-lg">No payments found.</p>
             <Button asChild>
