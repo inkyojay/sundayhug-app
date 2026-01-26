@@ -70,6 +70,7 @@ import {
 import { Label } from "~/core/components/ui/label";
 import { ColorBadge, SizeBadge } from "~/core/components/ui/color-badge";
 import { ScrollArea } from "~/core/components/ui/scroll-area";
+import { Skeleton } from "~/core/components/ui/skeleton";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
@@ -133,6 +134,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const sortOrder = url.searchParams.get("sortOrder") || "desc";
   // 상품 문의에서 연결된 productId 필터
   const productIdFilter = url.searchParams.get("productId") || "";
+  const inquiryFilter = url.searchParams.get("inquiryFilter") || "all";
+
+  // 동적 import로 문의 조회 함수 로드
+  const { getCustomerInquiries, getProductQnas } = await import("~/features/integrations/lib/naver/naver-inquiries.server");
 
   // 제품 목록 조회
   let query = supabase
@@ -173,6 +178,42 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const { data: inventorySummary } = await supabase
     .from("inventory_summary")
     .select("sku, current_stock");
+
+  // 문의 데이터 조회 (고객 문의 + 상품 문의)
+  const customerInquiriesResult = await getCustomerInquiries({});
+  const productQnasResult = await getProductQnas({});
+
+  const customerInquiries = customerInquiriesResult.inquiries || [];
+  const productQnas = productQnasResult.qnas || [];
+
+  // 제품별 문의 개수 집계 (originProductNo 기준)
+  const inquiryCountMap: Record<number, { total: number; waiting: number }> = {};
+
+  // 고객 문의 집계 (productNo 사용)
+  customerInquiries.forEach((inquiry: any) => {
+    if (inquiry.productNo) {
+      if (!inquiryCountMap[inquiry.productNo]) {
+        inquiryCountMap[inquiry.productNo] = { total: 0, waiting: 0 };
+      }
+      inquiryCountMap[inquiry.productNo].total += 1;
+      if (!inquiry.answered) {
+        inquiryCountMap[inquiry.productNo].waiting += 1;
+      }
+    }
+  });
+
+  // 상품 문의 집계 (productId 사용)
+  productQnas.forEach((qna: any) => {
+    if (qna.productId) {
+      if (!inquiryCountMap[qna.productId]) {
+        inquiryCountMap[qna.productId] = { total: 0, waiting: 0 };
+      }
+      inquiryCountMap[qna.productId].total += 1;
+      if (!qna.answered) {
+        inquiryCountMap[qna.productId].waiting += 1;
+      }
+    }
+  });
 
   // 제품별로 옵션 그룹핑
   let productsWithOptions = (products || []).map((product: NaverProduct) => ({
@@ -244,6 +285,24 @@ export async function loader({ request }: LoaderFunctionArgs) {
         const mapped = sku ? internalProductsMapForFilter.get(sku) : null;
         return mapped?.sku_6_size === sizeFilter;
       });
+    });
+  }
+
+  // 문의 필터
+  if (inquiryFilter === "hasInquiries") {
+    productsWithOptions = productsWithOptions.filter((p: any) => {
+      const inquiryData = inquiryCountMap[p.origin_product_no];
+      return inquiryData && inquiryData.total > 0;
+    });
+  } else if (inquiryFilter === "hasWaiting") {
+    productsWithOptions = productsWithOptions.filter((p: any) => {
+      const inquiryData = inquiryCountMap[p.origin_product_no];
+      return inquiryData && inquiryData.waiting > 0;
+    });
+  } else if (inquiryFilter === "noInquiries") {
+    productsWithOptions = productsWithOptions.filter((p: any) => {
+      const inquiryData = inquiryCountMap[p.origin_product_no];
+      return !inquiryData || inquiryData.total === 0;
     });
   }
 
@@ -330,10 +389,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     stats,
     internalProducts: internalProducts || [],
     warehouseStockMap,
+    inquiryCountMap,
     availableColors: Array.from(colorSet).sort(),
     availableSizes: Array.from(sizeSet).sort(),
     error: productsError || optionsError,
-    filters: { search, status: statusFilter, stock: stockFilter, option: optionFilter, mapping: mappingFilter, color: colorFilter, size: sizeFilter, sortBy, sortOrder, productId: productIdFilter },
+    filters: { search, status: statusFilter, stock: stockFilter, option: optionFilter, mapping: mappingFilter, color: colorFilter, size: sizeFilter, sortBy, sortOrder, productId: productIdFilter, inquiryFilter },
   };
 }
 
@@ -399,7 +459,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function NaverProducts() {
-  const { products, stats, internalProducts, warehouseStockMap, availableColors, availableSizes, error, filters } = useLoaderData<typeof loader>();
+  const { products, stats, internalProducts, warehouseStockMap, inquiryCountMap, availableColors, availableSizes, error, filters } = useLoaderData<typeof loader>();
   
   // 내부 제품을 SKU 기준 Map으로 변환 (O(1) 조회)
   const internalProductsMap = useMemo(() => {
@@ -413,6 +473,7 @@ export default function NaverProducts() {
   const [expandedProducts, setExpandedProducts] = useState<Set<number>>(new Set());
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState(filters.search);
+  const [isInquiryDataLoading] = useState<boolean>(false); // Inquiry data loaded server-side
   const [inventoryModal, setInventoryModal] = useState<{
     open: boolean;
     originProductNo: number;
@@ -835,6 +896,7 @@ export default function NaverProducts() {
     const newSize = overrides.size !== undefined ? overrides.size : filters.size;
     const newSortBy = overrides.sortBy !== undefined ? overrides.sortBy : filters.sortBy;
     const newSortOrder = overrides.sortOrder !== undefined ? overrides.sortOrder : filters.sortOrder;
+    const newInquiryFilter = overrides.inquiryFilter !== undefined ? overrides.inquiryFilter : filters.inquiryFilter;
 
     if (newSearch) params.set("search", newSearch);
     if (newStatus && newStatus !== "all") params.set("status", newStatus);
@@ -845,7 +907,8 @@ export default function NaverProducts() {
     if (newSize && newSize !== "all") params.set("size", newSize);
     if (newSortBy && newSortBy !== "updated_at") params.set("sortBy", newSortBy);
     if (newSortOrder && newSortOrder !== "desc") params.set("sortOrder", newSortOrder);
-    
+    if (newInquiryFilter && newInquiryFilter !== "all") params.set("inquiryFilter", newInquiryFilter);
+
     const queryString = params.toString();
     return `/dashboard/products-naver${queryString ? `?${queryString}` : ""}`;
   };
@@ -891,10 +954,10 @@ export default function NaverProducts() {
     link.click();
   };
 
-  const hasActiveFilters = filters.search || filters.status !== "all" || filters.stock !== "all" || filters.option !== "all" || filters.mapping !== "all" || filters.color !== "all" || filters.size !== "all" || filters.productId;
+  const hasActiveFilters = filters.search || filters.status !== "all" || filters.stock !== "all" || filters.option !== "all" || filters.mapping !== "all" || filters.color !== "all" || filters.size !== "all" || filters.productId || filters.inquiryFilter !== "all";
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
+    <div className="flex flex-1 flex-col gap-4 p-4 sm:gap-6 sm:p-6">
       {/* 상품 문의에서 연결된 경우 알림 */}
       {filters.productId && (
         <div className="p-4 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-between">
@@ -947,7 +1010,7 @@ export default function NaverProducts() {
       </div>
 
       {/* 통계 카드 */}
-      <div className="grid gap-4 md:grid-cols-8">
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-4 md:grid-cols-8">
         <Card className="cursor-pointer hover:bg-muted/50" onClick={() => window.location.href = buildUrl({ status: "all", stock: "all", option: "all", mapping: "all" })}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">전체 제품</CardTitle>
@@ -1096,8 +1159,8 @@ export default function NaverProducts() {
                 </Select>
               )}
               {availableSizes.length > 0 && (
-                <Select 
-                  value={filters.size} 
+                <Select
+                  value={filters.size}
                   onValueChange={(v) => window.location.href = buildUrl({ size: v })}
                 >
                   <SelectTrigger className="w-[100px]">
@@ -1111,8 +1174,22 @@ export default function NaverProducts() {
                   </SelectContent>
                 </Select>
               )}
-              <Select 
-                value={filters.status} 
+              <Select
+                value={filters.inquiryFilter}
+                onValueChange={(v) => window.location.href = buildUrl({ inquiryFilter: v })}
+              >
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue placeholder="문의" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체 문의</SelectItem>
+                  <SelectItem value="hasInquiries">문의 있음</SelectItem>
+                  <SelectItem value="hasWaiting">대기중</SelectItem>
+                  <SelectItem value="noInquiries">문의 없음</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={filters.status}
                 onValueChange={(v) => window.location.href = buildUrl({ status: v })}
               >
                 <SelectTrigger className="w-[110px]">
@@ -1203,17 +1280,18 @@ export default function NaverProducts() {
                     />
                   </TableHead>
                   <TableHead className="w-[40px]"></TableHead>
-                  <TableHead className="w-[80px]">이미지</TableHead>
+                  <TableHead className="w-[80px] hidden sm:table-cell">이미지</TableHead>
                   <TableHead>제품명</TableHead>
-                  <TableHead className="w-[60px]">유형</TableHead>
-                  <TableHead className="w-[150px]">판매자 코드</TableHead>
-                  <TableHead className="w-[90px]">색상</TableHead>
-                  <TableHead className="w-[70px]">사이즈</TableHead>
-                  <TableHead className="w-[100px]">판매가</TableHead>
+                  <TableHead className="w-[60px] hidden lg:table-cell">유형</TableHead>
+                  <TableHead className="w-[150px] hidden md:table-cell">판매자 코드</TableHead>
+                  <TableHead className="w-[90px] hidden lg:table-cell">색상</TableHead>
+                  <TableHead className="w-[70px] hidden lg:table-cell">사이즈</TableHead>
+                  <TableHead className="w-[100px] hidden md:table-cell">판매가</TableHead>
                   <TableHead className="w-[70px]">재고</TableHead>
                   <TableHead className="w-[90px]">상태</TableHead>
-                  <TableHead className="w-[70px]">옵션 수</TableHead>
-                  <TableHead className="w-[80px]">품절</TableHead>
+                  <TableHead className="w-[70px] hidden md:table-cell">옵션 수</TableHead>
+                  <TableHead className="w-[80px] hidden md:table-cell">품절</TableHead>
+                  <TableHead className="w-[80px]">문의</TableHead>
                   <TableHead className="w-[100px]">액션</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1253,10 +1331,10 @@ export default function NaverProducts() {
                             )
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden sm:table-cell">
                           {product.represent_image ? (
-                            <img 
-                              src={product.represent_image} 
+                            <img
+                              src={product.represent_image}
                               alt={product.product_name}
                               className="w-12 h-12 object-cover rounded"
                             />
@@ -1275,7 +1353,7 @@ export default function NaverProducts() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden lg:table-cell">
                           {isSetProduct ? (
                             <Badge variant="outline" className="text-xs border-purple-500 text-purple-600 bg-purple-50">
                               <PackageOpenIcon className="h-3 w-3 mr-1" />
@@ -1287,10 +1365,10 @@ export default function NaverProducts() {
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell className="font-mono text-xs">
+                        <TableCell className="hidden md:table-cell font-mono text-xs">
                           {product.seller_management_code || "-"}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden lg:table-cell">
                           {isSingleOption && firstMappedProduct?.color_kr ? (
                             <ColorBadge colorName={firstMappedProduct.color_kr} />
                           ) : isSingleOption ? (
@@ -1299,7 +1377,7 @@ export default function NaverProducts() {
                             <span className="text-muted-foreground text-xs">다중</span>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden lg:table-cell">
                           {isSingleOption && firstMappedProduct?.sku_6_size ? (
                             <SizeBadge size={firstMappedProduct.sku_6_size} />
                           ) : isSingleOption ? (
@@ -1308,16 +1386,16 @@ export default function NaverProducts() {
                             <span className="text-muted-foreground text-xs">다중</span>
                           )}
                         </TableCell>
-                        <TableCell>{formatPrice(product.sale_price)}</TableCell>
+                        <TableCell className="hidden md:table-cell">{formatPrice(product.sale_price)}</TableCell>
                         <TableCell>
-                          <Badge 
+                          <Badge
                             variant={product.stock_quantity <= 0 ? "destructive" : "secondary"}
                           >
                             {product.stock_quantity}개
                           </Badge>
                         </TableCell>
                         <TableCell>{getStatusBadge(product.product_status)}</TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
                           {(product.options?.length || 0) > 1 ? (
                             <Badge variant="outline">
                               {product.options?.length || 0}개
@@ -1328,12 +1406,50 @@ export default function NaverProducts() {
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
                           {outOfStockOptions > 0 ? (
                             <Badge variant="destructive">{outOfStockOptions}개</Badge>
                           ) : (
                             <span className="text-muted-foreground">-</span>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          {isInquiryDataLoading ? (
+                            <Skeleton className="h-6 w-12" />
+                          ) : (() => {
+                            const inquiryData = inquiryCountMap[product.origin_product_no];
+                            const total = inquiryData?.total || 0;
+                            const waiting = inquiryData?.waiting || 0;
+
+                            if (total === 0) {
+                              return (
+                                <div className="flex items-center gap-1 text-muted-foreground" title="문의 없음">
+                                  <MessageSquareIcon className="h-3 w-3" />
+                                  <span className="text-xs">0</span>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.location.href = `/dashboard/inquiries/naver?productId=${product.origin_product_no}`;
+                                }}
+                                className="cursor-pointer hover:opacity-70 transition-opacity"
+                                title={`총 ${total}건 (대기: ${waiting}건)`}
+                              >
+                                <Badge
+                                  variant={waiting > 0 ? "destructive" : "secondary"}
+                                  className="cursor-pointer"
+                                >
+                                  <MessageSquareIcon className="h-3 w-3 mr-1" />
+                                  {total}건
+                                </Badge>
+                              </button>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
@@ -1367,7 +1483,7 @@ export default function NaverProducts() {
                       {/* 옵션 아코디언 */}
                       {expandedProducts.has(product.origin_product_no) && product.options && product.options.length > 0 && (
                         <TableRow>
-                          <TableCell colSpan={14} className="bg-muted/30 p-0">
+                          <TableCell colSpan={15} className="bg-muted/30 p-0">
                             <div className="p-4">
                               <Table>
                                 <TableHeader>
@@ -1545,7 +1661,7 @@ export default function NaverProducts() {
                 })}
                 {products.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={15} className="text-center py-8 text-muted-foreground">
                       {hasActiveFilters
                         ? "검색 결과가 없습니다"
                         : "제품이 없습니다. \"제품 동기화\" 버튼을 클릭해 스마트스토어에서 제품을 가져오세요."}

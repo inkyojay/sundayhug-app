@@ -6,12 +6,14 @@
  * - 상태 필터
  * - 검색
  * - 새로고침 버튼
+ * - 상품 필터 배지 (옵션)
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { Search, RefreshCw, Calendar, Filter } from "lucide-react";
+import { Search, RefreshCw, Calendar, Filter, X } from "lucide-react";
 import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
+import { Badge } from "~/core/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -33,6 +35,9 @@ interface InquiryFiltersProps {
   onFilterChange: (filters: InquiryFilterValues) => void;
   onRefresh: () => void;
   isLoading: boolean;
+  productId?: string;
+  productName?: string;
+  onRemoveProductFilter?: () => void;
 }
 
 const DATE_RANGE_OPTIONS = [
@@ -54,6 +59,9 @@ export function InquiryFilters({
   onFilterChange,
   onRefresh,
   isLoading,
+  productId,
+  productName,
+  onRemoveProductFilter,
 }: InquiryFiltersProps) {
   const [searchInput, setSearchInput] = useState(filters.searchQuery);
 
@@ -83,8 +91,27 @@ export function InquiryFilters({
   );
 
   return (
-    <div className="flex flex-col sm:flex-row gap-3">
-      {/* 기간 선택 */}
+    <div className="flex flex-col gap-3">
+      {/* Product Filter Badge */}
+      {productId && (
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="gap-2">
+            <span>{productName ? `상품: ${productName}` : `상품 ID: ${productId}`}</span>
+            {onRemoveProductFilter && (
+              <button
+                onClick={onRemoveProductFilter}
+                className="hover:bg-secondary-foreground/20 rounded-sm transition-colors"
+                aria-label="Remove product filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </Badge>
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        {/* 기간 선택 */}
       <Select value={filters.dateRange} onValueChange={handleDateRangeChange}>
         <SelectTrigger className="w-full sm:w-[140px]">
           <Calendar className="h-4 w-4 mr-2" />
@@ -134,6 +161,7 @@ export function InquiryFilters({
       >
         <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
       </Button>
+      </div>
     </div>
   );
 }

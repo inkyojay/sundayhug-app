@@ -94,6 +94,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const dateRange = url.searchParams.get("dateRange") || "30days";
   const status = (url.searchParams.get("status") || "all") as InquiryStatusFilter;
   const searchQuery = url.searchParams.get("search") || "";
+  const productId = url.searchParams.get("productId") || "";
 
   // 동적 import로 서버 전용 모듈 로드
   const { getNaverToken } = await import("../lib/naver.server");
@@ -109,7 +110,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       customerInquiries: [],
       productQnas: [],
       totalStats: { total: 0, waiting: 0, answered: 0, holding: 0 },
-      filters: { dateRange, status, searchQuery },
+      productStats: undefined,
+      filters: { dateRange, status, searchQuery, productId },
       templates: [],
       error: "네이버 스마트스토어가 연동되지 않았습니다.",
     });
@@ -153,6 +155,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     );
   }
 
+  // 고객 문의 상품 필터링
+  if (productId) {
+    filteredCustomerInquiries = filteredCustomerInquiries.filter(
+      (inquiry) => String(inquiry.productNo) === productId
+    );
+  }
+
   // 상품 문의 검색 필터링
   let filteredProductQnas = productQnaResult.qnas || [];
   if (searchQuery) {
@@ -162,6 +171,13 @@ export async function loader({ request }: Route.LoaderArgs) {
         String(qna.questionId).includes(query) ||
         (qna.question?.toLowerCase().includes(query) ?? false) ||
         (qna.productName?.toLowerCase().includes(query) ?? false)
+    );
+  }
+
+  // 상품 문의 상품 필터링
+  if (productId) {
+    filteredProductQnas = filteredProductQnas.filter(
+      (qna) => String(qna.productId) === productId
     );
   }
 
@@ -176,12 +192,27 @@ export async function loader({ request }: Route.LoaderArgs) {
     holding: 0,
   };
 
+  // 상품별 통계 (productId가 있는 경우)
+  const productStats = productId ? {
+    total: filteredCustomerInquiries.length + filteredProductQnas.length,
+    waiting: filteredCustomerInquiries.filter((i) => !i.answered).length + filteredProductQnas.filter((q) => !q.answered).length,
+    answered: filteredCustomerInquiries.filter((i) => i.answered).length + filteredProductQnas.filter((q) => q.answered).length,
+    holding: 0,
+  } : undefined;
+
+  // 상품 이름 추출 (productId로 필터링된 경우)
+  const productName = productId
+    ? filteredCustomerInquiries[0]?.productName || filteredProductQnas[0]?.productName
+    : undefined;
+
   return data({
     isConnected: true,
     customerInquiries: filteredCustomerInquiries,
     productQnas: filteredProductQnas,
     totalStats,
-    filters: { dateRange, status, searchQuery },
+    productStats,
+    filters: { dateRange, status, searchQuery, productId },
+    productName,
     templates: templates || [],
     error: customerResult.success && productQnaResult.success
       ? null
@@ -412,7 +443,9 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
     customerInquiries,
     productQnas,
     totalStats,
+    productStats,
     filters,
+    productName,
     templates,
     error
   } = loaderData;
@@ -489,6 +522,13 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
   const handleRefresh = useCallback(() => {
     navigate(".", { replace: true });
   }, [navigate]);
+
+  // 상품 필터 제거 핸들러
+  const handleRemoveProductFilter = useCallback(() => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("productId");
+    setSearchParams(params);
+  }, [searchParams, setSearchParams]);
 
   // 통합 동기화 핸들러
   const handleSyncAll = useCallback(() => {
@@ -594,9 +634,9 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
   const totalCount = customerInquiries.length + productQnas.length;
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
+    <div className="flex flex-1 flex-col gap-4 p-4 sm:gap-6 sm:p-6">
       {/* 헤더 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
             <Link to="/dashboard/integrations/naver">
@@ -604,29 +644,29 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
             </Link>
           </Button>
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <MessageSquare className="h-6 w-6 text-blue-500" />
+            <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500" />
               네이버 문의 관리
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm sm:text-base text-muted-foreground">
               고객 문의와 상품 문의를 확인하고 답변을 작성합니다
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleRefresh} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-            새로고침
+          <Button variant="outline" onClick={handleRefresh} disabled={isLoading} size="sm" className="sm:size-default">
+            <RefreshCw className={`h-4 w-4 sm:mr-2 ${isLoading ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">새로고침</span>
           </Button>
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild size="sm" className="sm:size-default">
             <a
               href="https://sell.smartstore.naver.com"
               target="_blank"
               rel="noopener noreferrer"
             >
-              <ExternalLink className="h-4 w-4 mr-2" />
-              스마트스토어
+              <ExternalLink className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">스마트스토어</span>
             </a>
           </Button>
         </div>
@@ -672,10 +712,10 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
 
       {/* 통계 카드 */}
       <InquiryStatsCards
-        total={totalStats.total}
-        waiting={totalStats.waiting}
-        answered={totalStats.answered}
-        holding={totalStats.holding}
+        total={filters.productId && productStats ? productStats.total : totalStats.total}
+        waiting={filters.productId && productStats ? productStats.waiting : totalStats.waiting}
+        answered={filters.productId && productStats ? productStats.answered : totalStats.answered}
+        holding={filters.productId && productStats ? productStats.holding : totalStats.holding}
         onStatusClick={handleStatusClick}
       />
 
@@ -717,6 +757,9 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
             onFilterChange={handleFilterChange}
             onRefresh={handleRefresh}
             isLoading={isLoading}
+            productId={filters.productId}
+            productName={productName}
+            onRemoveProductFilter={handleRemoveProductFilter}
           />
 
           {/* 통합 테이블 */}
