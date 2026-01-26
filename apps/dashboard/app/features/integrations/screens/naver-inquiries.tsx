@@ -634,9 +634,9 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
   const totalCount = customerInquiries.length + productQnas.length;
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
+    <div className="flex flex-1 flex-col gap-4 p-4 sm:gap-6 sm:p-6">
       {/* 헤더 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
             <Link to="/dashboard/integrations/naver">
@@ -644,29 +644,29 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
             </Link>
           </Button>
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <MessageSquare className="h-6 w-6 text-blue-500" />
+            <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500" />
               네이버 문의 관리
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm sm:text-base text-muted-foreground">
               고객 문의와 상품 문의를 확인하고 답변을 작성합니다
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleRefresh} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-            새로고침
+          <Button variant="outline" onClick={handleRefresh} disabled={isLoading} size="sm" className="sm:size-default">
+            <RefreshCw className={`h-4 w-4 sm:mr-2 ${isLoading ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">새로고침</span>
           </Button>
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild size="sm" className="sm:size-default">
             <a
               href="https://sell.smartstore.naver.com"
               target="_blank"
               rel="noopener noreferrer"
             >
-              <ExternalLink className="h-4 w-4 mr-2" />
-              스마트스토어
+              <ExternalLink className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">스마트스토어</span>
             </a>
           </Button>
         </div>

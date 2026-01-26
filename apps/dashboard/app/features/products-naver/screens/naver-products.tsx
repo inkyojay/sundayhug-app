@@ -70,6 +70,7 @@ import {
 import { Label } from "~/core/components/ui/label";
 import { ColorBadge, SizeBadge } from "~/core/components/ui/color-badge";
 import { ScrollArea } from "~/core/components/ui/scroll-area";
+import { Skeleton } from "~/core/components/ui/skeleton";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 
@@ -472,6 +473,7 @@ export default function NaverProducts() {
   const [expandedProducts, setExpandedProducts] = useState<Set<number>>(new Set());
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState(filters.search);
+  const [isInquiryDataLoading] = useState<boolean>(false); // Inquiry data loaded server-side
   const [inventoryModal, setInventoryModal] = useState<{
     open: boolean;
     originProductNo: number;
@@ -955,7 +957,7 @@ export default function NaverProducts() {
   const hasActiveFilters = filters.search || filters.status !== "all" || filters.stock !== "all" || filters.option !== "all" || filters.mapping !== "all" || filters.color !== "all" || filters.size !== "all" || filters.productId || filters.inquiryFilter !== "all";
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
+    <div className="flex flex-1 flex-col gap-4 p-4 sm:gap-6 sm:p-6">
       {/* 상품 문의에서 연결된 경우 알림 */}
       {filters.productId && (
         <div className="p-4 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-between">
@@ -1008,7 +1010,7 @@ export default function NaverProducts() {
       </div>
 
       {/* 통계 카드 */}
-      <div className="grid gap-4 md:grid-cols-8">
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-4 md:grid-cols-8">
         <Card className="cursor-pointer hover:bg-muted/50" onClick={() => window.location.href = buildUrl({ status: "all", stock: "all", option: "all", mapping: "all" })}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">전체 제품</CardTitle>
@@ -1278,17 +1280,17 @@ export default function NaverProducts() {
                     />
                   </TableHead>
                   <TableHead className="w-[40px]"></TableHead>
-                  <TableHead className="w-[80px]">이미지</TableHead>
+                  <TableHead className="w-[80px] hidden sm:table-cell">이미지</TableHead>
                   <TableHead>제품명</TableHead>
-                  <TableHead className="w-[60px]">유형</TableHead>
-                  <TableHead className="w-[150px]">판매자 코드</TableHead>
-                  <TableHead className="w-[90px]">색상</TableHead>
-                  <TableHead className="w-[70px]">사이즈</TableHead>
-                  <TableHead className="w-[100px]">판매가</TableHead>
+                  <TableHead className="w-[60px] hidden lg:table-cell">유형</TableHead>
+                  <TableHead className="w-[150px] hidden md:table-cell">판매자 코드</TableHead>
+                  <TableHead className="w-[90px] hidden lg:table-cell">색상</TableHead>
+                  <TableHead className="w-[70px] hidden lg:table-cell">사이즈</TableHead>
+                  <TableHead className="w-[100px] hidden md:table-cell">판매가</TableHead>
                   <TableHead className="w-[70px]">재고</TableHead>
                   <TableHead className="w-[90px]">상태</TableHead>
-                  <TableHead className="w-[70px]">옵션 수</TableHead>
-                  <TableHead className="w-[80px]">품절</TableHead>
+                  <TableHead className="w-[70px] hidden md:table-cell">옵션 수</TableHead>
+                  <TableHead className="w-[80px] hidden md:table-cell">품절</TableHead>
                   <TableHead className="w-[80px]">문의</TableHead>
                   <TableHead className="w-[100px]">액션</TableHead>
                 </TableRow>
@@ -1329,10 +1331,10 @@ export default function NaverProducts() {
                             )
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden sm:table-cell">
                           {product.represent_image ? (
-                            <img 
-                              src={product.represent_image} 
+                            <img
+                              src={product.represent_image}
                               alt={product.product_name}
                               className="w-12 h-12 object-cover rounded"
                             />
@@ -1351,7 +1353,7 @@ export default function NaverProducts() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden lg:table-cell">
                           {isSetProduct ? (
                             <Badge variant="outline" className="text-xs border-purple-500 text-purple-600 bg-purple-50">
                               <PackageOpenIcon className="h-3 w-3 mr-1" />
@@ -1363,10 +1365,10 @@ export default function NaverProducts() {
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell className="font-mono text-xs">
+                        <TableCell className="hidden md:table-cell font-mono text-xs">
                           {product.seller_management_code || "-"}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden lg:table-cell">
                           {isSingleOption && firstMappedProduct?.color_kr ? (
                             <ColorBadge colorName={firstMappedProduct.color_kr} />
                           ) : isSingleOption ? (
@@ -1375,7 +1377,7 @@ export default function NaverProducts() {
                             <span className="text-muted-foreground text-xs">다중</span>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden lg:table-cell">
                           {isSingleOption && firstMappedProduct?.sku_6_size ? (
                             <SizeBadge size={firstMappedProduct.sku_6_size} />
                           ) : isSingleOption ? (
@@ -1384,16 +1386,16 @@ export default function NaverProducts() {
                             <span className="text-muted-foreground text-xs">다중</span>
                           )}
                         </TableCell>
-                        <TableCell>{formatPrice(product.sale_price)}</TableCell>
+                        <TableCell className="hidden md:table-cell">{formatPrice(product.sale_price)}</TableCell>
                         <TableCell>
-                          <Badge 
+                          <Badge
                             variant={product.stock_quantity <= 0 ? "destructive" : "secondary"}
                           >
                             {product.stock_quantity}개
                           </Badge>
                         </TableCell>
                         <TableCell>{getStatusBadge(product.product_status)}</TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
                           {(product.options?.length || 0) > 1 ? (
                             <Badge variant="outline">
                               {product.options?.length || 0}개
@@ -1404,7 +1406,7 @@ export default function NaverProducts() {
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
                           {outOfStockOptions > 0 ? (
                             <Badge variant="destructive">{outOfStockOptions}개</Badge>
                           ) : (
@@ -1412,13 +1414,20 @@ export default function NaverProducts() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {(() => {
+                          {isInquiryDataLoading ? (
+                            <Skeleton className="h-6 w-12" />
+                          ) : (() => {
                             const inquiryData = inquiryCountMap[product.origin_product_no];
                             const total = inquiryData?.total || 0;
                             const waiting = inquiryData?.waiting || 0;
 
                             if (total === 0) {
-                              return <span className="text-muted-foreground">0</span>;
+                              return (
+                                <div className="flex items-center gap-1 text-muted-foreground" title="문의 없음">
+                                  <MessageSquareIcon className="h-3 w-3" />
+                                  <span className="text-xs">0</span>
+                                </div>
+                              );
                             }
 
                             return (
@@ -1435,6 +1444,7 @@ export default function NaverProducts() {
                                   variant={waiting > 0 ? "destructive" : "secondary"}
                                   className="cursor-pointer"
                                 >
+                                  <MessageSquareIcon className="h-3 w-3 mr-1" />
                                   {total}건
                                 </Badge>
                               </button>
