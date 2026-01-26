@@ -213,6 +213,34 @@ export function createCSVResponse(csv: string, filename: string): Response {
 }
 
 /**
+ * Excel 다운로드 Response 생성
+ *
+ * @param buffer - Excel 파일 Buffer
+ * @param filename - 다운로드 파일명 (확장자 제외)
+ * @returns Response 객체
+ *
+ * @example
+ * ```ts
+ * // loader나 action에서 사용
+ * const buffer = await generateExcel(columns, data, 'Sheet1');
+ * return createExcelResponse(buffer, 'orders-export');
+ * ```
+ */
+export function createExcelResponse(buffer: Buffer, filename: string): Response {
+  // 파일명에 날짜 추가
+  const timestamp = new Date().toISOString().split("T")[0];
+  const fullFilename = `${filename}-${timestamp}.xlsx`;
+
+  return new Response(buffer, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="${encodeURIComponent(fullFilename)}"`,
+    },
+  });
+}
+
+/**
  * 객체 배열에서 CSV Response 직접 생성
  *
  * @param columns - 컬럼 정의 배열
