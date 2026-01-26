@@ -24,6 +24,15 @@ export interface ExcelColumnDef<T> {
 }
 
 /**
+ * Excel 시트 정의 (다중 시트용)
+ */
+export interface ExcelSheetDef<T extends Record<string, any>> {
+  sheetName: string;
+  columns: ExcelColumnDef<T>[];
+  data: T[];
+}
+
+/**
  * Excel 파일 생성 (단일 시트)
  *
  * @param columns - 컬럼 정의 배열
@@ -108,6 +117,76 @@ export async function generateExcelFromObjects<T extends Record<string, any>>(
   sheetName: string = "Sheet1"
 ): Promise<Buffer> {
   return generateExcel(columns, data, sheetName);
+}
+
+/**
+ * Excel 파일 생성 (다중 시트)
+ *
+ * @param sheets - 시트 정의 배열
+ * @returns Excel 파일 Buffer
+ *
+ * @example
+ * ```ts
+ * const buffer = await generateMultiSheetExcel([
+ *   {
+ *     sheetName: '주문 목록',
+ *     columns: [
+ *       { header: '주문번호', accessor: 'orderNo', width: 15 },
+ *       { header: '금액', accessor: (row) => row.amount.toLocaleString(), width: 12 },
+ *     ],
+ *     data: orders,
+ *   },
+ *   {
+ *     sheetName: '상품 목록',
+ *     columns: [
+ *       { header: '상품명', accessor: 'name', width: 20 },
+ *       { header: '가격', accessor: (row) => row.price.toLocaleString(), width: 12 },
+ *     ],
+ *     data: products,
+ *   },
+ * ]);
+ * ```
+ */
+export async function generateMultiSheetExcel(
+  sheets: ExcelSheetDef<any>[]
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+
+  // 각 시트 생성
+  for (const sheet of sheets) {
+    const worksheet = workbook.addWorksheet(sheet.sheetName);
+
+    // 컬럼 정의 설정
+    worksheet.columns = sheet.columns.map((col) => ({
+      header: col.header,
+      key: col.header,
+      width: col.width ?? 15, // 기본 너비 15
+    }));
+
+    // 헤더 스타일 설정
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE0E0E0" },
+    };
+    worksheet.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
+
+    // 데이터 추가
+    sheet.data.forEach((row) => {
+      const rowData = sheet.columns.map((col) => {
+        if (typeof col.accessor === "function") {
+          return col.accessor(row) ?? "";
+        }
+        return row[col.accessor] ?? "";
+      });
+      worksheet.addRow(rowData);
+    });
+  }
+
+  // Buffer로 변환
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
 }
 
 /**
