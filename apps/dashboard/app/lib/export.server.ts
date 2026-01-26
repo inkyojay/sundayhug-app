@@ -241,6 +241,37 @@ export function createExcelResponse(buffer: Buffer, filename: string): Response 
 }
 
 /**
+ * 객체 배열에서 Excel Response 직접 생성
+ *
+ * @param columns - 컬럼 정의 배열
+ * @param data - 데이터 객체 배열
+ * @param filename - 다운로드 파일명 (확장자 제외)
+ * @param sheetName - 시트 이름 (기본값: 'Sheet1')
+ * @returns Response 객체
+ *
+ * @example
+ * ```ts
+ * return await createExcelResponseFromObjects(
+ *   [
+ *     { header: '주문번호', accessor: 'orderNo', width: 15 },
+ *     { header: '상태', accessor: 'status', width: 12 },
+ *   ],
+ *   orders,
+ *   'orders-export'
+ * );
+ * ```
+ */
+export async function createExcelResponseFromObjects<T extends Record<string, any>>(
+  columns: ExcelColumnDef<T>[],
+  data: T[],
+  filename: string,
+  sheetName: string = "Sheet1"
+): Promise<Response> {
+  const buffer = await generateExcelFromObjects(columns, data, sheetName);
+  return createExcelResponse(buffer, filename);
+}
+
+/**
  * 객체 배열에서 CSV Response 직접 생성
  *
  * @param columns - 컬럼 정의 배열
