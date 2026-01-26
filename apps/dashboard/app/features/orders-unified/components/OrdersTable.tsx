@@ -158,7 +158,7 @@ export function OrdersTable({
         <TableBody>
           {orders.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
+              <TableCell colSpan={13} className="text-center py-12 text-muted-foreground">
                 주문이 없습니다. 동기화 버튼을 눌러 주문을 가져오세요.
               </TableCell>
             </TableRow>
@@ -197,6 +197,7 @@ export function OrdersTable({
                     />
                   </TableCell>
                   <TableCell>{renderOrderChannelBadge(order.marketId, order.orderPlaceName)}</TableCell>
+                  <TableCell className="font-mono text-sm">{order.orderNo}</TableCell>
                   <TableCell>
                     <OrderStatusBadge status={order.ordStatus} />
                   </TableCell>
@@ -275,7 +276,7 @@ export function OrdersTable({
                   </TableCell>
                 </TableRow>
                 {expandedOrders.has(order.key) && (
-                  <OrderDetailRow order={order} colSpan={12} />
+                  <OrderDetailRow order={order} colSpan={13} />
                 )}
               </>
             ))
