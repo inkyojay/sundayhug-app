@@ -195,6 +195,23 @@ export function NavButton() {
 }
 ```
 
+## Real-World Examples
+
+Looking for complete, production-ready examples? Check out our [Examples Guide](./docs/examples.md) featuring:
+
+- **Login Form with Validation** - Complete form with error handling and user feedback
+- **Confirmation Dialogs** - Reusable dialog patterns for destructive actions
+- **User Profile Cards** - Card compositions with avatars and badges
+- **Navigation Menus** - Feature-rich dropdown menus with nested items
+- **Data Tables with Actions** - Tables with row actions and status indicators
+- **Settings Panels** - Tabbed interfaces with forms and preferences
+- **Contact Forms** - Multi-field forms with textarea and validation
+- **Dashboard Stats** - Stat cards with data visualization
+
+Each example includes complete, copy-paste-ready code demonstrating component composition, state management, and common UI patterns.
+
+👉 **[View All Examples](./docs/examples.md)**
+
 ## Development
 
 ### Type Safety
@@ -254,8 +271,10 @@ When adding or modifying components:
 ## Support
 
 For questions or issues, please refer to:
-- [Component Documentation](./docs/components/)
-- [Usage Examples](./docs/examples/)
+- [Complete Component Catalog](./COMPONENTS.md) - Full API reference for all 24 exports
+- [Usage Guide](./USAGE_GUIDE.md) - Setup, theming, and best practices
+- [Real-World Examples](./docs/examples.md) - Production-ready composition patterns
+- [Individual Component Docs](./docs/) - Detailed documentation for priority components
 - Internal SundayHug development wiki
 
 ---
