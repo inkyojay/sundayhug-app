@@ -178,9 +178,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     filteredProductQnas = filteredProductQnas.filter(
       (qna) => String(qna.productId) === productId
     );
-    console.log(`✅ Product filter active: productId=${productId}`);
-    console.log(`Filtered customer inquiries: ${filteredCustomerInquiries.length}`);
-    console.log(`Filtered product qnas: ${filteredProductQnas.length}`);
   }
 
   // 통합 통계 (고객 문의 + 상품 문의)
