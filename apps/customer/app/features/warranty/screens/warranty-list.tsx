@@ -335,6 +335,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
               handleStatusChange("all");
             }
           }}
+          aria-label={`${t("warranty:admin.warrantyManagement.stats.total")} ${stats.total_warranties}개, 클릭하여 전체 보증서 보기`}
         >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">{t("warranty:admin.warrantyManagement.stats.total")}</CardTitle>
@@ -353,6 +354,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
               handleStatusChange("pending");
             }
           }}
+          aria-label={`${t("warranty:admin.warrantyManagement.stats.pending")} ${stats.pending_count}개, 클릭하여 승인 대기 보증서 보기`}
         >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
@@ -374,6 +376,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
               handleStatusChange("approved");
             }
           }}
+          aria-label={`${t("warranty:admin.warrantyManagement.stats.approved")} ${stats.approved_count}개, 클릭하여 승인된 보증서 보기`}
         >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
@@ -395,6 +398,7 @@ export default function WarrantyList({ loaderData }: Route.ComponentProps) {
               handleStatusChange("rejected");
             }
           }}
+          aria-label={`${t("warranty:admin.warrantyManagement.stats.rejected")} ${stats.rejected_count}개, 클릭하여 거부된 보증서 보기`}
         >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
