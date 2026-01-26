@@ -94,6 +94,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const dateRange = url.searchParams.get("dateRange") || "30days";
   const status = (url.searchParams.get("status") || "all") as InquiryStatusFilter;
   const searchQuery = url.searchParams.get("search") || "";
+  const productId = url.searchParams.get("productId") || "";
 
   // 동적 import로 서버 전용 모듈 로드
   const { getNaverToken } = await import("../lib/naver.server");
@@ -109,7 +110,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       customerInquiries: [],
       productQnas: [],
       totalStats: { total: 0, waiting: 0, answered: 0, holding: 0 },
-      filters: { dateRange, status, searchQuery },
+      filters: { dateRange, status, searchQuery, productId },
       templates: [],
       error: "네이버 스마트스토어가 연동되지 않았습니다.",
     });
@@ -153,6 +154,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     );
   }
 
+  // 고객 문의 상품 필터링
+  if (productId) {
+    filteredCustomerInquiries = filteredCustomerInquiries.filter(
+      (inquiry) => String(inquiry.productNo) === productId
+    );
+  }
+
   // 상품 문의 검색 필터링
   let filteredProductQnas = productQnaResult.qnas || [];
   if (searchQuery) {
@@ -163,6 +171,16 @@ export async function loader({ request }: Route.LoaderArgs) {
         (qna.question?.toLowerCase().includes(query) ?? false) ||
         (qna.productName?.toLowerCase().includes(query) ?? false)
     );
+  }
+
+  // 상품 문의 상품 필터링
+  if (productId) {
+    filteredProductQnas = filteredProductQnas.filter(
+      (qna) => String(qna.productId) === productId
+    );
+    console.log(`✅ Product filter active: productId=${productId}`);
+    console.log(`Filtered customer inquiries: ${filteredCustomerInquiries.length}`);
+    console.log(`Filtered product qnas: ${filteredProductQnas.length}`);
   }
 
   // 통합 통계 (고객 문의 + 상품 문의)
@@ -181,7 +199,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     customerInquiries: filteredCustomerInquiries,
     productQnas: filteredProductQnas,
     totalStats,
-    filters: { dateRange, status, searchQuery },
+    filters: { dateRange, status, searchQuery, productId },
     templates: templates || [],
     error: customerResult.success && productQnaResult.success
       ? null
