@@ -343,7 +343,7 @@ export function UploadForm({
                 type="button"
                 onClick={() => setSelectedBabyId(baby.id)}
                 className={cn(
-                  "w-full p-4 rounded-2xl border-2 text-left transition-all",
+                  "w-full p-4 rounded-2xl border-2 text-left transition-all outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
                   selectedBabyId === baby.id
                     ? "border-[#FF6B35] bg-orange-50 dark:bg-orange-900/20"
                     : "border-gray-100 dark:border-gray-700 hover:border-gray-200"
@@ -378,7 +378,7 @@ export function UploadForm({
                 setIsAddingNewBaby(true);
                 setSelectedBabyId("");
               }}
-              className="w-full p-4 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700 text-gray-500 hover:border-[#FF6B35] hover:text-[#FF6B35] transition-colors flex items-center justify-center gap-2"
+              className="w-full p-4 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700 text-gray-500 hover:border-[#FF6B35] hover:text-[#FF6B35] transition-colors flex items-center justify-center gap-2 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
             >
               <Plus className="w-5 h-5" />
               <span className="font-medium">{t("sleep-analysis:upload.addNewBaby", { defaultValue: "새 아이로 분석하기" })}</span>
@@ -444,7 +444,7 @@ export function UploadForm({
                   type="button"
                   onClick={() => setNewBabyGender("male")}
                   className={cn(
-                    "flex-1 h-14 rounded-2xl border-2 font-medium transition-all flex items-center justify-center gap-2",
+                    "flex-1 h-14 rounded-2xl border-2 font-medium transition-all flex items-center justify-center gap-2 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
                     newBabyGender === "male"
                       ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600"
                       : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"
@@ -457,7 +457,7 @@ export function UploadForm({
                   type="button"
                   onClick={() => setNewBabyGender("female")}
                   className={cn(
-                    "flex-1 h-14 rounded-2xl border-2 font-medium transition-all flex items-center justify-center gap-2",
+                    "flex-1 h-14 rounded-2xl border-2 font-medium transition-all flex items-center justify-center gap-2 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
                     newBabyGender === "female"
                       ? "border-pink-500 bg-pink-50 dark:bg-pink-900/20 text-pink-600"
                       : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"
