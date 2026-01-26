@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/core/components/ui/select";
+import { Badge } from "~/core/components/ui/badge";
 
 import { ChannelBadge } from "./ChannelBadge";
 import { OrderStatusBadge } from "./OrderStatusBadge";
@@ -49,6 +50,27 @@ interface OrdersTableProps {
   onSort: (column: string) => void;
   onSaveInvoice: (order: UnifiedOrder, invoiceNo: string, carrName: string) => void;
   isProcessing: boolean;
+}
+
+/**
+ * 주문 경로명에 따라 Badge variant 반환
+ */
+function getOrderSourceBadgeVariant(orderPlaceName: string | null): "orange" | "green" | "red" | "secondary" {
+  if (!orderPlaceName) return "secondary";
+
+  const name = orderPlaceName.toLowerCase();
+
+  if (name.includes("11st") || name.includes("11번가")) {
+    return "orange";
+  }
+  if (name.includes("gmarket") || name.includes("g마켓") || name.includes("지마켓")) {
+    return "green";
+  }
+  if (name.includes("auction") || name.includes("옥션")) {
+    return "red";
+  }
+
+  return "secondary";
 }
 
 export function OrdersTable({
@@ -100,6 +122,7 @@ export function OrdersTable({
             </TableHead>
             <TableHead className="w-[40px]"></TableHead>
             <TableHead className="w-[80px]">채널</TableHead>
+            <TableHead className="w-[100px]">주문 경로</TableHead>
             <TableHead
               className="cursor-pointer hover:bg-muted"
               onClick={() => onSort("shop_ord_no")}
@@ -127,7 +150,7 @@ export function OrdersTable({
         <TableBody>
           {orders.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={11} className="text-center py-12 text-muted-foreground">
+              <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
                 주문이 없습니다. 동기화 버튼을 눌러 주문을 가져오세요.
               </TableCell>
             </TableRow>
@@ -164,6 +187,15 @@ export function OrdersTable({
                       marketId={order.marketId}
                       orderPlaceName={order.orderPlaceName}
                     />
+                  </TableCell>
+                  <TableCell>
+                    {order.orderPlaceName ? (
+                      <Badge variant={getOrderSourceBadgeVariant(order.orderPlaceName)}>
+                        {order.orderPlaceName}
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">자사몰</span>
+                    )}
                   </TableCell>
                   <TableCell className="font-mono text-xs">{order.orderNo}</TableCell>
                   <TableCell>
@@ -244,7 +276,7 @@ export function OrdersTable({
                   </TableCell>
                 </TableRow>
                 {expandedOrders.has(order.key) && (
-                  <OrderDetailRow order={order} colSpan={11} />
+                  <OrderDetailRow order={order} colSpan={12} />
                 )}
               </>
             ))
