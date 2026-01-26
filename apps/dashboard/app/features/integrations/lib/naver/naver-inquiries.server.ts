@@ -278,6 +278,45 @@ export async function getProductQnas(params: GetProductQnasParams = {}): Promise
   };
 }
 
+/**
+ * 특정 상품의 문의 목록 조회
+ *
+ * @param originProductNo - 상품 번호
+ * @param params - 추가 조회 파라미터 (선택)
+ */
+export async function getInquiriesByProduct(
+  originProductNo: number,
+  params: Omit<GetProductQnasParams, 'originProductNo'> = {}
+): Promise<{
+  success: boolean;
+  qnas?: NaverProductQna[];
+  totalCount?: number;
+  error?: string;
+}> {
+  console.log(`📦 상품별 문의 조회: originProductNo=${originProductNo}`);
+
+  // 전체 상품 문의 목록 조회
+  const result = await getProductQnas(params);
+
+  if (!result.success) {
+    console.error(`❌ 상품별 문의 조회 실패: ${result.error}`);
+    return { success: false, error: result.error };
+  }
+
+  // 특정 상품의 문의만 필터링
+  const productQnas = (result.qnas || []).filter(
+    (qna) => qna.productId === String(originProductNo)
+  );
+
+  console.log(`✅ 상품별 문의 조회 완료: ${productQnas.length}건`);
+
+  return {
+    success: true,
+    qnas: productQnas,
+    totalCount: productQnas.length,
+  };
+}
+
 // ============================================================================
 // 상품 문의 답변
 // ============================================================================
