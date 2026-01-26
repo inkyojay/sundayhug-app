@@ -110,6 +110,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       customerInquiries: [],
       productQnas: [],
       totalStats: { total: 0, waiting: 0, answered: 0, holding: 0 },
+      productStats: undefined,
       filters: { dateRange, status, searchQuery, productId },
       templates: [],
       error: "네이버 스마트스토어가 연동되지 않았습니다.",
@@ -191,11 +192,20 @@ export async function loader({ request }: Route.LoaderArgs) {
     holding: 0,
   };
 
+  // 상품별 통계 (productId가 있는 경우)
+  const productStats = productId ? {
+    total: filteredCustomerInquiries.length + filteredProductQnas.length,
+    waiting: filteredCustomerInquiries.filter((i) => !i.answered).length + filteredProductQnas.filter((q) => !q.answered).length,
+    answered: filteredCustomerInquiries.filter((i) => i.answered).length + filteredProductQnas.filter((q) => q.answered).length,
+    holding: 0,
+  } : undefined;
+
   return data({
     isConnected: true,
     customerInquiries: filteredCustomerInquiries,
     productQnas: filteredProductQnas,
     totalStats,
+    productStats,
     filters: { dateRange, status, searchQuery, productId },
     templates: templates || [],
     error: customerResult.success && productQnaResult.success
