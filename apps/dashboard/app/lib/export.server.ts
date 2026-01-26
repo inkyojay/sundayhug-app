@@ -13,6 +13,15 @@ export interface CSVColumnDef<T> {
 }
 
 /**
+ * Excel 컬럼 헤더 정의
+ */
+export interface ExcelColumnDef<T> {
+  header: string;
+  accessor: keyof T | ((row: T) => string | number | null | undefined);
+  width?: number; // 컬럼 너비 (선택사항)
+}
+
+/**
  * CSV 문자열 생성
  *
  * @param headers - 컬럼 헤더 배열
