@@ -133,6 +133,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const sortOrder = url.searchParams.get("sortOrder") || "desc";
   // 상품 문의에서 연결된 productId 필터
   const productIdFilter = url.searchParams.get("productId") || "";
+  const inquiryFilter = url.searchParams.get("inquiryFilter") || "all";
 
   // 동적 import로 문의 조회 함수 로드
   const { getCustomerInquiries, getProductQnas } = await import("~/features/integrations/lib/naver/naver-inquiries.server");
@@ -286,6 +287,24 @@ export async function loader({ request }: LoaderFunctionArgs) {
     });
   }
 
+  // 문의 필터
+  if (inquiryFilter === "hasInquiries") {
+    productsWithOptions = productsWithOptions.filter((p: any) => {
+      const inquiryData = inquiryCountMap[p.origin_product_no];
+      return inquiryData && inquiryData.total > 0;
+    });
+  } else if (inquiryFilter === "hasWaiting") {
+    productsWithOptions = productsWithOptions.filter((p: any) => {
+      const inquiryData = inquiryCountMap[p.origin_product_no];
+      return inquiryData && inquiryData.waiting > 0;
+    });
+  } else if (inquiryFilter === "noInquiries") {
+    productsWithOptions = productsWithOptions.filter((p: any) => {
+      const inquiryData = inquiryCountMap[p.origin_product_no];
+      return !inquiryData || inquiryData.total === 0;
+    });
+  }
+
   // 정렬
   if (sortBy === "color" || sortBy === "size") {
     productsWithOptions.sort((a: any, b: any) => {
@@ -373,7 +392,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     availableColors: Array.from(colorSet).sort(),
     availableSizes: Array.from(sizeSet).sort(),
     error: productsError || optionsError,
-    filters: { search, status: statusFilter, stock: stockFilter, option: optionFilter, mapping: mappingFilter, color: colorFilter, size: sizeFilter, sortBy, sortOrder, productId: productIdFilter },
+    filters: { search, status: statusFilter, stock: stockFilter, option: optionFilter, mapping: mappingFilter, color: colorFilter, size: sizeFilter, sortBy, sortOrder, productId: productIdFilter, inquiryFilter },
   };
 }
 
@@ -875,6 +894,7 @@ export default function NaverProducts() {
     const newSize = overrides.size !== undefined ? overrides.size : filters.size;
     const newSortBy = overrides.sortBy !== undefined ? overrides.sortBy : filters.sortBy;
     const newSortOrder = overrides.sortOrder !== undefined ? overrides.sortOrder : filters.sortOrder;
+    const newInquiryFilter = overrides.inquiryFilter !== undefined ? overrides.inquiryFilter : filters.inquiryFilter;
 
     if (newSearch) params.set("search", newSearch);
     if (newStatus && newStatus !== "all") params.set("status", newStatus);
@@ -885,7 +905,8 @@ export default function NaverProducts() {
     if (newSize && newSize !== "all") params.set("size", newSize);
     if (newSortBy && newSortBy !== "updated_at") params.set("sortBy", newSortBy);
     if (newSortOrder && newSortOrder !== "desc") params.set("sortOrder", newSortOrder);
-    
+    if (newInquiryFilter && newInquiryFilter !== "all") params.set("inquiryFilter", newInquiryFilter);
+
     const queryString = params.toString();
     return `/dashboard/products-naver${queryString ? `?${queryString}` : ""}`;
   };
@@ -931,7 +952,7 @@ export default function NaverProducts() {
     link.click();
   };
 
-  const hasActiveFilters = filters.search || filters.status !== "all" || filters.stock !== "all" || filters.option !== "all" || filters.mapping !== "all" || filters.color !== "all" || filters.size !== "all" || filters.productId;
+  const hasActiveFilters = filters.search || filters.status !== "all" || filters.stock !== "all" || filters.option !== "all" || filters.mapping !== "all" || filters.color !== "all" || filters.size !== "all" || filters.productId || filters.inquiryFilter !== "all";
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -1136,8 +1157,8 @@ export default function NaverProducts() {
                 </Select>
               )}
               {availableSizes.length > 0 && (
-                <Select 
-                  value={filters.size} 
+                <Select
+                  value={filters.size}
                   onValueChange={(v) => window.location.href = buildUrl({ size: v })}
                 >
                   <SelectTrigger className="w-[100px]">
@@ -1151,8 +1172,22 @@ export default function NaverProducts() {
                   </SelectContent>
                 </Select>
               )}
-              <Select 
-                value={filters.status} 
+              <Select
+                value={filters.inquiryFilter}
+                onValueChange={(v) => window.location.href = buildUrl({ inquiryFilter: v })}
+              >
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue placeholder="문의" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체 문의</SelectItem>
+                  <SelectItem value="hasInquiries">문의 있음</SelectItem>
+                  <SelectItem value="hasWaiting">대기중</SelectItem>
+                  <SelectItem value="noInquiries">문의 없음</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={filters.status}
                 onValueChange={(v) => window.location.href = buildUrl({ status: v })}
               >
                 <SelectTrigger className="w-[110px]">
