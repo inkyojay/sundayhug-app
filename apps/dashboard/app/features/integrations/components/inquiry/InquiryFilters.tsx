@@ -93,10 +93,10 @@ export function InquiryFilters({
   return (
     <div className="flex flex-col gap-3">
       {/* Product Filter Badge */}
-      {productId && productName && (
+      {productId && (
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="gap-2">
-            <span>상품: {productName}</span>
+            <span>{productName ? `상품: ${productName}` : `상품 ID: ${productId}`}</span>
             {onRemoveProductFilter && (
               <button
                 onClick={onRemoveProductFilter}
