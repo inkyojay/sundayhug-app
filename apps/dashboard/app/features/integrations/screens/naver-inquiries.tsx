@@ -200,6 +200,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     holding: 0,
   } : undefined;
 
+  // 상품 이름 추출 (productId로 필터링된 경우)
+  const productName = productId
+    ? filteredCustomerInquiries[0]?.productName || filteredProductQnas[0]?.productName
+    : undefined;
+
   return data({
     isConnected: true,
     customerInquiries: filteredCustomerInquiries,
@@ -207,6 +212,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     totalStats,
     productStats,
     filters: { dateRange, status, searchQuery, productId },
+    productName,
     templates: templates || [],
     error: customerResult.success && productQnaResult.success
       ? null
@@ -439,6 +445,7 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
     totalStats,
     productStats,
     filters,
+    productName,
     templates,
     error
   } = loaderData;
@@ -515,6 +522,13 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
   const handleRefresh = useCallback(() => {
     navigate(".", { replace: true });
   }, [navigate]);
+
+  // 상품 필터 제거 핸들러
+  const handleRemoveProductFilter = useCallback(() => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("productId");
+    setSearchParams(params);
+  }, [searchParams, setSearchParams]);
 
   // 통합 동기화 핸들러
   const handleSyncAll = useCallback(() => {
@@ -743,6 +757,9 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
             onFilterChange={handleFilterChange}
             onRefresh={handleRefresh}
             isLoading={isLoading}
+            productId={filters.productId}
+            productName={productName}
+            onRemoveProductFilter={handleRemoveProductFilter}
           />
 
           {/* 통합 테이블 */}
