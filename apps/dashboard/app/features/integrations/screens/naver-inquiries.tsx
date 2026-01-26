@@ -437,6 +437,7 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
     customerInquiries,
     productQnas,
     totalStats,
+    productStats,
     filters,
     templates,
     error
@@ -697,10 +698,10 @@ export default function NaverInquiries({ loaderData, actionData }: Route.Compone
 
       {/* 통계 카드 */}
       <InquiryStatsCards
-        total={totalStats.total}
-        waiting={totalStats.waiting}
-        answered={totalStats.answered}
-        holding={totalStats.holding}
+        total={filters.productId && productStats ? productStats.total : totalStats.total}
+        waiting={filters.productId && productStats ? productStats.waiting : totalStats.waiting}
+        answered={filters.productId && productStats ? productStats.answered : totalStats.answered}
+        holding={filters.productId && productStats ? productStats.holding : totalStats.holding}
         onStatusClick={handleStatusClick}
       />
 
