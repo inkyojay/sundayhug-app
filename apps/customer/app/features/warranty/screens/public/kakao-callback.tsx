@@ -12,9 +12,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     return redirect("/customer/login?error=kakao_failed");
   }
   
-  // 카카오 REST API 키
-  const KAKAO_CLIENT_ID = "7474843a05c3daf50d1253676e6badbd";
-  const KAKAO_CLIENT_SECRET = "fKH6o2bNEmPMIAKE0ftRP9X0Ub6Gom6q";
+  const KAKAO_CLIENT_ID = process.env.KAKAO_WARRANTY_CLIENT_ID!;
+  const KAKAO_CLIENT_SECRET = process.env.KAKAO_WARRANTY_CLIENT_SECRET!;
   const REDIRECT_URI = `${url.origin}/customer/kakao/callback`;
   
   try {
@@ -68,17 +67,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     const kakaoGender = kakaoAccount.gender || null; // male / female
     const kakaoAgeRange = kakaoAccount.age_range || null; // 예: 20~29
     const kakaoBirthday = kakaoAccount.birthday || null; // MMDD 형식
-    
-    console.log("[Kakao] 수집된 정보:", {
-      id: kakaoId,
-      nickname: kakaoNickname,
-      email: kakaoEmail,
-      name: kakaoName,
-      phone: kakaoPhone,
-      gender: kakaoGender,
-      age_range: kakaoAgeRange,
-      birthday: kakaoBirthday
-    });
     
     // 3. 기존 회원 확인
     let { data: member } = await supabase

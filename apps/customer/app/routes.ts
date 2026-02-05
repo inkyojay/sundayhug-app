@@ -53,6 +53,7 @@ export default [
       route("/:id/story-card", "features/sleep-analysis/api/story-card.tsx"),
       route("/:id/share-card", "features/sleep-analysis/api/share-card.route.ts"),
       route("/seed-references", "features/sleep-analysis/api/seed-references.tsx"),
+      route("/forecast", "features/sleep-forecast/api/forecast.tsx"),
     ]),
     // 블로그 API
     ...prefix("/blog", [
@@ -88,6 +89,7 @@ export default [
         index("features/customer/screens/sleep-hub.tsx"),
         route("/analyze", "features/sleep-analysis/screens/analyze-public.tsx"),
         route("/result/:id", "features/sleep-analysis/screens/result.tsx", { id: "customer-sleep-result" }),
+        route("/forecast", "features/sleep-forecast/screens/forecast.tsx"),
       ]),
       
       // 블로그

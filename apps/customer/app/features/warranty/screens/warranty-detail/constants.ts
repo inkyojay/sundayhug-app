@@ -1,6 +1,7 @@
 /**
  * Warranty Detail Constants
  */
+import type { LucideIcon } from "lucide-react";
 import {
   CheckCircleIcon,
   XCircleIcon,
@@ -9,7 +10,7 @@ import {
 
 export const STATUS_CONFIG: Record<
   string,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: any }
+  { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: LucideIcon }
 > = {
   pending: { label: "승인 대기", variant: "outline", icon: ClockIcon },
   approved: { label: "승인 완료", variant: "default", icon: CheckCircleIcon },

@@ -314,7 +314,7 @@ export default function EventReviewScreen() {
   // 주소 검색 API 로딩 상태
   const [isAddressApiReady, setIsAddressApiReady] = useState(false);
 
-  const fetcherData = fetcher.data as any;
+  const fetcherData = fetcher.data as { success: boolean; error?: string; warrantyId?: string } | undefined;
   const isSubmitting = fetcher.state === "submitting";
 
   const selectedEvent = events.find((e: any) => e.id === selectedEventId);

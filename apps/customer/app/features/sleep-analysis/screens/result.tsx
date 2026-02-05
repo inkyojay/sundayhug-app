@@ -13,7 +13,8 @@ import { data, Link, useLoaderData } from "react-router";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { AnalysisResult } from "../components/analysis-result";
 import { StoryCardModal } from "../components/story-card-modal";
-import type { AnalysisReport, FeedbackItem, RiskLevel } from "../schema";
+import type { AnalysisReport, RiskLevel } from "../schema";
+import type { SleepAnalysisResult } from "../lib/sleep-analysis.server";
 
 export const meta: Route.MetaFunction = () => {
   return [
@@ -49,7 +50,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   // feedbackItems를 summary JSON에서 추출 (테이블이 아닌 JSON에 저장됨)
-  let feedbackItems: any[] = [];
+  let feedbackItems: SleepAnalysisResult["feedbackItems"] = [];
   if (analysis.summary) {
     try {
       const parsed = JSON.parse(analysis.summary);
@@ -68,8 +69,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 // DB 데이터를 AnalysisReport 형태로 변환
 function convertToReport(
-  analysis: any, 
-  feedbackItems: any[]
+  analysis: { summary: string },
+  feedbackItems: SleepAnalysisResult["feedbackItems"]
 ): AnalysisReport {
   let safetyScore = 70;
   let summary = "";
@@ -90,7 +91,7 @@ function convertToReport(
   }
   
   // feedbackItems 변환 (id, x, y, riskLevel 모두 포함)
-  const convertedFeedback = feedbackItems.map((item: any, index: number) => ({
+  const convertedFeedback = feedbackItems.map((item, index) => ({
     id: item.id || item.itemNumber || index + 1,
     x: typeof item.x === 'number' ? item.x : parseFloat(item.x) || 50,
     y: typeof item.y === 'number' ? item.y : parseFloat(item.y) || 50,

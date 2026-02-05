@@ -33,8 +33,6 @@ export async function action({ request, params }: Route.ActionArgs) {
   type GoodCardData = Awaited<ReturnType<typeof import("../lib/card-image.server")>>["GoodCardData"];
 
   try {
-    console.log(`[CardNews] Starting generation for analysis ${id}...`);
-    
     // 1. 분석 결과 가져오기
     const result = await getSleepAnalysis(id);
 
@@ -64,7 +62,6 @@ export async function action({ request, params }: Route.ActionArgs) {
 
     // base64만 있으면 Storage에 업로드
     if (!imageUrl && imageBase64) {
-      console.log("[CardNews] Uploading image to storage...");
       const uploadResult = await uploadImageToStorage(
         adminClient,
         Buffer.from(imageBase64, "base64"),
@@ -90,8 +87,6 @@ export async function action({ request, params }: Route.ActionArgs) {
     }
 
     // 5. Bad/Good 카드 이미지 생성
-    console.log("[CardNews] Generating feedback card images...");
-    
     const badCards: BadCardData[] = cardNewsText.badItems.slice(0, 3).map((item, i) => ({
       number: i + 1,
       title: item.title,
@@ -110,10 +105,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       generateGoodCardImages(goodCards),
     ]);
 
-    console.log(`[CardNews] Generated ${badCardUrls.length} bad cards, ${goodCardUrls.length} good cards`);
-
     // 6. 핀 오버레이 이미지 생성
-    console.log("[CardNews] Generating pin overlay image...");
     const pinData = report.feedbackItems.map(item => ({
       id: item.id,
       x: item.x,
@@ -122,10 +114,8 @@ export async function action({ request, params }: Route.ActionArgs) {
     }));
     
     const imagePinUrl = await generatePinOverlayImage(imageUrl, pinData);
-    console.log("[CardNews] Pin overlay image generated");
 
     // 7. 추천 제품 가져오기
-    console.log("[CardNews] Fetching recommended products...");
     const { data: products } = await adminClient
       .from("sleep_recommended_products")
       .select("short_name, image_url")
@@ -139,8 +129,6 @@ export async function action({ request, params }: Route.ActionArgs) {
     }));
 
     // 8. Placid로 카드뉴스 생성
-    console.log("[CardNews] Generating Placid card news...");
-    
     const cardNewsData: CardNewsData = {
       // 1번: 썸네일
       name: babyName,
@@ -165,7 +153,6 @@ export async function action({ request, params }: Route.ActionArgs) {
     };
 
     const slideUrls = await generateAllCardNewsSlides(cardNewsData);
-    console.log(`[CardNews] Generated ${slideUrls.length} slides`);
 
     // 9. DB에 저장 (선택적)
     const { error: updateError } = await adminClient

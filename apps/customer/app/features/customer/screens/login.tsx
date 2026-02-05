@@ -9,6 +9,7 @@ import type { Route } from "./+types/login";
 import { useState, useEffect } from "react";
 import { data, useNavigate, useActionData, Form, useLoaderData, Link } from "react-router";
 import { ArrowLeft, Mail, ChevronRight } from "lucide-react";
+import { KakaoBubbleIcon } from "~/core/components/icons/kakao-bubble";
 
 import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
@@ -80,8 +81,7 @@ export default function CustomerLoginScreen() {
   }, [actionData, navigate]);
 
   const handleKakaoLogin = async () => {
-    // 카카오 REST API 키 (카카오 개발자 콘솔에서 확인)
-    const KAKAO_CLIENT_ID = "2737860d151daba73e31d3df6213a012";
+    const KAKAO_CLIENT_ID = import.meta.env.VITE_KAKAO_CLIENT_ID;
     const REDIRECT_URI = `${window.location.origin}/customer/kakao/callback`;
     
     // 카카오 동의 항목 (scope)
@@ -143,9 +143,7 @@ export default function CustomerLoginScreen() {
               onClick={handleKakaoLogin}
               className="w-full flex items-center justify-center gap-3 bg-[#FEE500] text-[#000000] font-medium h-14 rounded-2xl hover:bg-[#FEE500]/90 transition-colors"
             >
-              <svg viewBox="0 0 24 24" className="h-6 w-6 fill-current">
-                <path d="M12 3c5.799 0 10.5 3.664 10.5 8.185 0 4.52-4.701 8.184-10.5 8.184a13.5 13.5 0 01-1.727-.11l-4.408 2.883c-.501.265-.678.236-.472-.413l.892-3.678c-2.88-1.46-4.785-3.99-4.785-6.866C1.5 6.665 6.201 3 12 3z" />
-              </svg>
+              <KakaoBubbleIcon className="h-6 w-6" />
               카카오로 로그인
             </button>
 

@@ -196,7 +196,7 @@ export function AnalysisResult({
         });
         return;
       } catch (error) {
-        console.log("Kakao share failed, using fallback:", error);
+        // Kakao share failed, using fallback
       }
     }
     
@@ -280,7 +280,7 @@ export function AnalysisResult({
             return;
           } catch (shareError) {
             // 공유 취소 또는 실패 시 일반 다운로드로 폴백
-            console.log("공유 취소됨, 일반 다운로드 시도");
+            // 공유 취소됨, 일반 다운로드로 폴백
           }
         }
       }

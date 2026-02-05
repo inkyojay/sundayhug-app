@@ -119,7 +119,6 @@ export async function action({ request }: Route.ActionArgs) {
             })
             .eq("id", warrantyId);
           
-          console.log("✅ 승인 알림톡 발송 완료:", alimtalkResult.messageId);
         } else {
           console.error("⚠️ 알림톡 발송 실패 (승인은 완료됨):", alimtalkResult.error);
         }
@@ -159,7 +158,6 @@ export async function action({ request }: Route.ActionArgs) {
         );
 
         if (alimtalkResult.success) {
-          console.log("✅ 거절 알림톡 발송 완료:", alimtalkResult.messageId);
         } else {
           console.error("⚠️ 알림톡 발송 실패 (거절은 완료됨):", alimtalkResult.error);
         }

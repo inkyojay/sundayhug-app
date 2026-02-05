@@ -14,6 +14,7 @@ import { Textarea } from "~/core/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/core/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "~/core/components/ui/radio-group";
 import FormErrors from "~/core/components/form-error";
+import { formatPhoneNumber } from "~/core/lib/formatters";
 
 // Helper wrapper for FormErrors
 const FormError = ({ children }: { children: string }) => (
@@ -114,12 +115,6 @@ export default function AsRequestScreen({ loaderData }: Route.ComponentProps) {
 
   // 인증은 loader에서 처리하므로 클라이언트 체크 불필요
 
-  const formatPhoneNumber = (value: string) => {
-    const numbers = value.replace(/[^\d]/g, "");
-    if (numbers.length <= 3) return numbers;
-    if (numbers.length <= 7) return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
-    return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7, 11)}`;
-  };
 
   if (!warranty) {
     return (

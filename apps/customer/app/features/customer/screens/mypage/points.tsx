@@ -54,7 +54,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   });
 }
 
-const typeConfig: Record<string, { label: string; icon: any; color: string }> = {
+const typeConfig: Record<string, { label: string; icon: typeof MessageSquare; color: string }> = {
   review_reward: { 
     label: "후기 보상", 
     icon: MessageSquare, 

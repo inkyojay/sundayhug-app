@@ -48,18 +48,9 @@ export async function action({ request }: Route.ActionArgs) {
       );
     }
 
-    console.log("📥 Image URL analysis request received");
-    console.log("  - Image URL:", imageUrl.substring(0, 100) + "...");
-    console.log("  - Birth Date:", birthDate);
-
     // Download image from URL
     const { buffer, contentType } = await downloadImageFromUrl(imageUrl);
     const base64String = bufferToBase64(buffer);
-
-    console.log("Image download success:", {
-      size: buffer.length,
-      mimeType: contentType,
-    });
 
     // Analyze with Gemini
     const report = await analyzeSleepEnvironment(
@@ -92,7 +83,6 @@ export async function action({ request }: Route.ActionArgs) {
       // Update analysis with image URL
       await updateAnalysisImageUrl(analysisId, uploadedImageUrl);
 
-      console.log("✅ Image uploaded to Storage:", uploadedImageUrl);
     } catch (uploadError) {
       console.error("Image upload failed (continuing):", uploadError);
     }

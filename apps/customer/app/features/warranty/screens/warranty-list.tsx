@@ -162,9 +162,9 @@ export async function action({ request }: Route.ActionArgs) {
       }
 
       return { success: true, message: `${ids.length}개 보증서가 삭제되었습니다.` };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("삭제 예외:", error);
-      return { success: false, error: error.message || "삭제 중 오류가 발생했습니다." };
+      return { success: false, error: error instanceof Error ? error.message : "삭제 중 오류가 발생했습니다." };
     }
   }
 

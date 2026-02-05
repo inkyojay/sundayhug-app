@@ -187,7 +187,7 @@ export default function AdminEventFormScreen() {
   const [newGiftCode, setNewGiftCode] = useState("");
   const [newGiftImage, setNewGiftImage] = useState("");
 
-  const fetcherData = fetcher.data as any;
+  const fetcherData = fetcher.data as { success: boolean; error?: string; eventId?: string } | undefined;
 
   const handleSaveEvent = () => {
     fetcher.submit(

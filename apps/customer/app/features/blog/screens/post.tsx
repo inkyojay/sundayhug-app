@@ -68,7 +68,7 @@ export const meta: Route.MetaFunction = ({ data }) => {
     // Open Graph image for social media previews
     {
       name: "og:image",
-      content: `http://localhost:5173/api/blog/og?slug=${data.frontmatter.slug}`,
+      content: `${process.env.SITE_URL}/api/blog/og?slug=${data.frontmatter.slug}`,
     },
     // Open Graph title for social media previews
     {

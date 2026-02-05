@@ -20,7 +20,7 @@ export async function doesUserExist(email: string) {
 
   // auth.users 직접 접근이 안되면 false 반환 (새 사용자로 간주)
   if (error) {
-    console.log("doesUserExist check skipped:", error.message);
+    // auth.users 직접 접근 실패 - 새 사용자로 간주
     return false;
   }
 

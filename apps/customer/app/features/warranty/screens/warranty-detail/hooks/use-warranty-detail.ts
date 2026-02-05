@@ -10,12 +10,12 @@ export function useWarrantyDetail() {
 
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<Record<string, unknown>[]>([]);
 
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
 
-  const fetcherData = fetcher.data as any;
+  const fetcherData = fetcher.data as { success: boolean; searchResults?: Record<string, unknown>[] } | undefined;
   const isSubmitting = fetcher.state !== "idle";
 
   // Update state when fetcher completes

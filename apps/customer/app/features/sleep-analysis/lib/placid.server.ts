@@ -241,41 +241,32 @@ export async function generateGoodFeedbackSlide(
 export async function generateAllCardNewsSlides(
   data: CardNewsData
 ): Promise<string[]> {
-  console.log("[Placid] Starting card news generation...");
-  
   const slideUrls: string[] = [];
   
   try {
     // 1번: 썸네일
-    console.log("[Placid] Generating slide 1: Thumbnail");
     const slide1 = await generateThumbnailSlide(data.name, data.photo1, data.goal);
     slideUrls.push(slide1);
     
     // 2번: 엄마의 현실일기
-    console.log("[Placid] Generating slide 2: Mom's Diary");
     const slide2 = await generateMomsDiarySlide(data.date, data.photo1, data.text122);
     slideUrls.push(slide2);
     
     // 3번: 이미지+핀+점수
-    console.log("[Placid] Generating slide 3: Image + Pin + Score");
     const slide3 = await generateImagePinSlide(data.imagePinUrl, data.name, data.score);
     slideUrls.push(slide3);
     
     // 4번: Bad 피드백 + 추천제품
-    console.log("[Placid] Generating slide 4: Bad Feedback + Products");
     const slide4 = await generateBadFeedbackSlide(data.badCardUrls, data.products);
     slideUrls.push(slide4);
     
     // 5번: Good 피드백 + 양총평
-    console.log("[Placid] Generating slide 5: Good Feedback + Summary");
     const slide5 = await generateGoodFeedbackSlide(data.goodCardUrls, data.summary);
     slideUrls.push(slide5);
     
     // 6번: CTA (고정 이미지)
-    console.log("[Placid] Adding slide 6: CTA (fixed)");
     slideUrls.push(CTA_IMAGE_URL);
-    
-    console.log("[Placid] Card news generation complete!");
+
     return slideUrls;
     
   } catch (error) {

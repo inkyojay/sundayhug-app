@@ -68,8 +68,6 @@ export async function action({ request }: Route.ActionArgs) {
       .update({ verified: true, updated_at: new Date().toISOString() })
       .eq("id", otpRecord.id);
 
-    console.log("[OTP-Only] 전화번호 인증 완료:", normalizedPhone);
-
     return data({
       success: true,
       message: "전화번호 인증이 완료되었습니다.",

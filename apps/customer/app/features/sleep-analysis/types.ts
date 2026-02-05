@@ -1,5 +1,11 @@
 /**
  * Sleep Analysis Types
+ *
+ * @deprecated Use types from ./schema.ts instead:
+ * - SleepAnalysis, AnalysisReport, FeedbackItem, RiskLevel
+ * - SleepAnalysisResult from ./lib/sleep-analysis.server.ts
+ *
+ * This file is kept for reference but is not imported anywhere.
  */
 
 export interface UploadFormData {
@@ -11,38 +17,5 @@ export interface UploadFormData {
   instagramId?: string;
   newBabyName?: string;
   newBabyGender?: string;
-}
-
-export interface FeedbackItem {
-  emoji: string;
-  keyword: string;
-  danger_level: "safe" | "caution" | "danger";
-  description: string;
-  improvement: string;
-  reference?: string;
-}
-
-export interface AnalysisReport {
-  overall_score: number;
-  overall_comment: string;
-  feedback_items: FeedbackItem[];
-  comprehensive_recommendation: string;
-}
-
-export interface SleepAnalysis {
-  id: string;
-  user_id?: string;
-  phone_number?: string;
-  instagram_id?: string;
-  birth_date: string;
-  age_in_months: number;
-  image_url?: string;
-  overall_score: number;
-  overall_comment: string;
-  comprehensive_recommendation: string;
-  feedback_items?: FeedbackItem[];
-  slides_generated: boolean;
-  slide_urls?: string[];
-  created_at: string;
 }
 

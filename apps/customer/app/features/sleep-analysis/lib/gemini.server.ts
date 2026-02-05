@@ -150,7 +150,7 @@ ${references.map((ref) => `- ${ref.title}: ${ref.url} (출처: ${ref.source})`).
 `;
     }
   } catch (error) {
-    console.log("RAG references not available, using fallback");
+    // RAG references not available, using fallback
   }
 
   const prompt = `당신은 신생아 및 24개월 미만 영유아를 위한 세계 최고 수준의 소아 수면 안전 전문가입니다.

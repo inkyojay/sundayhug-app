@@ -7,6 +7,7 @@ import type { Route } from "./+types/profile";
 import { useState, useEffect } from "react";
 import { data, useActionData, Form, Link, redirect, useLoaderData, useNavigation } from "react-router";
 import { useTranslation } from "react-i18next";
+import { formatPhoneNumber } from "~/core/lib/formatters";
 import { 
   ArrowLeft, 
   User, 
@@ -237,12 +238,6 @@ export default function ProfileScreen() {
   const [passwordMessage, setPasswordMessage] = useState<{ type: "success" | "error", text: string } | null>(null);
   const [babyMessage, setBabyMessage] = useState<{ type: "success" | "error", text: string } | null>(null);
 
-  const formatPhoneNumber = (value: string) => {
-    const numbers = value.replace(/[^\d]/g, "");
-    if (numbers.length <= 3) return numbers;
-    if (numbers.length <= 7) return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
-    return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7, 11)}`;
-  };
   
   // 액션 결과 처리
   useEffect(() => {

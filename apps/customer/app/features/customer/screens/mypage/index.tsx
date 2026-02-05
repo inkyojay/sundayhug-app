@@ -114,7 +114,7 @@ const reviewTypeLabels: Record<string, string> = {
   blog: "블로그",
 };
 
-const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
+const statusConfig: Record<string, { label: string; color: string; icon: typeof Clock }> = {
   pending: { label: "대기중", color: "bg-yellow-100 text-yellow-700", icon: Clock },
   approved: { label: "승인", color: "bg-green-100 text-green-700", icon: CheckCircle },
   rejected: { label: "반려", color: "bg-red-100 text-red-700", icon: XCircle },

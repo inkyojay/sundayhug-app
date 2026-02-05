@@ -19,7 +19,7 @@ function getSolapiConfig(): SolapiConfig {
   const apiSecret = process.env.SOLAPI_API_SECRET;
   const pfId = process.env.SOLAPI_PF_ID || "";
   const templateId = process.env.SOLAPI_TEMPLATE_ID || "";
-  const senderNumber = "07077038005";
+  const senderNumber = process.env.SOLAPI_SENDER_NUMBER || "07077038005";
 
   if (!apiKey || !apiSecret) {
     throw new Error("SOLAPI_API_KEY, SOLAPI_API_SECRET must be set");
@@ -112,7 +112,6 @@ export async function sendAlimtalkOTP(
     }
 
     if (result.groupId) {
-      console.log("알림톡 발송 성공:", result.groupId);
       return { success: true, messageId: result.groupId };
     }
 
@@ -163,7 +162,6 @@ export async function sendSmsOTP(
     }
 
     if (result.groupId || result.messageId) {
-      console.log("SMS 발송 성공:", result.groupId || result.messageId);
       return { success: true, messageId: result.groupId || result.messageId };
     }
 
@@ -228,7 +226,6 @@ export async function sendWarrantyApprovalAlimtalk(
     }
 
     if (result.groupId || result.messageId) {
-      console.log("보증서 승인 알림톡 발송 성공:", result.groupId || result.messageId);
       return { success: true, messageId: result.groupId || result.messageId };
     }
 
@@ -287,7 +284,6 @@ export async function sendWarrantyRejectionAlimtalk(
     }
 
     if (result.groupId || result.messageId) {
-      console.log("보증서 거절 알림톡 발송 성공:", result.groupId || result.messageId);
       return { success: true, messageId: result.groupId || result.messageId };
     }
 

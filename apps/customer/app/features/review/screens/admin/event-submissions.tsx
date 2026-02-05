@@ -219,7 +219,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   return { success: false };
 }
 
-const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
+const statusConfig: Record<string, { label: string; color: string; icon: typeof Clock }> = {
   pending: { label: "검토 대기", color: "bg-yellow-100 text-yellow-700", icon: Clock },
   approved: { label: "승인됨", color: "bg-green-100 text-green-700", icon: CheckCircle },
   rejected: { label: "반려됨", color: "bg-red-100 text-red-700", icon: XCircle },
@@ -254,7 +254,7 @@ export default function EventSubmissionsScreen() {
   const [trackingCarrier, setTrackingCarrier] = useState("cj");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const fetcherData = fetcher.data as any;
+  const fetcherData = fetcher.data as { success: boolean; error?: string; message?: string } | undefined;
 
   const handleApprove = (id: string) => {
     if (!confirm("승인하시겠습니까? 포인트가 자동 적립됩니다.")) return;

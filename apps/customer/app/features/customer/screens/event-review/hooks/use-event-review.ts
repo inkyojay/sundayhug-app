@@ -57,7 +57,7 @@ export function useEventReview({ events, profile, warranties }: UseEventReviewPr
   const [showForm, setShowForm] = useState(false);
   const [isAddressApiReady, setIsAddressApiReady] = useState(false);
 
-  const fetcherData = fetcher.data as any;
+  const fetcherData = fetcher.data as { success: boolean; error?: string; warrantyId?: string } | undefined;
   const isSubmitting = fetcher.state === "submitting";
 
   const selectedEvent = events.find((e) => e.id === selectedEventId);

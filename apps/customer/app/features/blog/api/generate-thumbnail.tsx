@@ -148,9 +148,7 @@ Style requirements:
         .eq("id", postId);
     }
 
-    console.log("[Thumbnail] 썸네일 생성 완료:", thumbnailUrl);
-
-    return data({ 
+    return data({
       success: true, 
       thumbnailUrl,
       message: "썸네일이 생성되었습니다!" 

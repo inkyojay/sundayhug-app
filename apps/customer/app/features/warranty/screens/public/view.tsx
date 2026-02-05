@@ -71,7 +71,7 @@ export default function WarrantyView({ loaderData }: Route.ComponentProps) {
   const { t } = useTranslation(["warranty", "common"]);
   const { warranty } = loaderData;
 
-  const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
+  const statusConfig: Record<string, { label: string; color: string; icon: typeof ClockIcon }> = {
     pending: { label: t("warranty:public.view.status.pending"), color: "text-yellow-600 bg-yellow-50", icon: ClockIcon },
     approved: { label: t("warranty:public.view.status.approved"), color: "text-green-600 bg-green-50", icon: CheckCircleIcon },
     rejected: { label: t("warranty:public.view.status.rejected"), color: "text-red-600 bg-red-50", icon: XCircleIcon },

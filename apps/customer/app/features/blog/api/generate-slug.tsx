@@ -8,12 +8,12 @@
 import type { Route } from "./+types/generate-slug";
 
 import { data } from "react-router";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import adminClient from "~/core/lib/supa-admin-client.server";
 
 // Gemini 초기화 (AI 번역용)
-const genAI = process.env.GEMINI_API_KEY 
-  ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+const genAI = process.env.GEMINI_API_KEY
+  ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
   : null;
 
 // 한글 → 영어 슬러그 변환 (규칙 기반 fallback)
@@ -73,8 +73,6 @@ async function generateEnglishSlugWithAI(title: string, content?: string): Promi
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    
     const prompt = `다음 한국어 블로그 제목을 SEO에 최적화된 영어 URL 슬러그로 변환해주세요.
 
 규칙:
@@ -90,9 +88,11 @@ ${content ? `본문 일부: "${content.slice(0, 200)}..."` : ""}
 
 슬러그만 출력하세요 (다른 설명 없이):`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let slug = response.text().trim().toLowerCase();
+    const response = await genAI.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
+    let slug = (response.text ?? "").trim().toLowerCase();
     
     // 정리
     slug = slug

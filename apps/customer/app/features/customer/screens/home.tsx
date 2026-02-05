@@ -19,9 +19,12 @@ import {
   Sparkles,
   Gift
 } from "lucide-react";
+
+import { ServiceCard } from "~/features/customer/components/service-card";
 import { Theme, useTheme } from "remix-themes";
 
 import { Button } from "~/core/components/ui/button";
+import { KakaoBubbleIcon } from "~/core/components/icons/kakao-bubble";
 import { LanguageSelector } from "~/core/components/language-selector";
 import makeServerClient from "~/core/lib/supa-client.server";
 
@@ -229,140 +232,52 @@ export default function CustomerHomeScreen() {
 
         {/* Bento Grid - 2개 카드만 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-          {/* 정품 인증 - Large Orange Card */}
-          <Link
+          <ServiceCard
             to="/customer/warranty"
-            className="group"
-          >
-            <div className="h-full min-h-[280px] md:min-h-[350px] bg-[#FF6B35] rounded-3xl p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.02]">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-white/80 text-sm font-medium tracking-wider uppercase">
-                    {t("customer:home.services.warranty.label")}
-                  </p>
-                  <h2 className="text-white text-3xl md:text-4xl font-bold mt-2">
-                    {t("customer:home.services.warranty.title")}
-                  </h2>
-                </div>
-                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                  <ShieldCheck className="w-6 h-6 text-white" />
-                </div>
-              </div>
-
-              <div>
-                <p className="text-white/90 text-base md:text-lg">
-                  {t("customer:home.services.warranty.description")}
-                </p>
-                <div className="mt-4 flex items-center text-white/80 group-hover:text-white transition-colors">
-                  <span className="text-sm font-medium">{t("customer:home.services.warranty.button")}</span>
-                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </div>
-            </div>
-          </Link>
-
-          {/* 수면 분석 - Large Dark Card */}
-          <Link
+            label={t("customer:home.services.warranty.label")}
+            title={t("customer:home.services.warranty.title")}
+            description={t("customer:home.services.warranty.description")}
+            buttonText={t("customer:home.services.warranty.button")}
+            icon={<ShieldCheck className="w-6 h-6 text-white" />}
+            variant="orange"
+          />
+          <ServiceCard
             to="/customer/sleep"
-            className="group"
-          >
-            <div className="h-full min-h-[280px] md:min-h-[350px] bg-[#1A1A1A] rounded-3xl p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.02]">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-gray-400 text-sm font-medium tracking-wider uppercase">
-                    {t("customer:home.services.sleepAnalysis.label")}
-                  </p>
-                  <h2 className="text-white text-3xl md:text-4xl font-bold mt-2">
-                    {t("customer:home.services.sleepAnalysis.title")}
-                  </h2>
-                </div>
-                <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center">
-                  <Moon className="w-6 h-6 text-white" />
-                </div>
-              </div>
-
-              <div>
-                <p className="text-gray-400 text-base md:text-lg">
-                  {t("customer:home.services.sleepAnalysis.description")}
-                </p>
-                <div className="mt-4 flex items-center text-gray-500 group-hover:text-white transition-colors">
-                  <span className="text-sm font-medium">{t("customer:home.services.sleepAnalysis.button")}</span>
-                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </div>
-            </div>
-          </Link>
+            label={t("customer:home.services.sleepAnalysis.label")}
+            title={t("customer:home.services.sleepAnalysis.title")}
+            description={t("customer:home.services.sleepAnalysis.description")}
+            buttonText={t("customer:home.services.sleepAnalysis.button")}
+            icon={<Moon className="w-6 h-6 text-white" />}
+            variant="dark"
+          />
         </div>
 
         {/* 추가 서비스 - AI 상담 & 블로그 (Feature Flag로 제어) */}
         {(features.chatEnabled || features.blogEnabled) && (
           <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* AI 육아 상담 */}
             {features.chatEnabled && (
-              <Link
+              <ServiceCard
                 to="/customer/chat"
-                className="group"
-              >
-                <div className="h-full min-h-[180px] bg-gradient-to-br from-orange-500 to-orange-600 rounded-3xl p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.02]">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-orange-200 text-sm font-medium tracking-wider uppercase">
-                        {t("customer:home.services.chat.label")}
-                      </p>
-                      <h2 className="text-white text-2xl md:text-3xl font-bold mt-1">
-                        {t("customer:home.services.chat.title")}
-                      </h2>
-                    </div>
-                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                      <MessageCircleQuestion className="w-5 h-5 text-white" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-orange-100 text-sm md:text-base">
-                      {t("customer:home.services.chat.description")}
-                    </p>
-                    <div className="mt-3 flex items-center text-white/80 group-hover:text-white transition-colors">
-                      <span className="text-sm font-medium">{t("customer:home.services.chat.button")}</span>
-                      <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                    </div>
-                  </div>
-                </div>
-              </Link>
+                label={t("customer:home.services.chat.label")}
+                title={t("customer:home.services.chat.title")}
+                description={t("customer:home.services.chat.description")}
+                buttonText={t("customer:home.services.chat.button")}
+                icon={<MessageCircleQuestion className="w-5 h-5 text-white" />}
+                variant="gradient-orange"
+                size="medium"
+              />
             )}
-
-            {/* 블로그 */}
             {features.blogEnabled && (
-              <Link
+              <ServiceCard
                 to="/customer/blog"
-                className="group"
-              >
-                <div className="h-full min-h-[180px] bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-3xl p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:scale-[1.02]">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-emerald-200 text-sm font-medium tracking-wider uppercase">
-                        {t("customer:home.services.blog.label")}
-                      </p>
-                      <h2 className="text-white text-2xl md:text-3xl font-bold mt-1">
-                        {t("customer:home.services.blog.title")}
-                      </h2>
-                    </div>
-                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                      <Sparkles className="w-5 h-5 text-white" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-emerald-100 text-sm md:text-base">
-                      {t("customer:home.services.blog.description")}
-                    </p>
-                    <div className="mt-3 flex items-center text-white/80 group-hover:text-white transition-colors">
-                      <span className="text-sm font-medium">{t("customer:home.services.blog.button")}</span>
-                      <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                    </div>
-                  </div>
-                </div>
-              </Link>
+                label={t("customer:home.services.blog.label")}
+                title={t("customer:home.services.blog.title")}
+                description={t("customer:home.services.blog.description")}
+                buttonText={t("customer:home.services.blog.button")}
+                icon={<Sparkles className="w-5 h-5 text-white" />}
+                variant="gradient-emerald"
+                size="medium"
+              />
             )}
           </div>
         )}
@@ -388,9 +303,7 @@ export default function CustomerHomeScreen() {
             rel="noopener noreferrer"
             className="bg-white/60 dark:bg-gray-800/60 backdrop-blur rounded-2xl p-5 hover:bg-white dark:hover:bg-gray-800 transition-colors border border-gray-200/50 dark:border-gray-700/50 group"
           >
-            <svg className="w-6 h-6 text-[#FAE100] mb-3" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 3c5.799 0 10.5 3.664 10.5 8.185 0 4.52-4.701 8.184-10.5 8.184a13.5 13.5 0 01-1.727-.11l-4.408 2.883c-.501.265-.678.236-.472-.413l.892-3.678c-2.88-1.46-4.785-3.99-4.785-6.866C1.5 6.665 6.201 3 12 3z" />
-            </svg>
+            <KakaoBubbleIcon className="w-6 h-6 text-[#FAE100] mb-3" />
             <h4 className="font-semibold text-gray-900 dark:text-white">{t("customer:home.quickLinks.customerService")}</h4>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t("customer:home.quickLinks.kakaoChat")}</p>
           </a>

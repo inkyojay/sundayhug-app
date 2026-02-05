@@ -217,7 +217,7 @@ export default function ForgotPasswordScreen() {
   // fetcher 결과 처리
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
-      const result = fetcher.data as any;
+      const result = fetcher.data as { success: boolean; error?: string; step?: string; email?: string };
       
       if (!result.success) {
         setError(result.error);

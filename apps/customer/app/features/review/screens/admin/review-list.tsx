@@ -128,7 +128,7 @@ export async function action({ request }: Route.ActionArgs) {
     return { success: false, error: "필수 정보가 누락되었습니다." };
   }
 
-  const updateData: any = {
+  const updateData: Record<string, unknown> = {
     reviewed_at: new Date().toISOString(),
   };
 
@@ -198,7 +198,7 @@ const statusConfig = {
   },
 };
 
-const giftStatusConfig: Record<string, { label: string; color: string; icon: any }> = {
+const giftStatusConfig: Record<string, { label: string; color: string; icon: typeof Clock }> = {
   pending: { label: "대기", color: "bg-gray-100 text-gray-600", icon: Clock },
   approved: { label: "승인", color: "bg-blue-100 text-blue-700", icon: CheckCircle },
   shipped: { label: "발송완료", color: "bg-purple-100 text-purple-700", icon: Truck },
@@ -595,7 +595,7 @@ export default function AdminReviewListScreen() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectModal, setShowRejectModal] = useState(false);
 
-  const fetcherData = fetcher.data as any;
+  const fetcherData = fetcher.data as { success: boolean; error?: string; message?: string } | undefined;
 
   const handleApprove = (id: string) => {
     if (!confirm("이 후기를 승인하시겠습니까?\n승인 시 사은품 상태도 '승인'으로 변경됩니다.")) return;

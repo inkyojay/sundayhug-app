@@ -12,9 +12,8 @@ import { redirect, data } from "react-router";
 import makeServerClient from "~/core/lib/supa-client.server";
 import adminClient from "~/core/lib/supa-admin-client.server";
 
-// 카카오 API 설정 (카카오 개발자 콘솔에서 확인)
-const KAKAO_CLIENT_ID = "2737860d151daba73e31d3df6213a012";
-const KAKAO_CLIENT_SECRET = "HexFevCinjno2w3zvLIMtE0lUos1gk5Q";
+const KAKAO_CLIENT_ID = process.env.KAKAO_CLIENT_ID!;
+const KAKAO_CLIENT_SECRET = process.env.KAKAO_CLIENT_SECRET!;
 
 interface KakaoTokenResponse {
   access_token: string;
@@ -60,7 +59,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   
   try {
     // 1. 인가 코드로 토큰 교환
-    console.log("[Kakao Callback] 토큰 교환 시작...");
     const tokenResponse = await fetch("https://kauth.kakao.com/oauth/token", {
       method: "POST",
       headers: {
@@ -82,10 +80,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       return redirect("/customer/login?error=kakao_token_failed");
     }
     
-    console.log("[Kakao Callback] 토큰 발급 성공, scope:", tokenData.scope);
-    
     // 2. 사용자 정보 요청
-    console.log("[Kakao Callback] 사용자 정보 요청...");
     const userResponse = await fetch("https://kapi.kakao.com/v2/user/me", {
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
@@ -111,32 +106,19 @@ export async function loader({ request }: Route.LoaderArgs) {
     const kakaoAgeRange = kakaoAccount.age_range || null;
     const kakaoBirthday = kakaoAccount.birthday || null;
     
-    console.log("[Kakao Callback] 수집된 정보:", {
-      kakaoId,
-      email: kakaoEmail,
-      nickname: kakaoNickname,
-      name: kakaoName,
-      phone: kakaoPhone,
-      gender: kakaoGender,
-      ageRange: kakaoAgeRange,
-    });
-    
     if (!kakaoEmail) {
       console.error("[Kakao Callback] 이메일 없음 - 동의 필요");
       return redirect("/customer/login?error=kakao_email_required");
     }
     
     // 3. Supabase에서 기존 사용자 확인 또는 생성
-    console.log("[Kakao Callback] Supabase 사용자 확인/생성...");
-    
     // 카카오 ID 기반 고유 비밀번호 (변경 불가능한 고정값)
     const kakaoPassword = `kakao_${kakaoId}_sundayhug_2024!`;
     
     let userId: string;
     let isNewUser = false;
     
-    // profiles 테이블에서 이메일로 기존 사용자 확인 (더 빠르고 확실함)
-    console.log("[Kakao Callback] profiles에서 이메일로 사용자 조회...");
+    // profiles 테이블에서 이메일로 기존 사용자 확인
     const { data: existingProfile } = await adminClient
       .from("profiles")
       .select("id")
@@ -145,7 +127,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     
     if (existingProfile) {
       // 기존 사용자 - 비밀번호 업데이트
-      console.log("[Kakao Callback] 기존 사용자 발견 (profiles):", existingProfile.id);
       userId = existingProfile.id;
       
       // 비밀번호 업데이트 (카카오 로그인용)
@@ -158,7 +139,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       });
     } else {
       // 새 사용자 생성
-      console.log("[Kakao Callback] 새 사용자 생성...");
       const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
         email: kakaoEmail,
         password: kakaoPassword,
@@ -178,12 +158,9 @@ export async function loader({ request }: Route.LoaderArgs) {
       
       userId = newUser.user.id;
       isNewUser = true;
-      console.log("[Kakao Callback] 새 사용자 생성 완료:", userId);
     }
     
     // 4. profiles 테이블에 추가 정보 저장/업데이트
-    console.log("[Kakao Callback] profiles 업데이트...");
-    
     // 기존 프로필 확인
     const { data: profileData } = await adminClient
       .from("profiles")
@@ -226,11 +203,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         });
     }
     
-    console.log("[Kakao Callback] profiles 업데이트 완료");
-    
     // 5. Supabase 세션 생성 (비밀번호 로그인)
-    console.log("[Kakao Callback] 세션 생성...");
-    
     const [supabase, headers] = makeServerClient(request);
     
     // 비밀번호로 로그인하여 세션 생성
@@ -243,8 +216,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       console.error("[Kakao Callback] 로그인 실패:", signInError);
       return redirect("/customer/login?error=login_failed");
     }
-    
-    console.log("[Kakao Callback] 세션 생성 완료:", signInData.user?.id);
     
     // 6. 마이페이지로 리다이렉트
     return redirect("/customer/mypage", { headers });

@@ -17,6 +17,7 @@ import {
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useFetcher, useNavigate, redirect, data, useLoaderData } from "react-router";
+import { formatPhoneNumber } from "~/core/lib/formatters";
 
 import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
@@ -169,7 +170,7 @@ export default function WarrantyRegister() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const fetcherData = fetcher.data as any;
+  const fetcherData = fetcher.data as { success: boolean; error?: string; step?: string; warrantyNumber?: string } | undefined;
   
   useEffect(() => {
     if (!fetcherData) return;
@@ -178,12 +179,6 @@ export default function WarrantyRegister() {
     }
   }, [fetcherData]);
 
-  function formatPhoneNumber(value: string) {
-    const numbers = value.replace(/[^\d]/g, "");
-    if (numbers.length <= 3) return numbers;
-    if (numbers.length <= 7) return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
-    return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7, 11)}`;
-  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });

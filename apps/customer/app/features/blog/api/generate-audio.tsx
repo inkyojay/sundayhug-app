@@ -182,9 +182,7 @@ export async function action({ request }: Route.ActionArgs) {
       }, { status: 500 });
     }
 
-    console.log(`[TTS] 오디오 생성 완료: ${urlData.publicUrl}`);
-    
-    return data({ 
+    return data({
       success: true, 
       audioUrl: urlData.publicUrl 
     });

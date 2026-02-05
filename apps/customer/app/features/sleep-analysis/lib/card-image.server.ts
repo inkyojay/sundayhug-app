@@ -222,7 +222,6 @@ export async function generateBadCardImages(cards: BadCardData[]): Promise<strin
   const imageUrls: string[] = [];
   
   for (const card of cards) {
-    console.log(`[CardImage] Generating bad card ${card.number}: ${card.title}`);
     const url = await generateBadCardImage(card);
     imageUrls.push(url);
   }
@@ -237,7 +236,6 @@ export async function generateGoodCardImages(cards: GoodCardData[]): Promise<str
   const imageUrls: string[] = [];
   
   for (const card of cards) {
-    console.log(`[CardImage] Generating good card ${card.number}: ${card.title}`);
     const url = await generateGoodCardImage(card);
     imageUrls.push(url);
   }

@@ -179,8 +179,8 @@ export default function BlogPostScreen() {
           text: post.excerpt || "",
           url: window.location.href,
         });
-      } catch (err) {
-        console.log("Share cancelled");
+      } catch {
+        // Share cancelled by user
       }
     } else {
       navigator.clipboard.writeText(window.location.href);

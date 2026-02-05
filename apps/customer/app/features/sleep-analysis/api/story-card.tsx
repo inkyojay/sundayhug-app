@@ -36,8 +36,6 @@ export async function action({ request, params }: Route.ActionArgs) {
   const { generateStoryCardImage } = await import("../lib/story-card.server");
 
   try {
-    console.log(`[StoryCard] Starting generation for analysis ${id}...`);
-
     // 1. 분석 결과 가져오기
     const result = await getSleepAnalysis(id);
 
@@ -63,15 +61,11 @@ export async function action({ request, params }: Route.ActionArgs) {
     // 3. 이미지 URL (80점 이상일 때만 사용)
     const imageUrl = result.image_url || undefined;
     
-    console.log(`[StoryCard] Score: ${score}, HasImage: ${!!imageUrl}`);
-
     // 4. 스토리 카드 생성 (점수에 따라 자동 분기)
     const storyCardUrl = await generateStoryCardImage({
       score,
       imageUrl,
     });
-
-    console.log(`[StoryCard] Card generated: ${storyCardUrl}`);
 
     return data({
       success: true,

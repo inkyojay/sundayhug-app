@@ -295,21 +295,14 @@ export async function generateStoryCardImage(
 ): Promise<string> {
   const { score, imageUrl } = data;
   
-  console.log("[StoryCard] Generating 1:1 card...", { score, hasImage: !!imageUrl });
-
   let html: string;
-  
+
   // 80점 이상이고 이미지가 있으면 축하 카드, 아니면 팁 카드
   if (score >= 80 && imageUrl) {
-    console.log("[StoryCard] HIGH score card (with photo)");
     html = generateHighScoreCard(score, imageUrl);
   } else {
-    console.log("[StoryCard] LOW score card (tip only)");
     html = generateLowScoreCard(score);
   }
 
-  const cardUrl = await htmlToImage(html);
-  console.log("[StoryCard] Card generated:", cardUrl);
-  
-  return cardUrl;
+  return htmlToImage(html);
 }

@@ -440,7 +440,6 @@ export async function action({ request, params }: Route.ActionArgs) {
             })
             .eq("id", id);
           
-          console.log("✅ 승인 알림톡 발송 완료:", alimtalkResult.messageId);
         } else {
           console.error("⚠️ 알림톡 발송 실패 (승인은 완료됨):", alimtalkResult.error);
         }
@@ -485,7 +484,6 @@ export async function action({ request, params }: Route.ActionArgs) {
         );
 
         if (alimtalkResult.success) {
-          console.log("✅ 거절 알림톡 발송 완료:", alimtalkResult.messageId);
         } else {
           console.error("⚠️ 알림톡 발송 실패 (거절은 완료됨):", alimtalkResult.error);
         }
@@ -546,7 +544,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   return { success: false, error: "알 수 없는 액션" };
 }
 
-const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: any }> = {
+const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof ClockIcon }> = {
   pending: { label: "승인 대기", variant: "outline", icon: ClockIcon },
   approved: { label: "승인 완료", variant: "default", icon: CheckCircleIcon },
   rejected: { label: "거절", variant: "destructive", icon: XCircleIcon },

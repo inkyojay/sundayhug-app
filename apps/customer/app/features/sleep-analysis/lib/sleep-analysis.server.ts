@@ -3,7 +3,46 @@
  */
 import { createClient } from "@supabase/supabase-js";
 // schema.ts의 AnalysisReport를 사용 (Gemini 반환 형식)
-import type { AnalysisReport } from "../schema";
+import type { AnalysisReport, RiskLevel } from "../schema";
+
+interface SleepAnalysisRecord {
+  id: string;
+  user_id: string | null;
+  image_url: string | null;
+  image_base64: string | null;
+  birth_date: string;
+  age_in_months: number;
+  summary: string;
+  report_slides: unknown;
+  phone_number: string | null;
+  instagram_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ParsedReport {
+  summary?: string;
+  feedbackItems?: {
+    id: number;
+    x: number;
+    y: number;
+    title: string;
+    feedback: string;
+    riskLevel: RiskLevel;
+  }[];
+  references?: { title: string; uri: string }[];
+  safetyScore?: number;
+  scoreComment?: string;
+  cardNews?: unknown;
+}
+
+export interface SleepAnalysisResult extends SleepAnalysisRecord {
+  report: ParsedReport | null;
+  feedbackItems: NonNullable<ParsedReport["feedbackItems"]>;
+  references: NonNullable<ParsedReport["references"]>;
+  safetyScore?: number;
+  scoreComment?: string;
+}
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -89,7 +128,7 @@ export async function saveSleepAnalysis(
   return data.id;
 }
 
-export async function getSleepAnalysis(id: string): Promise<any> {
+export async function getSleepAnalysis(id: string): Promise<SleepAnalysisResult> {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   const { data, error } = await supabase

@@ -215,7 +215,7 @@ export default function ReviewSubmitScreen() {
   const [buyerPhone, setBuyerPhone] = useState(profile?.phone || "");
   const [purchaseChannel, setPurchaseChannel] = useState("");
 
-  const fetcherData = fetcher.data as any;
+  const fetcherData = fetcher.data as { success: boolean; error?: string; message?: string } | undefined;
   const isSubmitting = fetcher.state === "submitting";
   const [showComplete, setShowComplete] = useState(false);
 

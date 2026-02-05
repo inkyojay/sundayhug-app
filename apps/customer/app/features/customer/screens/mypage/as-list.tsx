@@ -34,6 +34,7 @@ import { Label } from "~/core/components/ui/label";
 import { Textarea } from "~/core/components/ui/textarea";
 import makeServerClient from "~/core/lib/supa-client.server";
 import adminClient from "~/core/lib/supa-admin-client.server";
+import { formatPhoneNumber } from "~/core/lib/formatters";
 
 export function meta(): Route.MetaDescriptors {
   return [
@@ -132,7 +133,7 @@ export async function action({ request }: Route.ActionArgs) {
       }
     }
 
-    const insertData: any = {
+    const insertData: Record<string, unknown> = {
       request_type: "repair", // 수리로 통일
       issue_description: productType === "other" 
         ? `[제품: ${otherProductName}]\n\n${issueDescription}`
@@ -159,8 +160,8 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     return { success: true, message: "A/S 신청이 접수되었습니다." };
-  } catch (error: any) {
-    return { success: false, error: error.message || "신청 중 오류가 발생했습니다." };
+  } catch (error: unknown) {
+    return { success: false, error: error instanceof Error ? error.message : "신청 중 오류가 발생했습니다." };
   }
 }
 
@@ -193,20 +194,14 @@ export default function MypageAsListScreen() {
   
   const [formData, setFormData] = useState({
     contactName: user.name,
-    contactPhone: user.phone ? formatPhone(user.phone) : "",
+    contactPhone: user.phone ? formatPhoneNumber(user.phone) : "",
     otherProductName: "",
     issueDescription: "",
   });
 
-  const fetcherData = fetcher.data as any;
+  const fetcherData = fetcher.data as { success: boolean; error?: string; message?: string } | undefined;
   const isSubmitting = fetcher.state === "submitting";
 
-  function formatPhone(value: string) {
-    const numbers = value.replace(/[^\d]/g, "");
-    if (numbers.length <= 3) return numbers;
-    if (numbers.length <= 7) return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
-    return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7, 11)}`;
-  }
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -321,7 +316,7 @@ export default function MypageAsListScreen() {
     setUploadedUrls([]);
     setFormData({
       contactName: user.name,
-      contactPhone: user.phone ? formatPhone(user.phone) : "",
+      contactPhone: user.phone ? formatPhoneNumber(user.phone) : "",
       otherProductName: "",
       issueDescription: "",
     });
@@ -578,7 +573,7 @@ export default function MypageAsListScreen() {
                     type="tel"
                     placeholder="010-1234-5678"
                     value={formData.contactPhone}
-                    onChange={(e) => setFormData(prev => ({ ...prev, contactPhone: formatPhone(e.target.value) }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, contactPhone: formatPhoneNumber(e.target.value) }))}
                     maxLength={13}
                     className="h-12 rounded-xl border-gray-200 bg-white text-gray-900 placeholder:text-gray-400"
                     required
